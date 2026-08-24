@@ -460,6 +460,13 @@ Built and verified against live data:
 - `lib/bubble/requests.ts` — `createToolRequest`, `listRecentRequests`
 - `lib/notify.ts` — WhatsApp summary, gated
 - `app/(app)/requests` — list and create pages, the create server action
+- `app/(app)/layout.tsx` + `components/app-sidebar.tsx` — the signed-in shell
+  is a shadcn `Sidebar` (`collapsible="icon"`, a sheet below `md`) plus a
+  header holding the trigger. Nav items are only routes that exist; the
+  open/collapsed state round-trips through the `sidebar_state` cookie, read in
+  the layout so it renders server-side. `hooks/use-mobile.ts` was reworked to
+  `useSyncExternalStore` — the shipped version set state in an effect and
+  failed `react-hooks/set-state-in-effect`
 - `components/request-form.tsx`, `components/tool-picker.tsx`,
   `components/date-picker.tsx` — the form is a two-column layout (fields left,
   tool selection right, stacked below `lg`) with the 112-row catalogue behind a
