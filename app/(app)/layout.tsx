@@ -41,7 +41,7 @@ export default async function AppLayout({
             {/* The sidebar's own brand is offscreen below `md`, so the header
                 keeps a way home on small screens. */}
             <Link href="/requests" className="text-sm font-medium">
-              Tool requests
+              Ambient
             </Link>
           </header>
           {ALLOW_DEV_LOGIN && (

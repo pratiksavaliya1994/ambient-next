@@ -9,6 +9,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -20,21 +21,46 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
-import { newYorkLabel } from "@/lib/bubble/dates"
-import { listRecentRequests, type ToolRequest } from "@/lib/bubble/requests"
+import { newYorkDayLabel, newYorkTimeLabel } from "@/lib/bubble/dates"
+import {
+  hasContent,
+  listRecentRequests,
+  type ToolRequest,
+} from "@/lib/bubble/requests"
+import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Tool requests" }
 
+/** Enough to fill three rows of the widest grid, and never fewer than ten. */
+const VISIBLE_REQUESTS = 12
+
+/**
+ * How many rows to ask Bubble for to fill those twelve cards. Roughly half of
+ * the most recently created rows are abandoned blanks (see `hasContent`), so a
+ * window of exactly twelve is mostly empty cards. Four times over still fits in
+ * one Bubble page, which caps at 100.
+ */
+const FETCH_MULTIPLE = 4
+
+/**
+ * `auto-fill` rather than a fixed column count: the cards keep a readable
+ * floor of 21rem and a row simply holds fewer of them as the window narrows,
+ * down to one on a phone. `min(…, 100%)` stops that floor from overflowing a
+ * viewport narrower than a single card.
+ */
+const GRID =
+  "grid grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] gap-6"
+
 export default function RequestsPage() {
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-medium">Recent requests</h1>
-          <p className="text-sm text-muted-foreground">
-            Live from Bubble, newest first. Tool lines come from each
+          {/* <p className="text-sm text-muted-foreground">
+            The {VISIBLE_REQUESTS} newest from Bubble. Tool lines come from each
             request&rsquo;s requestedtools row.
-          </p>
+          </p> */}
         </div>
         <Button render={<Link href="/requests/new" />} nativeButton={false}>
           <PlusIcon data-icon="inline-start" />
@@ -51,15 +77,27 @@ export default function RequestsPage() {
 }
 
 async function RequestList() {
-  const requests = await listRecentRequests(25)
+  const recent = await listRecentRequests(VISIBLE_REQUESTS * FETCH_MULTIPLE)
+
+  // Counted while filling rather than over the whole window, so `skipped` is
+  // what was passed over to reach these cards and not a total.
+  const requests: ToolRequest[] = []
+  let skipped = 0
+  for (const request of recent) {
+    if (requests.length === VISIBLE_REQUESTS) break
+    if (hasContent(request)) requests.push(request)
+    else skipped++
+  }
 
   if (requests.length === 0) {
     return (
       <Empty className="border">
         <EmptyHeader>
-          <EmptyTitle>No requests yet</EmptyTitle>
+          <EmptyTitle>Nothing to show</EmptyTitle>
           <EmptyDescription>
-            Create one and it will appear here and in the Bubble calendar.
+            {skipped > 0
+              ? `The ${skipped} newest rows in Bubble are blank — no job, movement, slot or tools on any of them.`
+              : "Create a request and it will appear here and in the Bubble calendar."}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -72,85 +110,222 @@ async function RequestList() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {requests.map((request) => (
-        <RequestCard key={request.id} request={request} />
-      ))}
+    <div className="flex flex-col gap-3">
+      {/* {skipped > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {skipped} newer {skipped === 1 ? "row" : "rows"} hidden: no job,
+          movement, slot or tools on {skipped === 1 ? "it" : "them"}.
+        </p>
+      )} */}
+      <div className={GRID}>
+        {requests.map((request) => (
+          <RequestCard key={request.id} request={request} />
+        ))}
+      </div>
     </div>
   )
 }
 
+/**
+ * Delivery and pickup are the first thing anyone reads off a card, so each gets
+ * its own accent, and a request that is both gets a third rather than looking
+ * like one of them. The accents are the `--delivery` / `--pickup` / `--both`
+ * tokens in `globals.css`; the first two are the hues `request.color` already
+ * paints Bubble calendar events with.
+ *
+ * Each accent lands on the left rail, the card wash, the movement badge and the
+ * tool quantities, so a card reads as one theme rather than as decoration.
+ */
+const MOVEMENT_THEMES = {
+  delivery: {
+    label: "Delivery",
+    card: "border-l-delivery bg-card-delivery",
+    badge: "bg-delivery/15 text-delivery-foreground",
+    quantity: "bg-delivery/20 text-delivery-foreground",
+  },
+  pickup: {
+    label: "Pickup",
+    card: "border-l-pickup bg-card-pickup",
+    badge: "bg-pickup/15 text-pickup-foreground",
+    quantity: "bg-pickup/20 text-pickup-foreground",
+  },
+  both: {
+    label: "Delivery + Pickup",
+    card: "border-l-both bg-card-both",
+    badge: "bg-both/15 text-both-foreground",
+    quantity: "bg-both/20 text-both-foreground",
+  },
+  // The form will not submit one of these, but rows predating it exist.
+  neither: {
+    label: "No movement set",
+    card: "border-l-border bg-card",
+    badge: "bg-muted text-muted-foreground",
+    quantity: "bg-muted text-foreground",
+  },
+} as const
+
+function themeFor(request: ToolRequest) {
+  if (request.delivery && request.pickup) return MOVEMENT_THEMES.both
+  if (request.delivery) return MOVEMENT_THEMES.delivery
+  if (request.pickup) return MOVEMENT_THEMES.pickup
+  return MOVEMENT_THEMES.neither
+}
+
 function RequestCard({ request }: { request: ToolRequest }) {
-  const movement = [request.delivery && "Delivery", request.pickup && "Pickup"]
-    .filter(Boolean)
-    .join(" + ")
+  const theme = themeFor(request)
+  const totalTools = request.tools.reduce((sum, tool) => sum + tool.quantity, 0)
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{request.job}</CardTitle>
-        <CardDescription>
-          {[
-            newYorkLabel(request.start),
-            request.timeRange,
-            request.floor && `Floor ${request.floor}`,
-            request.fieldPm,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </CardDescription>
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {movement && <Badge variant="secondary">{movement}</Badge>}
-          {request.toDo && <Badge variant="outline">{request.toDo}</Badge>}
-          {request.weAre && <Badge variant="outline">{request.weAre}</Badge>}
-          {request.tentative && <Badge variant="outline">Tentative</Badge>}
+    <Card data-size="sm" className={cn("h-full gap-4", theme.card)}>
+      <CardHeader className="gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge className={theme.badge}>{theme.label}</Badge>
           {request.completed && <Badge>Completed</Badge>}
+          {request.tentative && <Badge variant="outline">Tentative</Badge>}
         </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {request.tools.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No tools listed.</p>
-        ) : (
-          <ul className="flex flex-col gap-1 text-sm">
-            {request.tools.map((tool) => (
-              <li key={tool.name} className="flex justify-between gap-4">
-                <span className="min-w-0 truncate">{tool.name}</span>
-                <span className="text-muted-foreground tabular-nums">
-                  &times; {tool.quantity}
-                </span>
-              </li>
-            ))}
-          </ul>
+        <CardTitle className="text-base leading-snug wrap-anywhere">
+          {request.job}
+        </CardTitle>
+        {(request.toDo || request.weAre) && (
+          <CardDescription className="flex flex-wrap gap-1.5">
+            {request.toDo && <Badge variant="secondary">{request.toDo}</Badge>}
+            {request.weAre && <Badge variant="outline">{request.weAre}</Badge>}
+          </CardDescription>
         )}
+      </CardHeader>
 
-        {(request.contact || request.notes || request.toolsNotes) && (
-          <div className="flex flex-col gap-1 border-t pt-3 text-sm text-muted-foreground">
-            {request.contact && (
-              <p>
-                Contact: {request.contact}
-                {request.contactPhone ? ` · ${request.contactPhone}` : ""}
-              </p>
-            )}
-            {request.notes && (
-              <p className="whitespace-pre-line">{request.notes}</p>
-            )}
-            {request.toolsNotes && (
-              <p className="whitespace-pre-line">
-                Tool notes: {request.toolsNotes}
-              </p>
+      <CardContent className="gap-4">
+        {/* One labelled row per fact. These used to be joined with dots onto a
+            single line, where a floor, a time window and a PM name were
+            indistinguishable from one another. */}
+        <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">
+          <Fact label="Day">{newYorkDayLabel(request.start)}</Fact>
+          <Fact label="Slot">{newYorkTimeLabel(request.start)}</Fact>
+          {request.timeRange && <Fact label="Window">{request.timeRange}</Fact>}
+          {request.floor && <Fact label="Floor">{request.floor}</Fact>}
+          {request.fieldPm && <Fact label="Field PM">{request.fieldPm}</Fact>}
+          {request.contact && (
+            <Fact label="Contact">
+              {request.contact}
+              {request.contactPhone && (
+                <span className="text-muted-foreground">
+                  {" · "}
+                  {request.contactPhone}
+                </span>
+              )}
+            </Fact>
+          )}
+        </dl>
+
+        <div className="overflow-hidden rounded-lg border bg-background/70">
+          <div className="flex items-center justify-between gap-2 border-b px-2.5 py-1.5">
+            <FactLabel>Tools</FactLabel>
+            {request.tools.length > 0 && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {request.tools.length}{" "}
+                {request.tools.length === 1 ? "line" : "lines"} · {totalTools}{" "}
+                total
+              </span>
             )}
           </div>
-        )}
+          {request.tools.length === 0 ? (
+            <p className="px-2.5 py-2 text-sm text-muted-foreground">
+              No tools listed.
+            </p>
+          ) : (
+            <ul className="divide-y">
+              {request.tools.map((tool) => (
+                <li
+                  key={tool.name}
+                  className="flex items-baseline gap-2.5 px-2.5 py-1.5"
+                >
+                  <span
+                    className={cn(
+                      "inline-flex min-w-8 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums",
+                      theme.quantity
+                    )}
+                  >
+                    {tool.quantity} &times;
+                  </span>
+                  <span className="min-w-0 flex-1 wrap-anywhere">
+                    {tool.name}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </CardContent>
+
+      {(request.notes || request.toolsNotes) && (
+        <CardFooter className="flex-col items-start gap-2 border-t">
+          {request.notes && <Note label="Notes">{request.notes}</Note>}
+          {request.toolsNotes && (
+            <Note label="Tool notes">{request.toolsNotes}</Note>
+          )}
+        </CardFooter>
+      )}
+
+      {(request.pickup || request.delivery) && (
+        <CardFooter className="gap-2 border-t">
+          {request.pickup && (
+            <Button size="sm" className="flex-1">
+              Accept Pickup
+            </Button>
+          )}
+          {request.delivery && (
+            <Button size="sm" variant="outline" className="flex-1">
+              Assign Tools
+            </Button>
+          )}
+        </CardFooter>
+      )}
     </Card>
+  )
+}
+
+function FactLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+      {children}
+    </span>
+  )
+}
+
+/** A `dt`/`dd` pair, so it has to be a fragment inside the `dl`'s grid. */
+function Fact({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <>
+      <dt>
+        <FactLabel>{label}</FactLabel>
+      </dt>
+      <dd className="min-w-0 wrap-anywhere">{children}</dd>
+    </>
+  )
+}
+
+function Note({ label, children }: { label: string; children: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <FactLabel>{label}</FactLabel>
+      <p className="wrap-anywhere whitespace-pre-line text-muted-foreground">
+        {children}
+      </p>
+    </div>
   )
 }
 
 function RequestListSkeleton() {
   return (
-    <div className="flex flex-col gap-4">
-      {[0, 1, 2].map((key) => (
-        <Skeleton key={key} className="h-44 w-full rounded-xl" />
+    <div className={GRID}>
+      {Array.from({ length: 6 }, (_, key) => (
+        <Skeleton key={key} className="h-80 w-full rounded-xl" />
       ))}
     </div>
   )

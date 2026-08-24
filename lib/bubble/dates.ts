@@ -73,24 +73,40 @@ export function newYorkStamp(at: Date): string {
   return `${p.month}-${p.day}-${p.year} ${p.hour}:${p.minute} ${p.dayPeriod.toLowerCase()}`
 }
 
-/** `Mon 8-24, 9:00 am` — for reading a request back on screen. */
-export function newYorkLabel(iso: string | null | undefined): string {
-  if (!iso) return "—"
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return "—"
+const LABEL = new Intl.DateTimeFormat("en-US", {
+  timeZone: TZ,
+  weekday: "short",
+  month: "numeric",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+})
 
-  const p = partsOf(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: TZ,
-      weekday: "short",
-      month: "numeric",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    }),
-    at
-  )
+/** Null for a missing or unparseable value, so each label can say "—" itself. */
+function labelParts(iso: string | null | undefined) {
+  if (!iso) return null
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return null
+  return partsOf(LABEL, at)
+}
+
+/** `Mon 8-24` — the calendar half of a request's slot. */
+export function newYorkDayLabel(iso: string | null | undefined): string {
+  const p = labelParts(iso)
+  return p ? `${p.weekday} ${p.month}-${p.day}` : "—"
+}
+
+/** `9:00 am` — the clock half of a request's slot. */
+export function newYorkTimeLabel(iso: string | null | undefined): string {
+  const p = labelParts(iso)
+  return p ? `${p.hour}:${p.minute} ${p.dayPeriod.toLowerCase()}` : "—"
+}
+
+/** `Mon 8-24, 9:00 am` — both halves, where only one line is available. */
+export function newYorkLabel(iso: string | null | undefined): string {
+  const p = labelParts(iso)
+  if (!p) return "—"
   return `${p.weekday} ${p.month}-${p.day}, ${p.hour}:${p.minute} ${p.dayPeriod.toLowerCase()}`
 }
 

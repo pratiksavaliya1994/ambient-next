@@ -2,7 +2,12 @@ import "server-only"
 
 import { z } from "zod"
 
-import { bubbleCreate, bubbleList, type BubbleThing } from "@/lib/bubble/client"
+import {
+  bubbleCreate,
+  bubbleList,
+  bubbleListAll,
+  type BubbleThing,
+} from "@/lib/bubble/client"
 import { newYorkInstant, newYorkStamp } from "@/lib/bubble/dates"
 import { DEFAULT_REQUEST_ORDER, requestColor } from "@/lib/bubble/enums"
 import { listJobs } from "@/lib/bubble/reference"
@@ -83,6 +88,28 @@ export type ToolRequest = {
   toolsNotes: string | null
 }
 
+/** Stands in for `request.job` when the Bubble row has none. */
+const NO_JOB = "(no job)"
+
+/**
+ * Whether a row has anything worth putting on screen.
+ *
+ * The live app is full of abandoned rows: 21 of the 40 most recently created
+ * carry no job, no delivery or pickup flag, no slot and no tool line, so a card
+ * for one is blank apart from "(no job)". A caller showing a fixed number of
+ * requests should over-fetch and drop these rather than fill the screen with
+ * them. Nothing here writes such a row — they predate this app.
+ */
+export function hasContent(request: ToolRequest): boolean {
+  return (
+    request.job !== NO_JOB ||
+    request.delivery ||
+    request.pickup ||
+    request.start !== null ||
+    request.tools.length > 0
+  )
+}
+
 function toToolRequest(
   row: z.infer<typeof requestRow>,
   lines: ToolLine[],
@@ -91,7 +118,7 @@ function toToolRequest(
   return {
     id: row._id,
     createdAt: row["Created Date"] ?? null,
-    job: row.job ?? "(no job)",
+    job: row.job ?? NO_JOB,
     toDo: row.toDo ?? null,
     weAre: row.weAre ?? null,
     floor: row.floor ?? null,
@@ -114,8 +141,8 @@ function toToolRequest(
 /**
  * The most recent requests with their tool lines attached.
  *
- * Two queries, not one per request: the tool rows come back in a single `in`
- * lookup keyed on the request ids. A request can carry more than one
+ * Two lookups, not one per request: the tool rows all come back from one `in`
+ * query keyed on the request ids. A request can carry more than one
  * `requestedtools` row (the Bubble UI writes a fresh one on each submit), so
  * the lines are merged and the quantities summed rather than the last row
  * winning.
@@ -131,8 +158,10 @@ export async function listRecentRequests(limit = 25): Promise<ToolRequest[]> {
   const ids = rows.map((row) => row._id)
   if (ids.length === 0) return []
 
-  const toolRows = await bubbleList(REQUESTED_TOOLS, {
-    limit: 100,
+  // Paged through rather than capped at one page: several `requestedtools`
+  // rows per request means a single 100-row page runs out before the last
+  // request does, which showed up as cards claiming "No tools listed".
+  const toolRows = await bubbleListAll(REQUESTED_TOOLS, {
     constraints: [{ key: "requestID", constraint_type: "in", value: ids }],
   })
 
@@ -140,7 +169,7 @@ export async function listRecentRequests(limit = 25): Promise<ToolRequest[]> {
     string,
     { lines: Map<string, number>; notes: string[] }
   >()
-  for (const raw of toolRows.results) {
+  for (const raw of toolRows) {
     const row = requestedToolsRow.parse(raw)
     if (!row.requestID) continue
 
