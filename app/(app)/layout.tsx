@@ -20,7 +20,7 @@ export default async function AppLayout({
   return (
     <Toaster>
       <div className="flex min-h-svh flex-col">
-        <header className="flex flex-wrap items-center gap-4 border-b px-6 py-3">
+        <header className="flex flex-wrap items-center gap-4 border-b px-4 py-3 sm:px-6">
           <Link href="/requests" className="font-medium">
             Tool requests
           </Link>
@@ -55,7 +55,7 @@ export default async function AppLayout({
             to the live Bubble database.
           </p>
         )}
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </Toaster>
   )

@@ -460,7 +460,10 @@ Built and verified against live data:
 - `lib/bubble/requests.ts` — `createToolRequest`, `listRecentRequests`
 - `lib/notify.ts` — WhatsApp summary, gated
 - `app/(app)/requests` — list and create pages, the create server action
-- `components/request-form.tsx`, `components/tool-picker.tsx`
+- `components/request-form.tsx`, `components/tool-picker.tsx`,
+  `components/date-picker.tsx` — the form is a two-column layout (fields left,
+  tool selection right, stacked below `lg`) with the 112-row catalogue behind a
+  dialog, so the initial `/requests/new` document dropped to ~290KB
 - Auth.js with the flag-gated `dev-login` and Entra providers; login page
 
 **The write path has not been exercised against the live app.** Every read has;

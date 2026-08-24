@@ -23,7 +23,7 @@ export default async function NewRequestPage() {
   ])
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
       <div>
         <h1 className="text-xl font-medium">New tool request</h1>
         <p className="text-sm text-muted-foreground">

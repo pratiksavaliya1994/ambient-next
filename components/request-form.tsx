@@ -2,24 +2,29 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AlertCircleIcon, SendIcon } from "lucide-react"
+import { AlertCircleIcon, PlusIcon, SendIcon } from "lucide-react"
 
 import {
   createRequestAction,
   INITIAL_CREATE_STATE,
 } from "@/app/(app)/requests/actions"
-import { ToolPicker, toolLinesOf } from "@/components/tool-picker"
+import { DatePicker } from "@/components/date-picker"
+import {
+  SelectedTools,
+  ToolPickerDialog,
+  toolLinesOf,
+} from "@/components/tool-picker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Combobox,
   ComboboxContent,
@@ -34,8 +39,6 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-  FieldLegend,
-  FieldSet,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
@@ -77,12 +80,33 @@ import { formatToolsSummary } from "@/lib/bubble/tools-summary"
 import { requestFormSchema } from "@/lib/schemas/request"
 
 /**
+ * `delivery` and `pickup` are two independent yes/no fields in Bubble and both
+ * can be true, but as two checkboxes they read as an invalid-by-default state
+ * — untick both and the form breaks. As three mutually exclusive tabs the same
+ * three combinations are reachable and none of them is empty, so the
+ * "pick delivery, pickup, or both" error can no longer be provoked from here.
+ */
+const MOVEMENTS = [
+  { value: "delivery", label: "Delivery", delivery: true, pickup: false },
+  { value: "pickup", label: "Pickup", delivery: false, pickup: true },
+  { value: "both", label: "Both", delivery: true, pickup: true },
+] as const
+
+type Movement = (typeof MOVEMENTS)[number]["value"]
+
+/**
  * The whole request form as one client island.
  *
  * The Bubble schema has no draft state — a request either exists or it does
  * not — so everything here stays in browser state until the submit button, and
  * the server action writes both rows in one go. Abandoning the page leaves the
  * database untouched, which is the opposite of what the old Bubble UI does.
+ *
+ * Laid out as one form column beside a tool column rather than as three
+ * stacked cards. Two fields to a row and the 112-row catalogue moved into a
+ * dialog, so the fields a PM actually fills in fit on one screen; what stays
+ * beside them is the selection, not the catalogue. Below `lg` the columns
+ * stack, tools last.
  */
 export function RequestForm({
   jobs,
@@ -106,8 +130,7 @@ export function RequestForm({
   const [job, setJob] = useState<JobOption | null>(null)
   const [toDo, setToDo] = useState<ToDo>(UNFILTERED_TO_DO)
   const [weAre, setWeAre] = useState<WeAre>(DEFAULT_WE_ARE)
-  const [delivery, setDelivery] = useState(true)
-  const [pickup, setPickup] = useState(false)
+  const [movement, setMovement] = useState<Movement>("delivery")
   const [day, setDay] = useState(newYorkToday)
   const [slotHour, setSlotHour] = useState(timeSlots[2]?.hour ?? 8)
   const [timeRange, setTimeRange] = useState("Anytime")
@@ -131,12 +154,15 @@ export function RequestForm({
     [toolTypes, toDo]
   )
 
+  const chosenMovement =
+    MOVEMENTS.find((item) => item.value === movement) ?? MOVEMENTS[0]
+
   const values = {
     jobId: job?.id ?? "",
     toDo,
     weAre,
-    delivery,
-    pickup,
+    delivery: chosenMovement.delivery,
+    pickup: chosenMovement.pickup,
     day,
     slotHour,
     timeRange,
@@ -172,9 +198,10 @@ export function RequestForm({
     label: pm.company ? `${pm.name} — ${pm.company}` : pm.name,
     value: pm.name,
   }))
+  const units = tools.reduce((sum, line) => sum + line.quantity, 0)
 
   return (
-    <form action={submit} className="flex flex-col gap-6">
+    <form action={submit} className="flex flex-col gap-4">
       <input type="hidden" name="payload" value={JSON.stringify(values)} />
 
       {(state.status === "error" || state.status === "invalid") && (
@@ -185,146 +212,132 @@ export function RequestForm({
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Job</CardTitle>
-          <CardDescription>
-            Where the tools are going, and what the work is.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            <Field data-invalid={fieldErrors.jobId ? true : undefined}>
-              <FieldLabel htmlFor="job">Job</FieldLabel>
-              <Combobox
-                items={jobs}
-                value={job}
-                onValueChange={(next) => setJob((next as JobOption) ?? null)}
-                itemToStringLabel={(item: JobOption) => item.name}
-                itemToStringValue={(item: JobOption) => item.id}
-                limit={40}
-              >
-                <ComboboxInput
-                  id="job"
-                  placeholder="Search jobs by name"
-                  aria-invalid={fieldErrors.jobId ? true : undefined}
-                />
-                <ComboboxContent>
-                  <ComboboxEmpty>No job matches.</ComboboxEmpty>
-                  <ComboboxList>
-                    {(item: JobOption) => (
-                      <ComboboxItem key={item.id} value={item}>
-                        <Item size="xs" className="p-0">
-                          <ItemContent>
-                            <ItemTitle className="whitespace-nowrap">
-                              {item.name}
-                            </ItemTitle>
-                            <ItemDescription>
-                              {[item.gc, item.borough]
-                                .filter(Boolean)
-                                .join(" · ") || "No GC on file"}
-                            </ItemDescription>
-                          </ItemContent>
-                        </Item>
-                      </ComboboxItem>
-                    )}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
-              {fieldErrors.jobId && (
-                <FieldError>{fieldErrors.jobId}</FieldError>
-              )}
-            </Field>
+      <ToggleGroup
+        value={[movement]}
+        onValueChange={(next) => {
+          if (next[0]) setMovement(next[0] as Movement)
+        }}
+        spacing={0}
+        variant="outline"
+        className="w-full *:flex-1"
+        aria-label="Request type"
+      >
+        {MOVEMENTS.map((item) => (
+          <ToggleGroupItem key={item.value} value={item.value}>
+            {item.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+      {fieldErrors.delivery && <FieldError>{fieldErrors.delivery}</FieldError>}
 
-            <Field>
-              <FieldLabel htmlFor="toDo">Job type</FieldLabel>
-              <Select
-                items={TO_DO.map((value) => ({ label: value, value }))}
-                value={toDo}
-                onValueChange={(next) => setToDo(next as ToDo)}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Request details</CardTitle>
+            <CardDescription>
+              Where the tools are going, when they are needed, and who to ask
+              for on site.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                className="sm:col-span-2"
+                data-invalid={fieldErrors.jobId ? true : undefined}
               >
-                <SelectTrigger id="toDo">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {TO_DO.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {value}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Filters the tool list below. Fast Request shows everything.
-              </FieldDescription>
-            </Field>
-
-            <Field>
-              <FieldLabel>We are</FieldLabel>
-              <ToggleGroup
-                value={[weAre]}
-                onValueChange={(next) => {
-                  if (next[0]) setWeAre(next[0] as WeAre)
-                }}
-                spacing={2}
-              >
-                {WE_ARE.map((value) => (
-                  <ToggleGroupItem key={value} value={value}>
-                    {value}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </Field>
-
-            <FieldSet data-invalid={fieldErrors.delivery ? true : undefined}>
-              <FieldLegend variant="label">Movement</FieldLegend>
-              <FieldGroup>
-                <Field orientation="horizontal">
-                  <Checkbox
-                    id="delivery"
-                    checked={delivery}
-                    onCheckedChange={(next) => setDelivery(next === true)}
+                <FieldLabel htmlFor="job">Job</FieldLabel>
+                <Combobox
+                  items={jobs}
+                  value={job}
+                  onValueChange={(next) => setJob((next as JobOption) ?? null)}
+                  itemToStringLabel={(item: JobOption) => item.name}
+                  itemToStringValue={(item: JobOption) => item.id}
+                  limit={40}
+                >
+                  <ComboboxInput
+                    id="job"
+                    placeholder="Search jobs by name"
+                    aria-invalid={fieldErrors.jobId ? true : undefined}
                   />
-                  <FieldLabel htmlFor="delivery">Delivery</FieldLabel>
-                </Field>
-                <Field orientation="horizontal">
-                  <Checkbox
-                    id="pickup"
-                    checked={pickup}
-                    onCheckedChange={(next) => setPickup(next === true)}
-                  />
-                  <FieldLabel htmlFor="pickup">Pickup</FieldLabel>
-                </Field>
-              </FieldGroup>
-              {fieldErrors.delivery && (
-                <FieldError>{fieldErrors.delivery}</FieldError>
-              )}
-            </FieldSet>
-          </FieldGroup>
-        </CardContent>
-      </Card>
+                  <ComboboxContent>
+                    <ComboboxEmpty>No job matches.</ComboboxEmpty>
+                    <ComboboxList>
+                      {(item: JobOption) => (
+                        <ComboboxItem key={item.id} value={item}>
+                          <Item size="xs" className="p-0">
+                            <ItemContent>
+                              <ItemTitle className="whitespace-nowrap">
+                                {item.name}
+                              </ItemTitle>
+                              <ItemDescription>
+                                {[item.gc, item.borough]
+                                  .filter(Boolean)
+                                  .join(" · ") || "No GC on file"}
+                              </ItemDescription>
+                            </ItemContent>
+                          </Item>
+                        </ComboboxItem>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+                {fieldErrors.jobId && (
+                  <FieldError>{fieldErrors.jobId}</FieldError>
+                )}
+              </Field>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>When and who</CardTitle>
-          <CardDescription>
-            The date and slot place the request on the Bubble calendar. The time
-            range is the free-text note the drivers read.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="toDo">Job type</FieldLabel>
+                <Select
+                  items={TO_DO.map((value) => ({ label: value, value }))}
+                  value={toDo}
+                  onValueChange={(next) => setToDo(next as ToDo)}
+                >
+                  <SelectTrigger id="toDo">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {TO_DO.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {value}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>Filters the tool list.</FieldDescription>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="weAre">We are</FieldLabel>
+                <Select
+                  items={WE_ARE.map((value) => ({ label: value, value }))}
+                  value={weAre}
+                  onValueChange={(next) => setWeAre(next as WeAre)}
+                >
+                  <SelectTrigger id="weAre">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {WE_ARE.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {value}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+
               <Field data-invalid={fieldErrors.day ? true : undefined}>
                 <FieldLabel htmlFor="day">Date</FieldLabel>
-                <Input
+                <DatePicker
                   id="day"
-                  type="date"
                   value={day}
-                  onChange={(event) => setDay(event.target.value)}
-                  aria-invalid={fieldErrors.day ? true : undefined}
+                  onValueChange={setDay}
+                  invalid={fieldErrors.day ? true : undefined}
                 />
                 <FieldDescription>New York time.</FieldDescription>
               </Field>
@@ -389,120 +402,127 @@ export function RequestForm({
                   inputMode="tel"
                 />
               </Field>
-            </div>
 
-            <Field>
-              <FieldLabel htmlFor="fieldPm">Field PM</FieldLabel>
-              <Select
-                items={pmItems}
-                value={fieldPm}
-                onValueChange={(next) => setFieldPm(String(next))}
-              >
-                <SelectTrigger id="fieldPm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {pmItems.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Saved to fieldPM2, the text field the live app reads. The
-                matching option set is left empty, as it is on every recent row.
-              </FieldDescription>
-            </Field>
+              <Field className="sm:col-span-2">
+                <FieldLabel htmlFor="fieldPm">Field PM</FieldLabel>
+                <Select
+                  items={pmItems}
+                  value={fieldPm}
+                  onValueChange={(next) => setFieldPm(String(next))}
+                >
+                  <SelectTrigger id="fieldPm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {pmItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  Saved to fieldPM2, the text field the live app reads.
+                </FieldDescription>
+              </Field>
 
-            <Field>
-              <FieldLabel htmlFor="notes">Notes</FieldLabel>
-              <Textarea
-                id="notes"
-                rows={3}
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-              />
-            </Field>
+              <Field className="sm:col-span-2">
+                <FieldLabel htmlFor="notes">Notes</FieldLabel>
+                <Textarea
+                  id="notes"
+                  rows={2}
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                />
+              </Field>
 
-            <Field orientation="horizontal">
-              <Switch
-                id="tentative"
-                checked={tentative}
-                onCheckedChange={(next) => setTentative(next === true)}
-              />
-              <FieldLabel htmlFor="tentative">
-                Tentative — the date may still move
-              </FieldLabel>
-            </Field>
-          </FieldGroup>
-        </CardContent>
-      </Card>
+              <Field orientation="horizontal" className="sm:col-span-2">
+                <Switch
+                  id="tentative"
+                  checked={tentative}
+                  onCheckedChange={(next) => setTentative(next === true)}
+                />
+                <FieldLabel htmlFor="tentative">
+                  Tentative — the date may still move
+                </FieldLabel>
+              </Field>
+            </FieldGroup>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tools</CardTitle>
-          <CardDescription>
-            {offered.length} of {toolTypes.length} tool types are offered for{" "}
-            {toDo}.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            <Field data-invalid={fieldErrors.tools ? true : undefined}>
-              <ToolPicker
+        <Card className="lg:sticky lg:top-4">
+          <CardHeader>
+            <CardTitle>Tools</CardTitle>
+            <CardDescription>
+              {tools.length === 0
+                ? `${offered.length} offered for ${toDo}`
+                : `${tools.length} ${tools.length === 1 ? "type" : "types"}, ${units} in total`}
+            </CardDescription>
+            <CardAction>
+              <ToolPickerDialog
                 toolTypes={offered}
                 selected={selected}
                 onChange={setSelected}
+                toDo={toDo}
+                catalogueSize={toolTypes.length}
+                trigger={
+                  <Button type="button" variant="outline" size="sm">
+                    <PlusIcon data-icon="inline-start" />
+                    Add tools
+                  </Button>
+                }
               />
-              {fieldErrors.tools && (
-                <FieldError>{fieldErrors.tools}</FieldError>
-              )}
-            </Field>
-
-            {tools.length > 0 && (
-              <Field>
-                <FieldLabel>Saved to Bubble as</FieldLabel>
-                <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs">
-                  {formatToolsSummary(tools)}
-                </pre>
-                <FieldDescription>
-                  One requestedtools row, one text field — the shape the old app
-                  reads.
-                </FieldDescription>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup className="gap-4">
+              <Field data-invalid={fieldErrors.tools ? true : undefined}>
+                <SelectedTools selected={selected} onChange={setSelected} />
+                {fieldErrors.tools && (
+                  <FieldError>{fieldErrors.tools}</FieldError>
+                )}
               </Field>
-            )}
 
-            <Field>
-              <FieldLabel htmlFor="toolsNotes">Tool notes</FieldLabel>
-              <Textarea
-                id="toolsNotes"
-                rows={2}
-                value={toolsNotes}
-                onChange={(event) => setToolsNotes(event.target.value)}
-                placeholder="Anything the warehouse needs to know"
-              />
-            </Field>
-          </FieldGroup>
-        </CardContent>
-        <CardFooter className="justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            {notificationsOn
-              ? "A WhatsApp notification will go out."
-              : "WhatsApp notifications are off — nothing will be sent."}
-          </p>
-          <Button type="submit" disabled={!valid || pending}>
-            {pending ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <SendIcon data-icon="inline-start" />
-            )}
-            Create request
-          </Button>
-        </CardFooter>
-      </Card>
+              {tools.length > 0 && (
+                <Field>
+                  <FieldLabel>Saved to Bubble as</FieldLabel>
+                  <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs">
+                    {formatToolsSummary(tools)}
+                  </pre>
+                </Field>
+              )}
+
+              <Field>
+                <FieldLabel htmlFor="toolsNotes">Tool notes</FieldLabel>
+                <Textarea
+                  id="toolsNotes"
+                  rows={2}
+                  value={toolsNotes}
+                  onChange={(event) => setToolsNotes(event.target.value)}
+                  placeholder="Anything the warehouse needs to know"
+                />
+              </Field>
+            </FieldGroup>
+          </CardContent>
+          <CardFooter className="flex-col items-stretch gap-3">
+            <Button type="submit" disabled={!valid || pending}>
+              {pending ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <SendIcon data-icon="inline-start" />
+              )}
+              Create request
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              {notificationsOn
+                ? "A WhatsApp notification will go out."
+                : "WhatsApp notifications are off — nothing will be sent."}
+            </p>
+          </CardFooter>
+        </Card>
+      </div>
     </form>
   )
 }
