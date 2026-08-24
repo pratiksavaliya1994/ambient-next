@@ -1,0 +1,108 @@
+{
+  "info": {
+    "name": "Bubble Data API — Ambient (live schema)",
+    "description": "Read-only exploration of the app the business runs on. `base` is the version-test branch, which despite the name is the only version in use — treat every write here as a write to production. Set the `token` collection variable first.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "base", "value": "https://cfaner.bubbleapps.io/version-test/api/1.1" },
+    { "key": "token", "value": "" },
+    { "key": "requestId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Swagger — the authoritative field names",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base}}/meta/swagger.json", "host": ["{{base}}"], "path": ["meta", "swagger.json"] },
+        "description": "definitions.{type}.properties is the real list of API field names; definitions.{type}Body is what is writable. Note that option-set fields are reported as type 'option set' with NO value list — those have to be read off live rows instead."
+      }
+    },
+    {
+      "name": "2. Recent requests",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base}}/obj/request?limit=25&sort_field=Created Date&descending=true",
+          "host": ["{{base}}"], "path": ["obj", "request"],
+          "query": [
+            { "key": "limit", "value": "25" },
+            { "key": "sort_field", "value": "Created Date" },
+            { "key": "descending", "value": "true" }
+          ]
+        },
+        "description": "Where the live values for the `toDo`, `weAre` and `color` option sets came from. `job` is the job NAME as text, not a link."
+      }
+    },
+    {
+      "name": "3. Tool lines for a set of requests",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base}}/obj/requestedtools?limit=100&constraints=[{\"key\":\"requestID\",\"constraint_type\":\"in\",\"value\":[\"{{requestId}}\"]}]",
+          "host": ["{{base}}"], "path": ["obj", "requestedtools"],
+          "query": [
+            { "key": "limit", "value": "100" },
+            { "key": "constraints", "value": "[{\"key\":\"requestID\",\"constraint_type\":\"in\",\"value\":[\"{{requestId}}\"]}]" }
+          ]
+        },
+        "description": "One row per request, not per tool. `toolsSummary` holds the whole list as quoted `Name: qty` entries. `in` takes an array, which is how the app fetches lines for a page of requests in one call."
+      }
+    },
+    {
+      "name": "4. Tool catalogue",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base}}/obj/toolstype?limit=100",
+          "host": ["{{base}}"], "path": ["obj", "toolstype"],
+          "query": [{ "key": "limit", "value": "100" }]
+        },
+        "description": "112 rows over two pages. `realtedTo` — Bubble's misspelling, keep it — lists the `toDo` job types each tool is offered for."
+      }
+    },
+    {
+      "name": "5. Jobs",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base}}/obj/jobs?limit=100&cursor=0",
+          "host": ["{{base}}"], "path": ["obj", "jobs"],
+          "query": [
+            { "key": "limit", "value": "100" },
+            { "key": "cursor", "value": "0" }
+          ]
+        },
+        "description": "1,445 rows, so fifteen pages. `name` is what `request.job` stores; `description` feeds `request.searchable`."
+      }
+    },
+    {
+      "name": "6. Field PMs and calendar slots",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base}}/obj/pms?limit=100",
+          "host": ["{{base}}"], "path": ["obj", "pms"],
+          "query": [{ "key": "limit", "value": "100" }]
+        },
+        "description": "12 PMs. `Name` and `Company` are option sets returned as display text. `Active` is set on one row only — do not filter on it. Swap the path for `timelabels` for the 14 calendar slots."
+      }
+    },
+    {
+      "name": "7. User — note what is NOT here",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base}}/obj/user?limit=3",
+          "host": ["{{base}}"], "path": ["obj", "user"],
+          "query": [{ "key": "limit", "value": "3" }]
+        },
+        "description": "No `email`, no `Role`, no `passwordHash`. The address is inside an opaque `authentication` object that constraints cannot reach — which is why the app does not map sessions onto Bubble users. `tempTools` is the old UI's draft tool selection."
+      }
+    }
+  ]
+}
