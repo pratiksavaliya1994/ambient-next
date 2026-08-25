@@ -1,24 +1,14 @@
-import "server-only"
-
 import { newYorkWeekday } from "@/lib/bubble/dates"
-import { bubbleCreate } from "@/lib/bubble/client"
 import type { ToolLine } from "@/lib/bubble/tools-summary"
 
 /**
- * The WhatsApp summary the old Bubble app sends on every new request, plus the
- * `Notifications` row its "resend last message" button reads back.
- *
- * **Both are off unless `NOTIFY_ON_CREATE=true`.** The group id in the
- * environment is a real, live WhatsApp group and the Bubble page workflow
- * still sends its own copy, so turning this on without first disabling the
- * Bubble-side send means every request notifies twice. Composing the text is
- * always safe and always runs; only the two side effects are gated.
+ * The WhatsApp summary text for a new request. Composing it is the only part
+ * of notifying that lives in Next.js — sending it is the `create-request`
+ * Bubble backend workflow's job (see `lib/bubble/requests.ts`), since that
+ * workflow is what has WhatsApp/Whapi credentials configured.
  */
 
-const WHAPI_URL = "https://gate.whapi.cloud/messages/text"
-
 export type NotificationInput = {
-  requestId: string
   requestedBy: string
   job: string
   jobDetails: string | null
@@ -68,67 +58,4 @@ export function buildSummary(input: NotificationInput): string {
   ]
 
   return lines.filter((line) => line !== null).join("\n")
-}
-
-export function notificationsEnabled(): boolean {
-  return process.env.NOTIFY_ON_CREATE === "true"
-}
-
-export type NotifyResult =
-  | { sent: false; reason: "disabled" }
-  | { sent: false; reason: "failed"; error: string }
-  | { sent: true }
-
-/**
- * Writes the `Notifications` row and sends the WhatsApp message. Never throws:
- * a request that saved but failed to notify is still a saved request, and the
- * caller reports the difference rather than rolling anything back.
- */
-export async function notifyNewRequest(
-  input: NotificationInput,
-  summary: string
-): Promise<NotifyResult> {
-  if (!notificationsEnabled()) return { sent: false, reason: "disabled" }
-
-  const token = process.env.WHAPI_TOKEN
-  const group = process.env.WHAPI_GROUP_ID
-  if (!token || !group) {
-    return {
-      sent: false,
-      reason: "failed",
-      error: "WHAPI_TOKEN / WHAPI_GROUP_ID are not set.",
-    }
-  }
-
-  try {
-    await bubbleCreate("notifications", {
-      request: input.requestId,
-      summary,
-      status: "Sent",
-    })
-
-    const response = await fetch(WHAPI_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ typing_time: 6, to: group, body: summary }),
-    })
-    if (!response.ok) {
-      return {
-        sent: false,
-        reason: "failed",
-        error: `Whapi replied ${response.status}.`,
-      }
-    }
-
-    return { sent: true }
-  } catch (error) {
-    return {
-      sent: false,
-      reason: "failed",
-      error: error instanceof Error ? error.message : "Unknown error.",
-    }
-  }
 }

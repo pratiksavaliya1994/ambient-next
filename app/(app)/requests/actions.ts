@@ -6,46 +6,22 @@ import { displayNameOf, requireSession } from "@/lib/auth/session"
 import { createToolRequest } from "@/lib/bubble/requests"
 import { listJobs } from "@/lib/bubble/reference"
 import { newYorkInstant } from "@/lib/bubble/dates"
-import { buildSummary, notifyNewRequest } from "@/lib/notify"
+import { buildSummary } from "@/lib/notify"
 import { requestFormSchema } from "@/lib/schemas/request"
-
-export type CreateRequestState =
-  | { status: "idle" }
-  | { status: "invalid"; message: string; fieldErrors: Record<string, string> }
-  | { status: "error"; message: string }
-  | {
-      status: "created"
-      requestId: string
-      job: string
-      warning: string | null
-    }
-
-export const INITIAL_CREATE_STATE: CreateRequestState = { status: "idle" }
+import type { CreateRequestState } from "./action-state"
 
 /**
- * The whole form arrives as one JSON string rather than as loose `FormData`
- * entries. The tool selection is an array of objects, which `FormData` can
- * only carry as parallel fields that then have to be re-zipped — JSON keeps
- * one shape on both sides of the boundary and lets the same Zod schema
- * validate it in the browser and again here.
- *
- * Validated again here regardless of what the client did: a server action is
- * reachable by direct POST.
+ * `react-hook-form` (via `zodResolver`) already validates this client-side, so
+ * the object arriving here is normally clean. It is re-validated regardless of
+ * what the client did: a server action is reachable by direct POST, and the
+ * browser's validation is not a security boundary.
  */
 export async function createRequestAction(
-  _previous: CreateRequestState,
-  formData: FormData
+  input: unknown
 ): Promise<CreateRequestState> {
   const session = await requireSession()
 
-  let raw: unknown
-  try {
-    raw = JSON.parse(String(formData.get("payload") ?? ""))
-  } catch {
-    return { status: "error", message: "Could not read the form." }
-  }
-
-  const parsed = requestFormSchema.safeParse(raw)
+  const parsed = requestFormSchema.safeParse(input)
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {}
     for (const issue of parsed.error.issues) {
@@ -61,35 +37,19 @@ export async function createRequestAction(
 
   const values = parsed.data
 
-  let created
-  try {
-    created = await createToolRequest(values)
-  } catch (error) {
-    return {
-      status: "error",
-      message:
-        error instanceof Error
-          ? `Bubble rejected the request: ${error.message}`
-          : "Bubble rejected the request.",
-    }
-  }
-
-  // The request row exists from here on. Nothing below may turn this into a
-  // failure — the user is told what did and did not land instead.
-  const warnings: string[] = []
-  if (!created.toolsRowId) {
-    warnings.push(
-      "The request saved but its tool list did not. Add the tools in Bubble, or delete the request and try again."
-    )
-  }
-
   const job = (await listJobs()).find((entry) => entry.id === values.jobId)
-  const notification = {
-    requestId: created.requestId,
+  if (!job) {
+    return { status: "error", message: "That job no longer exists in Bubble." }
+  }
+
+  // Built before the request exists — the message never references the
+  // request's id — so the one Bubble workflow call can carry it alongside
+  // everything else instead of composing it afterward.
+  const summary = buildSummary({
     requestedBy: displayNameOf(session),
-    job: created.job,
-    jobDetails: job?.description ?? null,
-    gc: job?.gc ?? null,
+    job: job.name,
+    jobDetails: job.description,
+    gc: job.gc,
     toDo: values.toDo,
     weAre: values.weAre,
     delivery: values.delivery,
@@ -103,14 +63,19 @@ export async function createRequestAction(
     notes: values.notes,
     tools: values.tools,
     toolsNotes: values.toolsNotes,
-  }
+  })
 
-  const notified = await notifyNewRequest(
-    notification,
-    buildSummary(notification)
-  )
-  if (!notified.sent && notified.reason === "failed") {
-    warnings.push(`The WhatsApp notification did not go out: ${notified.error}`)
+  let created
+  try {
+    created = await createToolRequest(values, job, summary)
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? `Bubble rejected the request: ${error.message}`
+          : "Bubble rejected the request.",
+    }
   }
 
   revalidatePath("/requests")
@@ -119,6 +84,5 @@ export async function createRequestAction(
     status: "created",
     requestId: created.requestId,
     job: created.job,
-    warning: warnings.length ? warnings.join(" ") : null,
   }
 }

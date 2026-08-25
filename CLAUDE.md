@@ -176,8 +176,14 @@ An option-set write with an unrecognised value fails silently in Bubble.
 
 ### Backend workflows
 
-Three exist and must not be broken: `/wf/googleDataToDB`, `/wf/Set Location`,
-`/wf/Set Status`. Nothing in this app calls them; everything is Data API CRUD.
+Three pre-existing ones must not be broken: `/wf/googleDataToDB`,
+`/wf/Set Location`, `/wf/Set Status`. This app doesn't call them.
+
+This app *does* call one workflow of its own: `/wf/create-request` (see
+"Creating a request" below) — the one exception to "everything is Data API
+CRUD." It creates the `request` row, the `requestedtools` row, and sends the
+WhatsApp notification as one server-side unit in Bubble, rather than this app
+doing two `/obj/...` writes and its own WhatsApp send.
 
 ---
 
@@ -268,7 +274,8 @@ The 14 half-hour slots the Bubble calendar lays requests out on
 ### Types this app does not touch
 
 `tools`, `toolshistory`, `consumables`, `materials`, `materialsfromebom`,
-`requestedmaterials`, `notifications` (except when notifications are enabled).
+`requestedmaterials`. `notifications` is also untouched from Next.js — the
+`create-request` workflow writes it from inside Bubble, if it does at all.
 
 ---
 
@@ -286,21 +293,34 @@ abandoned entries are never cleaned up.
 
 1. `app/(app)/requests/new/page.tsx` loads jobs, tool types, PMs and time slots
    server-side and passes them in.
-2. `components/request-form.tsx` holds every field in `useState` and submits
-   the whole thing as one JSON string in a hidden `payload` field. JSON rather
-   than loose `FormData` entries because the tool selection is an array of
-   objects, and this way the same Zod schema validates it in the browser and
-   again on the server.
-3. `app/(app)/requests/actions.ts` re-validates, then:
-   - `POST /obj/request`
-   - `POST /obj/requestedtools` with `requestID` and the formatted summary
-   - composes the WhatsApp summary and sends it *if enabled*
-   - `revalidatePath('/requests')`
+2. `components/request-form.tsx` is a `react-hook-form` form (`zodResolver`
+   against the same `requestFormSchema` used server-side). Widgets that aren't
+   native inputs (`Select`, `Combobox`, `ToggleGroup`, `Switch`, `DatePicker`,
+   the tool picker) go through `Controller`; a few fields (`job`, `movement`,
+   the tool `selected` map) stay as local state because the widget needs more
+   than the one schema field it maps onto, and push their derived value into
+   the form via `setValue`. Submitting calls `createRequestAction` directly
+   (no `<form action>`/`useActionState` — a server action is just an async
+   function, called here from `handleSubmit`'s callback inside a
+   `useTransition`).
+3. `app/(app)/requests/actions.ts` re-validates server-side, looks up the job,
+   builds the WhatsApp summary text (`buildSummary` in `lib/notify.ts` — text
+   composition only, no send), then makes **one** call:
+   `createToolRequest` (`lib/bubble/requests.ts`) →
+   `POST /wf/create-request` with the form values, the tool summary, and the
+   WhatsApp text as one payload. That workflow — built and owned in Bubble
+   Studio, not this repo — creates the `request` row, the `requestedtools`
+   row, and sends the WhatsApp message as one server-side unit, and returns
+   `{ requestId }`.
+4. `revalidatePath('/requests')`.
 
-**Partial failure is real.** There are no transactions. The `request` row is
-written first; if the `requestedtools` write then fails, the request exists
-without its tools. The action returns a warning saying exactly that rather than
-reporting a clean success. Do not "fix" this by swallowing it.
+This replaced an earlier version of this flow that did two direct
+`POST /obj/...` writes from Next.js and its own `fetch` to Whapi, gated by
+`NOTIFY_ON_CREATE`. That meant partial failure was a real, handled case (the
+`request` row could exist without its `requestedtools` row). With one Bubble
+workflow owning both writes, that specific failure mode moves inside Bubble —
+whether the workflow's own steps are atomic is a Bubble Studio concern, not
+something this app's code can guarantee.
 
 ### Reading requests back
 
@@ -313,20 +333,21 @@ UI writes a fresh one per submit), so lines are merged and quantities summed.
 
 ## WhatsApp notifications
 
-Off unless `NOTIFY_ON_CREATE=true`. Composing the text always runs; only the
-two side effects are gated:
+Sending is entirely Bubble's job now, done inside the `create-request`
+workflow (see "Creating a request" above) — this app no longer holds a Whapi
+token, writes a `notifications` row, or calls `gate.whapi.cloud` itself.
+`WHAPI_TOKEN` / `WHAPI_GROUP_ID` / `NOTIFY_ON_CREATE` are gone from this app's
+environment; if the workflow sends via Whapi, that token lives in Bubble's own
+API Connector config instead.
 
-- a `notifications` row with the assembled `summary` (the Bubble "resend last
-  WhatsApp" feature reads it back)
-- `POST https://gate.whapi.cloud/messages/text`
+`lib/notify.ts` keeps exactly one export, `buildSummary` — pure text
+composition, no side effect. It builds the message with real `\n`
+(`JSON.stringify` escapes them correctly on the way out; do not hand-escape)
+and hands the resulting string to the workflow call as one of its parameters.
 
-**The Bubble page workflow still sends its own copy.** Turning this on without
-first disabling the Bubble-side send means every request notifies twice. The
-group id in the environment is a real, live group.
-
-Build the message with real `\n` — `JSON.stringify` escapes them correctly.
-Do not hand-escape. `notifyNewRequest` never throws: a request that saved but
-failed to notify is still a saved request.
+This app's old, Bubble-page-workflow-triggered WhatsApp send does not apply
+here: this flow doesn't go through that page at all, so there's exactly one
+send — the new workflow's own — per request created through this app.
 
 ---
 
@@ -417,10 +438,6 @@ AUTH_MICROSOFT_ENTRA_ID_ISSUER=
 
 BUBBLE_API_BASE=https://cfaner.bubbleapps.io/version-test/api/1.1
 BUBBLE_API_TOKEN=
-
-NOTIFY_ON_CREATE=false
-WHAPI_TOKEN=
-WHAPI_GROUP_ID=
 ```
 
 No `DATABASE_URL`. None of these are `NEXT_PUBLIC_`.
@@ -450,15 +467,19 @@ are `server-only`, which throws under plain Node. No test runner is configured.
 Built and verified against live data:
 
 - `lib/bubble/client.ts` — the single Data API entry point, with 429/5xx retry
-  and backoff, cursor pagination and sorting
+  and backoff, cursor pagination and sorting; `bubbleRunWorkflow` posts to
+  `/wf/{name}` on the same client for backend-workflow calls
 - `lib/bubble/enums.ts` — `WE_ARE`, `TO_DO`, `requestColor`
 - `lib/bubble/dates.ts` — New York wall-clock conversion via `Intl` (two-pass,
   so it is correct across DST boundaries)
 - `lib/bubble/reference.ts` / `reference-types.ts` — jobs, tool types, PMs,
   time slots
 - `lib/bubble/tools-summary.ts` — the `toolsSummary` codec
-- `lib/bubble/requests.ts` — `createToolRequest`, `listRecentRequests`
-- `lib/notify.ts` — WhatsApp summary, gated
+- `lib/bubble/requests.ts` — `listRecentRequests` (reads, unchanged Data API);
+  `createToolRequest` now calls the `create-request` backend workflow instead
+  of writing `request`/`requestedtools` directly
+- `lib/notify.ts` — `buildSummary`, WhatsApp text composition only (sending
+  moved into the Bubble workflow)
 - `app/(app)/requests` — list and create pages, the create server action
 - `app/(app)/layout.tsx` + `components/app-sidebar.tsx` — the signed-in shell
   is a shadcn `Sidebar` (`collapsible="icon"`, a sheet below `md`) plus a
@@ -473,9 +494,13 @@ Built and verified against live data:
   dialog, so the initial `/requests/new` document dropped to ~290KB
 - Auth.js with the flag-gated `dev-login` and Entra providers; login page
 
-**The write path has not been exercised against the live app.** Every read has;
-creating a request would put a real row in the live database, so it is waiting
-on a decision to do that.
+**The write path has not been exercised against the live app, and right now it
+cannot be: `/wf/create-request` doesn't exist in Bubble Studio yet.** This
+app's code already calls it; until that workflow is built there (creating
+`request`, creating `requestedtools`, sending the WhatsApp message, returning
+`{ requestId }`), submitting the form fails at that one call. Every read path
+has been exercised — creating a request puts a real row in the live database,
+so exercising the write path is also waiting on that Bubble-side build.
 
 ### Where to go next
 

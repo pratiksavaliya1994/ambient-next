@@ -1,13 +1,16 @@
 "use client"
 
-import { useActionState, useEffect, useMemo, useState } from "react"
+import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import { Controller, useForm, useWatch } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { AlertCircleIcon, PlusIcon, SendIcon } from "lucide-react"
 
 import {
-  createRequestAction,
   INITIAL_CREATE_STATE,
-} from "@/app/(app)/requests/actions"
+  type CreateRequestState,
+} from "@/app/(app)/requests/action-state"
+import { createRequestAction } from "@/app/(app)/requests/actions"
 import { DatePicker } from "@/components/date-picker"
 import {
   SelectedTools,
@@ -66,8 +69,6 @@ import {
   TO_DO,
   UNFILTERED_TO_DO,
   WE_ARE,
-  type ToDo,
-  type WeAre,
 } from "@/lib/bubble/enums"
 import {
   Job,
@@ -78,7 +79,10 @@ import {
   type ToolType,
 } from "@/lib/bubble/reference-types"
 import { formatToolsSummary } from "@/lib/bubble/tools-summary"
-import { requestFormSchema } from "@/lib/schemas/request"
+import {
+  requestFormSchema,
+  type RequestFormValues,
+} from "@/lib/schemas/request"
 
 /**
  * `delivery` and `pickup` are two independent yes/no fields in Bubble and both
@@ -114,34 +118,50 @@ export function RequestForm({
   toolTypes,
   fieldPms,
   timeSlots,
-  notificationsOn,
 }: {
   jobs: Job[]
   toolTypes: ToolType[]
   fieldPms: FieldPm[]
   timeSlots: TimeSlot[]
-  notificationsOn: boolean
 }) {
   const router = useRouter()
-  const [state, submit, pending] = useActionState(
-    createRequestAction,
-    INITIAL_CREATE_STATE
-  )
+  const [state, setState] = useState<CreateRequestState>(INITIAL_CREATE_STATE)
+  const [pending, startTransition] = useTransition()
+
+  const {
+    register,
+    control,
+    handleSubmit,
+    setValue,
+    setError,
+    trigger,
+    formState: { errors, isValid },
+  } = useForm<RequestFormValues>({
+    resolver: zodResolver(requestFormSchema),
+    defaultValues: {
+      jobId: "",
+      toDo: UNFILTERED_TO_DO,
+      weAre: DEFAULT_WE_ARE,
+      delivery: true,
+      pickup: false,
+      day: newYorkToday(),
+      slotHour: timeSlots[2]?.hour ?? 8,
+      timeRange: "Anytime",
+      floor: "",
+      contact: "",
+      contactPhone: "",
+      fieldPm: fieldPms[0]?.name ?? "",
+      notes: "",
+      toolsNotes: "",
+      tentative: false,
+      tools: [],
+    },
+  })
+
+  const toDo = useWatch({ control, name: "toDo" })
 
   const [job, setJob] = useState<Job | null>(null)
-  const [toDo, setToDo] = useState<ToDo>(UNFILTERED_TO_DO)
-  const [weAre, setWeAre] = useState<WeAre>(DEFAULT_WE_ARE)
   const [movement, setMovement] = useState<Movement>("delivery")
-  const [day, setDay] = useState(newYorkToday)
-  const [slotHour, setSlotHour] = useState(timeSlots[2]?.hour ?? 8)
-  const [timeRange, setTimeRange] = useState("Anytime")
-  const [floor, setFloor] = useState("")
-  const [contact, setContact] = useState("")
-  const [contactPhone, setContactPhone] = useState("")
-  const [fieldPm, setFieldPm] = useState(fieldPms[0]?.name ?? "")
-  const [notes, setNotes] = useState("")
-  const [toolsNotes, setToolsNotes] = useState("")
-  const [tentative, setTentative] = useState(false)
   const [selected, setSelected] = useState<Record<string, number>>({})
 
   const tools = useMemo(() => toolLinesOf(selected), [selected])
@@ -155,41 +175,57 @@ export function RequestForm({
     [toolTypes, toDo]
   )
 
-  const chosenMovement =
-    MOVEMENTS.find((item) => item.value === movement) ?? MOVEMENTS[0]
-
-  const values = {
-    jobId: job?.id ?? "",
-    toDo,
-    weAre,
-    delivery: chosenMovement.delivery,
-    pickup: chosenMovement.pickup,
-    day,
-    slotHour,
-    timeRange,
-    floor,
-    contact,
-    contactPhone,
-    fieldPm,
-    notes,
-    toolsNotes,
-    tentative,
-    tools,
+  // `job`, `movement` and `selected` live outside react-hook-form because the
+  // widgets that edit them (Combobox, ToggleGroup, the tool picker) need more
+  // than the one schema field each maps onto — the Job object for display, or
+  // two booleans from one three-way toggle. Their `onChange` handlers push the
+  // derived schema value into the form; `shouldValidate` only re-checks the
+  // field being set, so picking a job doesn't prematurely flag the tools list.
+  function updateJob(next: Job | null) {
+    setJob(next)
+    setValue("jobId", next?.id ?? "", { shouldValidate: true })
   }
 
-  // The same schema the action runs, so the button state matches the outcome.
-  const valid = requestFormSchema.safeParse(values).success
-  const fieldErrors = state.status === "invalid" ? state.fieldErrors : {}
+  function updateMovement(next: Movement) {
+    setMovement(next)
+    const chosen =
+      MOVEMENTS.find((item) => item.value === next) ?? MOVEMENTS[0]
+    // Both fields have to change before either is re-validated: the
+    // delivery-or-pickup rule is cross-field, so validating `delivery` alone
+    // right after setting it (with the old `pickup` still in place) can flag
+    // an error that a lone, later `pickup` validation pass never clears.
+    setValue("delivery", chosen.delivery)
+    setValue("pickup", chosen.pickup)
+    void trigger(["delivery", "pickup"])
+  }
 
-  useEffect(() => {
-    if (state.status !== "created") return
+  function updateSelected(next: Record<string, number>) {
+    setSelected(next)
+    setValue("tools", toolLinesOf(next), { shouldValidate: true })
+  }
 
-    toast.add({
-      title: "Request created",
-      description: state.warning ?? `${state.job} is on the board.`,
+  const onSubmit = handleSubmit((values) => {
+    startTransition(async () => {
+      const result = await createRequestAction(values)
+      if (result.status === "invalid") {
+        for (const [key, message] of Object.entries(result.fieldErrors)) {
+          setError(key as keyof RequestFormValues, {
+            type: "server",
+            message,
+          })
+        }
+      }
+      setState(result)
+
+      if (result.status === "created") {
+        toast.add({
+          title: "Request created",
+          description: `${result.job} is on the board.`,
+        })
+        router.push("/requests")
+      }
     })
-    router.push("/requests")
-  }, [state, router])
+  })
 
   const slotItems = timeSlots.map((slot) => ({
     label: slot.label,
@@ -202,9 +238,7 @@ export function RequestForm({
   const units = tools.reduce((sum, line) => sum + line.quantity, 0)
 
   return (
-    <form action={submit} className="flex flex-col gap-4">
-      <input type="hidden" name="payload" value={JSON.stringify(values)} />
-
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
       {(state.status === "error" || state.status === "invalid") && (
         <Alert variant="destructive">
           <AlertCircleIcon />
@@ -216,7 +250,7 @@ export function RequestForm({
       <ToggleGroup
         value={[movement]}
         onValueChange={(next) => {
-          if (next[0]) setMovement(next[0] as Movement)
+          if (next[0]) updateMovement(next[0] as Movement)
         }}
         spacing={0}
         variant="outline"
@@ -229,7 +263,7 @@ export function RequestForm({
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
-      {fieldErrors.delivery && <FieldError>{fieldErrors.delivery}</FieldError>}
+      {errors.delivery && <FieldError errors={[errors.delivery]} />}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <Card>
@@ -244,13 +278,13 @@ export function RequestForm({
             <FieldGroup className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Field
                 className="sm:col-span-2"
-                data-invalid={fieldErrors.jobId ? true : undefined}
+                data-invalid={errors.jobId ? true : undefined}
               >
                 <FieldLabel htmlFor="job">Job</FieldLabel>
                 <Combobox
                   items={jobs}
                   value={job}
-                  onValueChange={(next) => setJob((next as Job) ?? null)}
+                  onValueChange={(next) => updateJob((next as Job) ?? null)}
                   itemToStringLabel={(item: Job) => item.name}
                   itemToStringValue={(item: Job) => item.id}
                   limit={40}
@@ -258,7 +292,7 @@ export function RequestForm({
                   <ComboboxInput
                     id="job"
                     placeholder="Search jobs by name"
-                    aria-invalid={fieldErrors.jobId ? true : undefined}
+                    aria-invalid={errors.jobId ? true : undefined}
                   />
                   <ComboboxContent>
                     <ComboboxEmpty>No job matches.</ComboboxEmpty>
@@ -282,148 +316,169 @@ export function RequestForm({
                     </ComboboxList>
                   </ComboboxContent>
                 </Combobox>
-                {fieldErrors.jobId && (
-                  <FieldError>{fieldErrors.jobId}</FieldError>
-                )}
+                {errors.jobId && <FieldError errors={[errors.jobId]} />}
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="toDo">Job type</FieldLabel>
-                <Select
-                  items={TO_DO.map((value) => ({ label: value, value }))}
-                  value={toDo}
-                  onValueChange={(next) => setToDo(next as ToDo)}
-                >
-                  <SelectTrigger id="toDo">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {TO_DO.map((value) => (
-                        <SelectItem key={value} value={value}>
-                          {value}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <Controller
+                  control={control}
+                  name="toDo"
+                  render={({ field }) => (
+                    <Select
+                      items={TO_DO.map((value) => ({ label: value, value }))}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      <SelectTrigger id="toDo" onBlur={field.onBlur}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {TO_DO.map((value) => (
+                            <SelectItem key={value} value={value}>
+                              {value}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
                 <FieldDescription>Filters the tool list.</FieldDescription>
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="weAre">We are</FieldLabel>
-                <Select
-                  items={WE_ARE.map((value) => ({ label: value, value }))}
-                  value={weAre}
-                  onValueChange={(next) => setWeAre(next as WeAre)}
-                >
-                  <SelectTrigger id="weAre">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {WE_ARE.map((value) => (
-                        <SelectItem key={value} value={value}>
-                          {value}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <Controller
+                  control={control}
+                  name="weAre"
+                  render={({ field }) => (
+                    <Select
+                      items={WE_ARE.map((value) => ({ label: value, value }))}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      <SelectTrigger id="weAre" onBlur={field.onBlur}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {WE_ARE.map((value) => (
+                            <SelectItem key={value} value={value}>
+                              {value}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="floor">Floor</FieldLabel>
                 <Input
                   id="floor"
-                  value={floor}
-                  onChange={(event) => setFloor(event.target.value)}
                   placeholder="14, ground, loading dock"
+                  {...register("floor")}
                 />
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="contact">Site contact</FieldLabel>
-                <Input
-                  id="contact"
-                  value={contact}
-                  onChange={(event) => setContact(event.target.value)}
-                />
+                <Input id="contact" {...register("contact")} />
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="contactPhone">Contact phone</FieldLabel>
                 <Input
                   id="contactPhone"
-                  value={contactPhone}
-                  onChange={(event) => setContactPhone(event.target.value)}
                   inputMode="tel"
+                  {...register("contactPhone")}
                 />
               </Field>
 
-              <Field data-invalid={fieldErrors.day ? true : undefined}>
+              <Field data-invalid={errors.day ? true : undefined}>
                 <FieldLabel htmlFor="day">Date</FieldLabel>
-                <DatePicker
-                  id="day"
-                  value={day}
-                  onValueChange={setDay}
-                  invalid={fieldErrors.day ? true : undefined}
+                <Controller
+                  control={control}
+                  name="day"
+                  render={({ field }) => (
+                    <DatePicker
+                      id="day"
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      invalid={errors.day ? true : undefined}
+                    />
+                  )}
                 />
                 {/* <FieldDescription>New York time.</FieldDescription> */}
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="slot">Calendar slot</FieldLabel>
-                <Select
-                  items={slotItems}
-                  value={String(slotHour)}
-                  onValueChange={(next) => setSlotHour(Number(next))}
-                >
-                  <SelectTrigger id="slot">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {slotItems.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <Controller
+                  control={control}
+                  name="slotHour"
+                  render={({ field }) => (
+                    <Select
+                      items={slotItems}
+                      value={String(field.value)}
+                      onValueChange={(next) => field.onChange(Number(next))}
+                    >
+                      <SelectTrigger id="slot" onBlur={field.onBlur}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {slotItems.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="timeRange">Time range</FieldLabel>
                 <Input
                   id="timeRange"
-                  value={timeRange}
-                  onChange={(event) => setTimeRange(event.target.value)}
                   placeholder="Anytime"
+                  {...register("timeRange")}
                 />
               </Field>
 
               <Field className="sm:col-span-2">
                 <FieldLabel htmlFor="fieldPm">Field PM</FieldLabel>
-                <Select
-                  items={pmItems}
-                  value={fieldPm}
-                  onValueChange={(next) => setFieldPm(String(next))}
-                >
-                  <SelectTrigger id="fieldPm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {pmItems.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <Controller
+                  control={control}
+                  name="fieldPm"
+                  render={({ field }) => (
+                    <Select
+                      items={pmItems}
+                      value={field.value}
+                      onValueChange={(next) => field.onChange(String(next))}
+                    >
+                      <SelectTrigger id="fieldPm" onBlur={field.onBlur}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {pmItems.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
                 <FieldDescription>
                   Saved to fieldPM2, the text field the live app reads.
                 </FieldDescription>
@@ -431,19 +486,20 @@ export function RequestForm({
 
               <Field className="sm:col-span-2">
                 <FieldLabel htmlFor="notes">Notes</FieldLabel>
-                <Textarea
-                  id="notes"
-                  rows={2}
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                />
+                <Textarea id="notes" rows={2} {...register("notes")} />
               </Field>
 
               <Field orientation="horizontal" className="sm:col-span-2">
-                <Switch
-                  id="tentative"
-                  checked={tentative}
-                  onCheckedChange={(next) => setTentative(next === true)}
+                <Controller
+                  control={control}
+                  name="tentative"
+                  render={({ field }) => (
+                    <Switch
+                      id="tentative"
+                      checked={field.value}
+                      onCheckedChange={(next) => field.onChange(next === true)}
+                    />
+                  )}
                 />
                 <FieldLabel htmlFor="tentative">
                   Tentative — the date may still move
@@ -465,7 +521,7 @@ export function RequestForm({
               <ToolPickerDialog
                 toolTypes={offered}
                 selected={selected}
-                onChange={setSelected}
+                onChange={updateSelected}
                 toDo={toDo}
                 catalogueSize={toolTypes.length}
                 trigger={
@@ -479,11 +535,9 @@ export function RequestForm({
           </CardHeader>
           <CardContent>
             <FieldGroup className="gap-4">
-              <Field data-invalid={fieldErrors.tools ? true : undefined}>
-                <SelectedTools selected={selected} onChange={setSelected} />
-                {fieldErrors.tools && (
-                  <FieldError>{fieldErrors.tools}</FieldError>
-                )}
+              <Field data-invalid={errors.tools ? true : undefined}>
+                <SelectedTools selected={selected} onChange={updateSelected} />
+                {errors.tools && <FieldError errors={[errors.tools]} />}
               </Field>
 
               {tools.length > 0 && (
@@ -500,15 +554,14 @@ export function RequestForm({
                 <Textarea
                   id="toolsNotes"
                   rows={2}
-                  value={toolsNotes}
-                  onChange={(event) => setToolsNotes(event.target.value)}
                   placeholder="Anything the warehouse needs to know"
+                  {...register("toolsNotes")}
                 />
               </Field>
             </FieldGroup>
           </CardContent>
           <CardFooter className="flex-col items-stretch gap-3">
-            <Button type="submit" disabled={!valid || pending}>
+            <Button type="submit" disabled={!isValid || pending}>
               {pending ? (
                 <Spinner data-icon="inline-start" />
               ) : (
@@ -517,9 +570,7 @@ export function RequestForm({
               Create request
             </Button>
             <p className="text-xs text-muted-foreground">
-              {notificationsOn
-                ? "A WhatsApp notification will go out."
-                : "WhatsApp notifications are off — nothing will be sent."}
+              A WhatsApp notification goes out automatically.
             </p>
           </CardFooter>
         </Card>

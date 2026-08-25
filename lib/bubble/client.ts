@@ -187,6 +187,29 @@ export async function bubbleCreate(
   return json.id
 }
 
+/**
+ * Runs a Bubble backend (API) workflow — `POST /wf/{name}` — rather than a
+ * `/obj/{type}` Data API write. Used for flows a single workflow owns
+ * end-to-end (e.g. creating a `request` and its `requestedtools` row and
+ * sending the WhatsApp notification in one server-side step in Bubble).
+ *
+ * Bubble nests a workflow's "Return data from API" values under a `response`
+ * key on the Data API, but that isn't independently confirmed for every
+ * workflow response shape — this falls back to the raw body if `response`
+ * isn't present, so a caller's own schema is what actually enforces the shape.
+ */
+export async function bubbleRunWorkflow(
+  name: string,
+  data: Record<string, unknown>
+): Promise<unknown> {
+  const res = await request(`/wf/${name}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+  const json = (await res.json()) as { response?: unknown }
+  return json.response ?? json
+}
+
 export async function bubblePatch(
   type: string,
   id: string,

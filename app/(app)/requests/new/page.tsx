@@ -8,7 +8,6 @@ import {
   listToolTypes,
 } from "@/lib/bubble/reference"
 import { toJobOption } from "@/lib/bubble/reference-types"
-import { notificationsEnabled } from "@/lib/notify"
 
 export const metadata: Metadata = { title: "New tool request" }
 
@@ -36,7 +35,6 @@ export default async function NewRequestPage() {
         toolTypes={toolTypes}
         fieldPms={fieldPms}
         timeSlots={timeSlots}
-        notificationsOn={notificationsEnabled()}
       />
     </div>
   )

@@ -3,14 +3,14 @@ import "server-only"
 import { z } from "zod"
 
 import {
-  bubbleCreate,
   bubbleList,
   bubbleListAll,
+  bubbleRunWorkflow,
   type BubbleThing,
 } from "@/lib/bubble/client"
 import { newYorkInstant, newYorkStamp } from "@/lib/bubble/dates"
 import { DEFAULT_REQUEST_ORDER, requestColor } from "@/lib/bubble/enums"
-import { listJobs } from "@/lib/bubble/reference"
+import type { Job } from "@/lib/bubble/reference-types"
 import {
   formatToolsSummary,
   parseToolsSummary,
@@ -198,47 +198,47 @@ export async function listRecentRequests(limit = 25): Promise<ToolRequest[]> {
 
 export type CreatedRequest = {
   requestId: string
-  /** The `requestedtools` row, or null if the request landed and it did not. */
-  toolsRowId: string | null
   job: string
-  summary: string
 }
 
+const CREATE_REQUEST_WORKFLOW = "create-request"
+
+const createRequestResult = z.object({
+  requestId: z.string(),
+})
+
 /**
- * Creates a request and its tool line.
- *
- * There are no transactions in the Data API. The `request` row is written
- * first because it is the row the ids hang off; if the `requestedtools` write
- * then fails the request still exists, so `toolsRowId` comes back null and the
- * caller must say so rather than reporting a clean success.
+ * Creates a request and its tool line via the `create-request` Bubble backend
+ * workflow (`POST /wf/create-request`), rather than two direct `/obj/...`
+ * writes. That workflow owns creating the `request` row, the `requestedtools`
+ * row, and sending the WhatsApp summary as one server-side unit — this only
+ * builds its payload. `job` and `summary` (the WhatsApp text, from
+ * `buildSummary` in `lib/notify.ts`) come from the caller, which already has
+ * the session context (`requestedBy`) needed to build them.
  */
 export async function createToolRequest(
-  values: RequestFormValues
+  values: RequestFormValues,
+  job: Job,
+  summary: string
 ): Promise<CreatedRequest> {
-  const job = (await listJobs()).find(
-    (candidate) => candidate.id === values.jobId
-  )
-  if (!job) throw new Error("That job no longer exists in Bubble.")
-
   const now = new Date()
   const start = newYorkInstant(values.day, values.slotHour)
   const end = new Date(start.getTime() + SLOT_LENGTH_MS)
 
-  const requestId = await bubbleCreate(REQUEST, {
+  const raw = await bubbleRunWorkflow(CREATE_REQUEST_WORKFLOW, {
     job: job.name,
     toDo: values.toDo,
     weAre: values.weAre,
     delivery: values.delivery,
     pickup: values.pickup,
     tentative: values.tentative,
-    completed: false,
     floor: values.floor,
     contact: values.contact,
     contactPhone: values.contactPhone,
     // `fieldPM` is the option set and `fieldPM2` the text copy. Every live row
     // written in the last two years fills the text field and leaves the option
     // set empty, so this does the same.
-    fieldPM2: values.fieldPm,
+    fieldPm: values.fieldPm,
     notes: values.notes,
     timeRange: values.timeRange,
     // Midnight New York on the delivery day, matching every live row.
@@ -250,21 +250,11 @@ export async function createToolRequest(
     // What the Bubble UI's search box matches on: the job's long description
     // followed by a New York timestamp.
     searchable: `${job.description} - ${newYorkStamp(now)}`,
+    toolsSummary: formatToolsSummary(values.tools),
+    toolsNotes: values.toolsNotes,
+    summary,
   })
 
-  const summary = formatToolsSummary(values.tools)
-
-  let toolsRowId: string | null = null
-  try {
-    toolsRowId = await bubbleCreate(REQUESTED_TOOLS, {
-      requestID: requestId,
-      toolsSummary: summary,
-      toolsNotes: values.toolsNotes,
-    })
-  } catch {
-    // Swallowed on purpose: the request exists and the caller needs its id to
-    // tell the user what did and did not land.
-  }
-
-  return { requestId, toolsRowId, job: job.name, summary }
+  const result = createRequestResult.parse(raw)
+  return { requestId: result.requestId, job: job.name }
 }
