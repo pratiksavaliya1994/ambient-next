@@ -70,9 +70,10 @@ import {
   type WeAre,
 } from "@/lib/bubble/enums"
 import {
+  Job,
   toolTypesFor,
   type FieldPm,
-  type JobOption,
+  // type JobOption,
   type TimeSlot,
   type ToolType,
 } from "@/lib/bubble/reference-types"
@@ -115,7 +116,7 @@ export function RequestForm({
   timeSlots,
   notificationsOn,
 }: {
-  jobs: JobOption[]
+  jobs: Job[]
   toolTypes: ToolType[]
   fieldPms: FieldPm[]
   timeSlots: TimeSlot[]
@@ -127,7 +128,7 @@ export function RequestForm({
     INITIAL_CREATE_STATE
   )
 
-  const [job, setJob] = useState<JobOption | null>(null)
+  const [job, setJob] = useState<Job | null>(null)
   const [toDo, setToDo] = useState<ToDo>(UNFILTERED_TO_DO)
   const [weAre, setWeAre] = useState<WeAre>(DEFAULT_WE_ARE)
   const [movement, setMovement] = useState<Movement>("delivery")
@@ -240,7 +241,7 @@ export function RequestForm({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <FieldGroup className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FieldGroup className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Field
                 className="sm:col-span-2"
                 data-invalid={fieldErrors.jobId ? true : undefined}
@@ -249,9 +250,9 @@ export function RequestForm({
                 <Combobox
                   items={jobs}
                   value={job}
-                  onValueChange={(next) => setJob((next as JobOption) ?? null)}
-                  itemToStringLabel={(item: JobOption) => item.name}
-                  itemToStringValue={(item: JobOption) => item.id}
+                  onValueChange={(next) => setJob((next as Job) ?? null)}
+                  itemToStringLabel={(item: Job) => item.name}
+                  itemToStringValue={(item: Job) => item.id}
                   limit={40}
                 >
                   <ComboboxInput
@@ -262,7 +263,7 @@ export function RequestForm({
                   <ComboboxContent>
                     <ComboboxEmpty>No job matches.</ComboboxEmpty>
                     <ComboboxList>
-                      {(item: JobOption) => (
+                      {(item: Job) => (
                         <ComboboxItem key={item.id} value={item}>
                           <Item size="xs" className="p-0">
                             <ItemContent>
@@ -270,7 +271,7 @@ export function RequestForm({
                                 {item.name}
                               </ItemTitle>
                               <ItemDescription>
-                                {[item.gc, item.borough]
+                                {[item.gc, item.borough, item.description]
                                   .filter(Boolean)
                                   .join(" · ") || "No GC on file"}
                               </ItemDescription>
@@ -331,6 +332,35 @@ export function RequestForm({
                 </Select>
               </Field>
 
+              <Field>
+                <FieldLabel htmlFor="floor">Floor</FieldLabel>
+                <Input
+                  id="floor"
+                  value={floor}
+                  onChange={(event) => setFloor(event.target.value)}
+                  placeholder="14, ground, loading dock"
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="contact">Site contact</FieldLabel>
+                <Input
+                  id="contact"
+                  value={contact}
+                  onChange={(event) => setContact(event.target.value)}
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="contactPhone">Contact phone</FieldLabel>
+                <Input
+                  id="contactPhone"
+                  value={contactPhone}
+                  onChange={(event) => setContactPhone(event.target.value)}
+                  inputMode="tel"
+                />
+              </Field>
+
               <Field data-invalid={fieldErrors.day ? true : undefined}>
                 <FieldLabel htmlFor="day">Date</FieldLabel>
                 <DatePicker
@@ -339,7 +369,7 @@ export function RequestForm({
                   onValueChange={setDay}
                   invalid={fieldErrors.day ? true : undefined}
                 />
-                <FieldDescription>New York time.</FieldDescription>
+                {/* <FieldDescription>New York time.</FieldDescription> */}
               </Field>
 
               <Field>
@@ -371,35 +401,6 @@ export function RequestForm({
                   value={timeRange}
                   onChange={(event) => setTimeRange(event.target.value)}
                   placeholder="Anytime"
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="floor">Floor</FieldLabel>
-                <Input
-                  id="floor"
-                  value={floor}
-                  onChange={(event) => setFloor(event.target.value)}
-                  placeholder="14, ground, loading dock"
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="contact">Site contact</FieldLabel>
-                <Input
-                  id="contact"
-                  value={contact}
-                  onChange={(event) => setContact(event.target.value)}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="contactPhone">Contact phone</FieldLabel>
-                <Input
-                  id="contactPhone"
-                  value={contactPhone}
-                  onChange={(event) => setContactPhone(event.target.value)}
-                  inputMode="tel"
                 />
               </Field>
 
@@ -452,7 +453,7 @@ export function RequestForm({
           </CardContent>
         </Card>
 
-        <Card className="lg:sticky lg:top-4">
+        <Card className="lg:sticky lg:top-18">
           <CardHeader>
             <CardTitle>Tools</CardTitle>
             <CardDescription>

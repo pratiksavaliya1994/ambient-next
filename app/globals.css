@@ -110,8 +110,9 @@
   --card-wash: 7%;
   --delivery: oklch(0.66 0.19 250);
   --delivery-foreground: oklch(0.42 0.15 250);
-  --pickup: oklch(0.72 0.17 40);
-  --pickup-foreground: oklch(0.44 0.14 40);
+  /* Pickup - green */
+  --pickup: oklch(0.68 0.16 155);
+  --pickup-foreground: oklch(0.38 0.11 155);
   --both: oklch(0.62 0.21 293);
   --both-foreground: oklch(0.44 0.19 293);
   --foreground: oklch(0.148 0.004 228.8);
@@ -151,8 +152,8 @@
   --card-wash: 14%;
   --delivery: oklch(0.66 0.19 250);
   --delivery-foreground: oklch(0.86 0.08 250);
-  --pickup: oklch(0.72 0.17 40);
-  --pickup-foreground: oklch(0.86 0.09 45);
+  --pickup: oklch(0.68 0.16 155);
+  --pickup-foreground: oklch(0.84 0.1 155);
   --both: oklch(0.62 0.21 293);
   --both-foreground: oklch(0.86 0.09 293);
   --sidebar-ring: oklch(0.56 0.021 213.5);

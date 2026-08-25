@@ -171,21 +171,184 @@ function themeFor(request: ToolRequest) {
   return MOVEMENT_THEMES.neither
 }
 
+// function RequestCard({ request }: { request: ToolRequest }) {
+//   const theme = themeFor(request)
+//   const totalTools = request.tools.reduce((sum, tool) => sum + tool.quantity, 0)
+
+//   return (
+//     <Card data-size="sm" className={cn("h-full gap-4", theme.card)}>
+//       <CardHeader className="gap-2">
+//         <div className="flex flex-wrap items-center gap-1.5">
+//           <Badge className={theme.badge}>{theme.label}</Badge>
+//           {request.completed && <Badge>Completed</Badge>}
+//           {request.tentative && <Badge variant="outline">Tentative</Badge>}
+//         </div>
+//         <CardTitle className="text-base leading-snug wrap-anywhere">
+//           {request.job}
+//         </CardTitle>
+//         {(request.toDo || request.weAre) && (
+//           <CardDescription className="flex flex-wrap gap-1.5">
+//             {request.toDo && <Badge variant="secondary">{request.toDo}</Badge>}
+//             {request.weAre && <Badge variant="outline">{request.weAre}</Badge>}
+//           </CardDescription>
+//         )}
+//       </CardHeader>
+
+//       <CardContent className="gap-4">
+//         {/* One labelled row per fact. These used to be joined with dots onto a
+//             single line, where a floor, a time window and a PM name were
+//             indistinguishable from one another. */}
+//         <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">
+//           <Fact label="Day">{newYorkDayLabel(request.start)}</Fact>
+//           <Fact label="Slot">{newYorkTimeLabel(request.start)}</Fact>
+//           {request.timeRange && <Fact label="Window">{request.timeRange}</Fact>}
+//           {request.floor && <Fact label="Floor">{request.floor}</Fact>}
+//           {request.fieldPm && <Fact label="Field PM">{request.fieldPm}</Fact>}
+//           {request.contact && (
+//             <Fact label="Contact">
+//               {request.contact}
+//               {request.contactPhone && (
+//                 <span className="text-muted-foreground">
+//                   {" · "}
+//                   {request.contactPhone}
+//                 </span>
+//               )}
+//             </Fact>
+//           )}
+//         </dl>
+
+//         {/* <div className="overflow-hidden rounded-lg border bg-background/70">
+//           <div className="flex items-center justify-between gap-2 border-b px-2.5 py-1.5">
+//             <FactLabel>Tools</FactLabel>
+//             {request.tools.length > 0 && (
+//               <span className="text-xs text-muted-foreground tabular-nums">
+//                 {request.tools.length}{" "}
+//                 {request.tools.length === 1 ? "line" : "lines"} · {totalTools}{" "}
+//                 total
+//               </span>
+//             )}
+//           </div>
+//           {request.tools.length === 0 ? (
+//             <p className="px-2.5 py-2 text-sm text-muted-foreground">
+//               No tools listed.
+//             </p>
+//           ) : (
+//             <ul className="divide-y">
+//               {request.tools.map((tool) => (
+//                 <li
+//                   key={tool.name}
+//                   className="flex items-baseline gap-2.5 px-2.5 py-1.5"
+//                 >
+//                   <span
+//                     className={cn(
+//                       "inline-flex min-w-8 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums",
+//                       theme.quantity
+//                     )}
+//                   >
+//                     {tool.quantity} x
+//                   </span>
+//                   <span className="min-w-0 flex-1 wrap-anywhere">
+//                     {tool.name}
+//                   </span>
+//                 </li>
+//               ))}
+//             </ul>
+//           )}
+//         </div> */}
+//         <div className="overflow-hidden rounded-lg border bg-background/70">
+//           <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+//             <FactLabel>Tools</FactLabel>
+
+//             {request.tools.length > 0 && (
+//               <span className="text-xs text-muted-foreground tabular-nums">
+//                 {request.tools.length}{" "}
+//                 {request.tools.length === 1 ? "tool" : "tools"} · {totalTools}{" "}
+//                 total items
+//               </span>
+//             )}
+//           </div>
+
+//           {request.tools.length === 0 ? (
+//             <p className="px-3 py-2.5 text-sm text-muted-foreground">
+//               No tools listed.
+//             </p>
+//           ) : (
+//             <ul className="divide-y">
+//               {request.tools.map((tool) => (
+//                 <li
+//                   key={tool.name}
+//                   className="flex items-center justify-between gap-4 px-3 py-2"
+//                 >
+//                   <span className="min-w-0 flex-1 text-sm wrap-anywhere">
+//                     {tool.name}
+//                   </span>
+
+//                   <span
+//                     className={cn(
+//                       "inline-flex shrink-0 items-center rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
+//                       theme.quantity
+//                     )}
+//                   >
+//                     Qty: {tool.quantity}
+//                   </span>
+//                 </li>
+//               ))}
+//             </ul>
+//           )}
+//         </div>
+//       </CardContent>
+
+//       {(request.notes || request.toolsNotes) && (
+//         <CardFooter className="flex-col items-start gap-2 border-t">
+//           {request.notes && <Note label="Notes">{request.notes}</Note>}
+//           {request.toolsNotes && (
+//             <Note label="Tool notes">{request.toolsNotes}</Note>
+//           )}
+//         </CardFooter>
+//       )}
+
+//       {(request.pickup || request.delivery) && (
+//         <CardFooter className="gap-2 border-t">
+//           {request.pickup && (
+//             <Button size="sm" className="flex-1">
+//               Accept Pickup
+//             </Button>
+//           )}
+//           {request.delivery && (
+//             <Button size="sm" variant="outline" className="flex-1">
+//               Assign Tools
+//             </Button>
+//           )}
+//         </CardFooter>
+//       )}
+//     </Card>
+//   )
+// }
+
 function RequestCard({ request }: { request: ToolRequest }) {
   const theme = themeFor(request)
   const totalTools = request.tools.reduce((sum, tool) => sum + tool.quantity, 0)
 
+  const hasNotes = request.notes || request.toolsNotes
+  const hasActions = request.pickup || request.delivery
+
   return (
-    <Card data-size="sm" className={cn("h-full gap-4", theme.card)}>
-      <CardHeader className="gap-2">
+    <Card
+      data-size="sm"
+      className={cn("flex h-130 flex-col gap-0 overflow-hidden", theme.card)}
+    >
+      {/* Fixed Header */}
+      <CardHeader className="shrink-0 gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge className={theme.badge}>{theme.label}</Badge>
           {request.completed && <Badge>Completed</Badge>}
           {request.tentative && <Badge variant="outline">Tentative</Badge>}
         </div>
+
         <CardTitle className="text-base leading-snug wrap-anywhere">
           {request.job}
         </CardTitle>
+
         {(request.toDo || request.weAre) && (
           <CardDescription className="flex flex-wrap gap-1.5">
             {request.toDo && <Badge variant="secondary">{request.toDo}</Badge>}
@@ -194,85 +357,98 @@ function RequestCard({ request }: { request: ToolRequest }) {
         )}
       </CardHeader>
 
-      <CardContent className="gap-4">
-        {/* One labelled row per fact. These used to be joined with dots onto a
-            single line, where a floor, a time window and a PM name were
-            indistinguishable from one another. */}
-        <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">
-          <Fact label="Day">{newYorkDayLabel(request.start)}</Fact>
-          <Fact label="Slot">{newYorkTimeLabel(request.start)}</Fact>
-          {request.timeRange && <Fact label="Window">{request.timeRange}</Fact>}
-          {request.floor && <Fact label="Floor">{request.floor}</Fact>}
-          {request.fieldPm && <Fact label="Field PM">{request.fieldPm}</Fact>}
-          {request.contact && (
-            <Fact label="Contact">
-              {request.contact}
-              {request.contactPhone && (
-                <span className="text-muted-foreground">
-                  {" · "}
-                  {request.contactPhone}
+      {/* Scrollable Content */}
+      <CardContent className="my-3 min-h-0 flex-1 overflow-y-auto">
+        <div className="flex flex-col gap-4">
+          <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">
+            <Fact label="Day">{newYorkDayLabel(request.start)}</Fact>
+
+            <Fact label="Slot">{newYorkTimeLabel(request.start)}</Fact>
+
+            {request.timeRange && (
+              <Fact label="Window">{request.timeRange}</Fact>
+            )}
+
+            {request.floor && <Fact label="Floor">{request.floor}</Fact>}
+
+            {request.fieldPm && <Fact label="Field PM">{request.fieldPm}</Fact>}
+
+            {request.contact && (
+              <Fact label="Contact">
+                {request.contact}
+                {request.contactPhone && (
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {request.contactPhone}
+                  </span>
+                )}
+              </Fact>
+            )}
+          </dl>
+
+          <div className="overflow-hidden rounded-lg border bg-background/70">
+            <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+              <FactLabel>Tools</FactLabel>
+
+              {request.tools.length > 0 && (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {request.tools.length}{" "}
+                  {request.tools.length === 1 ? "tool" : "tools"} · {totalTools}{" "}
+                  total items
                 </span>
               )}
-            </Fact>
-          )}
-        </dl>
+            </div>
 
-        <div className="overflow-hidden rounded-lg border bg-background/70">
-          <div className="flex items-center justify-between gap-2 border-b px-2.5 py-1.5">
-            <FactLabel>Tools</FactLabel>
-            {request.tools.length > 0 && (
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {request.tools.length}{" "}
-                {request.tools.length === 1 ? "line" : "lines"} · {totalTools}{" "}
-                total
-              </span>
+            {request.tools.length === 0 ? (
+              <p className="px-3 py-2.5 text-sm text-muted-foreground">
+                No tools listed.
+              </p>
+            ) : (
+              <ul className="divide-y">
+                {request.tools.map((tool) => (
+                  <li
+                    key={tool.name}
+                    className="flex items-center justify-between gap-4 px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1 text-sm wrap-anywhere">
+                      {tool.name}
+                    </span>
+
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
+                        theme.quantity
+                      )}
+                    >
+                      Qty: {tool.quantity}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-          {request.tools.length === 0 ? (
-            <p className="px-2.5 py-2 text-sm text-muted-foreground">
-              No tools listed.
-            </p>
-          ) : (
-            <ul className="divide-y">
-              {request.tools.map((tool) => (
-                <li
-                  key={tool.name}
-                  className="flex items-baseline gap-2.5 px-2.5 py-1.5"
-                >
-                  <span
-                    className={cn(
-                      "inline-flex min-w-8 shrink-0 justify-center rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums",
-                      theme.quantity
-                    )}
-                  >
-                    {tool.quantity} &times;
-                  </span>
-                  <span className="min-w-0 flex-1 wrap-anywhere">
-                    {tool.name}
-                  </span>
-                </li>
-              ))}
-            </ul>
+
+          {hasNotes && (
+            <div className="flex flex-col gap-2 border-t pt-4">
+              {request.notes && <Note label="Notes">{request.notes}</Note>}
+
+              {request.toolsNotes && (
+                <Note label="Tool notes">{request.toolsNotes}</Note>
+              )}
+            </div>
           )}
         </div>
       </CardContent>
 
-      {(request.notes || request.toolsNotes) && (
-        <CardFooter className="flex-col items-start gap-2 border-t">
-          {request.notes && <Note label="Notes">{request.notes}</Note>}
-          {request.toolsNotes && (
-            <Note label="Tool notes">{request.toolsNotes}</Note>
-          )}
-        </CardFooter>
-      )}
-
-      {(request.pickup || request.delivery) && (
-        <CardFooter className="gap-2 border-t">
+      {/* Always Fixed at Bottom */}
+      {hasActions && (
+        <CardFooter className="mt-auto shrink-0 gap-2 border-t">
           {request.pickup && (
             <Button size="sm" className="flex-1">
               Accept Pickup
             </Button>
           )}
+
           {request.delivery && (
             <Button size="sm" variant="outline" className="flex-1">
               Assign Tools

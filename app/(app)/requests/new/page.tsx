@@ -27,7 +27,7 @@ export default async function NewRequestPage() {
       <div>
         <h1 className="text-xl font-medium">New tool request</h1>
         <p className="text-sm text-muted-foreground">
-          Nothing is written to Bubble until you submit.
+          Enter details for a new tool request.
         </p>
       </div>
 

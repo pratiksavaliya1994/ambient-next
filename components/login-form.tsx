@@ -63,12 +63,15 @@ export function LoginForm({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sign in</CardTitle>
-        <CardDescription>Continue to the tool workflow.</CardDescription>
+    <Card className="gap-0 overflow-hidden py-0 shadow-lg ring-1 ring-foreground/[0.07]">
+      <div className="h-1 w-full bg-linear-to-r from-[#0b1220] via-[#c6a664] to-[#0b1220]" />
+      <CardHeader className="gap-1.5 pt-6">
+        <CardTitle className="text-xl">Sign in to your workspace</CardTitle>
+        <CardDescription>
+          Manage tool and equipment requests for Ambient Flooring job sites.
+        </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-4 pt-2 pb-6">
         {error && (
           <Alert variant="destructive">
             <AlertCircleIcon />
@@ -88,7 +91,7 @@ export function LoginForm({
             </Alert>
 
             <form onSubmit={onDevLogin}>
-              <FieldGroup>
+              <FieldGroup className="gap-4">
                 <Field>
                   <FieldLabel htmlFor="name">Your name</FieldLabel>
                   <Input
@@ -98,6 +101,7 @@ export function LoginForm({
                     placeholder="Daithi Murphy"
                     autoComplete="name"
                     autoFocus
+                    className="h-10"
                   />
                   <FieldDescription>
                     The Field PM on a request is picked separately, on the form.
@@ -105,6 +109,8 @@ export function LoginForm({
                 </Field>
                 <Button
                   type="submit"
+                  size="lg"
+                  className="w-full"
                   disabled={name.trim().length < 2 || pending !== null}
                 >
                   {pending === "dev" ? (
@@ -126,12 +132,13 @@ export function LoginForm({
             onClick={onMicrosoft}
             disabled={pending !== null}
             variant={allowDevLogin ? "outline" : "default"}
+            size="lg"
             className="w-full"
           >
             {pending === "microsoft" ? (
               <Spinner data-icon="inline-start" />
             ) : (
-              <LogInIcon data-icon="inline-start" />
+              <MicrosoftIcon data-icon="inline-start" />
             )}
             Continue with Microsoft
           </Button>
@@ -148,6 +155,20 @@ export function LoginForm({
           </Alert>
         )}
       </CardContent>
+      <div className="border-t border-border/70 bg-muted/30 px-6 py-3 text-center text-xs text-muted-foreground">
+        Having trouble signing in? Contact your administrator.
+      </div>
     </Card>
+  )
+}
+
+function MicrosoftIcon(props: React.ComponentProps<"svg">) {
+  return (
+    <svg viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
   )
 }

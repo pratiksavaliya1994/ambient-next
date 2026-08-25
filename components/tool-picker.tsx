@@ -115,6 +115,7 @@ export function ToolPickerDialog({
                 Try a different search, or switch the job type to widen the
                 list.
               </EmptyDescription>
+              {trigger}
             </EmptyHeader>
           </Empty>
         ) : (
@@ -185,16 +186,16 @@ export function SelectedTools({
             <WrenchIcon />
           </EmptyMedia>
           <EmptyTitle>No tools yet</EmptyTitle>
-          <EmptyDescription>
-            A request needs at least one tool type.
-          </EmptyDescription>
         </EmptyHeader>
+        <EmptyDescription>
+          A request needs at least one tool type.
+        </EmptyDescription>
       </Empty>
     )
   }
 
   return (
-    <ItemGroup className="max-h-[22rem] gap-1 overflow-y-auto rounded-lg border p-1">
+    <ItemGroup className="max-h-88 gap-1 overflow-y-auto rounded-lg border p-1">
       {lines.map((line) => (
         <Item key={line.name} size="sm" variant="muted">
           <ItemContent>
@@ -218,7 +219,7 @@ export function SelectedTools({
                 onChange(next)
               }}
             >
-              <XIcon />
+              <XIcon className="pointer-events-none font-bold text-red-500" />
             </Button>
           </ItemActions>
         </Item>

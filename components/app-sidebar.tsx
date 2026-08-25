@@ -66,10 +66,10 @@ export function AppSidebar({ userName }: { userName: string }) {
                 </div>
                 <div className="flex min-w-0 flex-col leading-tight">
                   <span className="truncate text-sm font-medium">
-                    Tool workflow
+                    Ambient Flooring
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
-                    Ambient Flooring
+                    Tool workflow
                   </span>
                 </div>
               </SidebarMenuButton>

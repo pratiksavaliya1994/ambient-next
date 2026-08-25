@@ -25,14 +25,15 @@ export type Job = {
  * reader is `createToolRequest`, building `request.searchable`, which looks the
  * job up again by id. Shipping it doubled the page payload for nothing.
  */
-export type JobOption = Omit<Job, "description">
+// export type JobOption = Omit<Job, "description">
 
-export function toJobOption(job: Job): JobOption {
+export function toJobOption(job: Job): Job {
   return {
     id: job.id,
     name: job.name,
     gc: job.gc,
     borough: job.borough,
+    description: job.description,
   }
 }
 
