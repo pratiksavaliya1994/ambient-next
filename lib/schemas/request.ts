@@ -44,8 +44,10 @@ export const requestFormSchema = z
     fieldPm: z.string().trim().max(120),
     notes: z.string().trim().max(2000),
     toolsNotes: z.string().trim().max(2000),
+    /** Free text, no separate selection — sent as-is, empty is valid. */
+    materials: z.string().trim().max(2000),
     tentative: z.boolean(),
-    tools: z.array(toolLineSchema).min(1, "Add at least one tool."),
+    tools: z.array(toolLineSchema),
   })
   .refine((value) => value.delivery || value.pickup, {
     message: "Pick delivery, pickup, or both.",
@@ -55,5 +57,12 @@ export const requestFormSchema = z
     message: "End date can't be before the start date.",
     path: ["endDate"],
   })
+  .refine(
+    (value) => value.tools.length > 0 || value.materials.trim().length > 3,
+    {
+      message: "Add at least one tool or enter materials.",
+      path: ["tools"],
+    }
+  )
 
 export type RequestFormValues = z.infer<typeof requestFormSchema>

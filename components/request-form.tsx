@@ -12,6 +12,7 @@ import {
 } from "@/app/(app)/requests/action-state"
 import { createRequestAction } from "@/app/(app)/requests/actions"
 import { DateRangePicker } from "@/components/date-range-picker"
+import { MaterialDialog } from "@/components/material-dialog"
 import {
   SelectedTools,
   ToolPickerDialog,
@@ -71,9 +72,11 @@ import {
   WE_ARE,
 } from "@/lib/bubble/enums"
 import {
+  defaultMaterialsFor,
   Job,
   toolTypesFor,
   type FieldPm,
+  type MaterialDefault,
   // type JobOption,
   type TimeSlot,
   type ToolType,
@@ -118,11 +121,13 @@ export function RequestForm({
   toolTypes,
   fieldPms,
   timeSlots,
+  materialDefaults,
 }: {
   jobs: Job[]
   toolTypes: ToolType[]
   fieldPms: FieldPm[]
   timeSlots: TimeSlot[]
+  materialDefaults: MaterialDefault[]
 }) {
   const router = useRouter()
   const [state, setState] = useState<CreateRequestState>(INITIAL_CREATE_STATE)
@@ -154,6 +159,7 @@ export function RequestForm({
       fieldPm: fieldPms[0]?.name ?? "",
       notes: "",
       toolsNotes: "",
+      materials: "",
       tentative: false,
       tools: [],
     },
@@ -162,6 +168,7 @@ export function RequestForm({
   const toDo = useWatch({ control, name: "toDo" })
   const startDate = useWatch({ control, name: "startDate" })
   const endDate = useWatch({ control, name: "endDate" })
+  const materials = useWatch({ control, name: "materials" })
 
   const [job, setJob] = useState<Job | null>(null)
   const [movement, setMovement] = useState<Movement>("delivery")
@@ -547,20 +554,46 @@ export function RequestForm({
             </CardAction>
           </CardHeader>
           <CardContent>
-            <FieldGroup className="gap-4">
+            <FieldGroup className="gap-6">
               <Field data-invalid={errors.tools ? true : undefined}>
                 <SelectedTools selected={selected} onChange={updateSelected} />
                 {errors.tools && <FieldError errors={[errors.tools]} />}
               </Field>
 
-              {tools.length > 0 && (
+              <Field>
+                <div className="flex items-center justify-between py-2">
+                  <FieldLabel>Materials</FieldLabel>
+                  <MaterialDialog
+                    value={materials}
+                    defaultText={defaultMaterialsFor(materialDefaults, toDo)}
+                    onChange={(next) =>
+                      setValue("materials", next, { shouldValidate: true })
+                    }
+                    trigger={
+                      <Button type="button" variant="outline" size="sm">
+                        <PlusIcon data-icon="inline-start" />
+                        Add material
+                      </Button>
+                    }
+                  />
+                </div>
+                {materials.trim() ? (
+                  <pre className="min-h-32 overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs whitespace-pre-wrap">
+                    {materials}
+                  </pre>
+                ) : (
+                  <FieldDescription>No materials added.</FieldDescription>
+                )}
+              </Field>
+
+              {/* {tools.length > 0 && (
                 <Field>
                   <FieldLabel>Saved to Bubble as</FieldLabel>
                   <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs">
                     {formatToolsSummary(tools)}
                   </pre>
                 </Field>
-              )}
+              )} */}
 
               <Field>
                 <FieldLabel htmlFor="toolsNotes">Tool notes</FieldLabel>

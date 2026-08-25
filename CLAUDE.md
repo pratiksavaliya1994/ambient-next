@@ -16,12 +16,15 @@ A Next.js frontend for the Tipp Floor Covering / Ambient Flooring tool
 workflow. Bubble.io stays as the database and backend. Next.js replaces the UI.
 
 **Current scope:** the request creation flow. A PM picks a job, a job type,
-a date and slot, and a set of tool *types with quantities*; submitting writes
-one `request` row and one `requestedtools` row. A list page reads requests back
-with their tool types and counts.
+a date and slot, and a set of tool *types with quantities*, plus an optional
+free-text materials list; submitting writes one `request` row and one
+`requestedtools` row (the materials text is sent along too, but the Bubble
+side doesn't act on it yet — see the `materials` / `requestedmaterials`
+sections below). A list page reads requests back with their tool types and
+counts.
 
 **Deliberately not built yet:** assigning specific tools to a request,
-approving or rejecting, materials, QR scanning, GPS.
+approving or rejecting, QR scanning, GPS.
 
 ---
 
@@ -280,12 +283,31 @@ with `startDate` to become `requestDateStart` (see `request` above) — so
 `slotHour` (`lib/schemas/request.ts`) and `timeRange` are always set together
 from the same pick, never independently.
 
+### `materials`
+
+6 rows, one per job type that has a default material list — not all 8 `toDo`
+values do; "Fast Request" and "Simple Grind" have no row. `List` is the
+default free-text list (e.g. `"Concrete: \n6x6 welded wire: \n..."`),
+`realtedTo` the same misspelled option-set-list shape as `toolstype.realtedTo`.
+This is a *starting point* for the request form's "Materials" popup, not a
+picker — a PM types free text, there's no catalogue of individual materials to
+select from.
+
 ### Types this app does not touch
 
-`tools`, `toolshistory`, `consumables`, `materials`, `materialsfromebom`,
-`requestedmaterials`. `notifications` is also untouched from Next.js — the
-`new-request` workflow writes a copy of the request/summary there from inside
-Bubble (its step 5), mirroring the old page workflow's behavior.
+`tools`, `toolshistory`, `consumables`, `materialsfromebom`. `notifications`
+is also untouched from Next.js — the `new-request` workflow writes a copy of
+the request/summary there from inside Bubble (its step 5), mirroring the old
+page workflow's behavior.
+
+`requestedmaterials` (`jobType` + a free-text `materials` field, one row per
+request) isn't written by this app either — same pattern as `request` /
+`requestedtools`: the `new-request` workflow owns creating rows from the
+payload this app sends. The form now sends `materials` (free text, empty
+string when nothing was added) on every submit; the workflow doesn't yet turn
+a non-empty value into a `requestedmaterials` row — that step still needs
+adding on the Bubble side. The WhatsApp summary line for it is already live
+(`buildSummary` in `lib/notify.ts`, only when non-empty).
 
 ---
 
@@ -488,7 +510,7 @@ Built and verified against live data:
 - `lib/bubble/dates.ts` — New York wall-clock conversion via `Intl` (two-pass,
   so it is correct across DST boundaries)
 - `lib/bubble/reference.ts` / `reference-types.ts` — jobs, tool types, PMs,
-  time slots
+  time slots, material defaults (`listMaterialDefaults`/`defaultMaterialsFor`)
 - `lib/bubble/tools-summary.ts` — the `toolsSummary` codec
 - `lib/bubble/requests.ts` — `listRecentRequests` (reads, unchanged Data API);
   `createToolRequest` now calls the `new-request` backend workflow instead
@@ -504,9 +526,13 @@ Built and verified against live data:
   `useSyncExternalStore` — the shipped version set state in an effect and
   failed `react-hooks/set-state-in-effect`
 - `components/request-form.tsx`, `components/tool-picker.tsx`,
-  `components/date-picker.tsx` — the form is a two-column layout (fields left,
-  tool selection right, stacked below `lg`) with the 112-row catalogue behind a
-  dialog, so the initial `/requests/new` document dropped to ~290KB
+  `components/material-dialog.tsx`, `components/date-picker.tsx` — the form is
+  a two-column layout (fields left, tool selection right, stacked below `lg`)
+  with the 112-row tool catalogue behind a dialog, so the initial
+  `/requests/new` document dropped to ~290KB. Materials has no catalogue to
+  hide behind a dialog for the same reason — it's one free-text popup below
+  the tool selection, pre-filled from `defaultMaterialsFor` the first time
+  it's opened for a given `toDo` and left alone on every reopen after that
 - Auth.js with the flag-gated `dev-login` and Entra providers; login page
 
 **The write path has been built on both sides but not yet exercised
@@ -532,6 +558,9 @@ build one.
   awkward: `requestedtools` links to nothing, so an assignment has no natural
   home without a new field — which is the kind of thing to raise rather than
   invent.
-- Materials (`requestedmaterials`: `jobType` + a free-text `materials` list).
-  Deliberately skipped; the old app writes one per request.
+- The `new-request` workflow's `requestedmaterials` step: create a row
+  (`materials` + `toDo` as `jobType`) when the form's `materials` field is
+  non-empty, the same way it already creates `requestedtools` from
+  `toolsSummary`. This app sends `materials` on every submit already; the
+  workflow just doesn't act on it yet.
 - `request.pictures` is a text field and unused here.

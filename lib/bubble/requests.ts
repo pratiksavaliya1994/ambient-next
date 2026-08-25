@@ -267,6 +267,11 @@ export async function createToolRequest(
     searchable: `${job.description} - ${newYorkStamp(now)}`,
     toolsSummary: formatToolsSummary(values.tools),
     toolsNotes: values.toolsNotes,
+    // Forward-compatible: the `new-request` workflow doesn't act on this yet —
+    // it's meant to create a `requestedmaterials` row (`materials` + `toDo` as
+    // `jobType`) when this is non-empty, once that step is added on the Bubble
+    // side. The WhatsApp line for it is already live — see `buildSummary`.
+    materials: values.materials,
     summary,
   })
 

@@ -27,6 +27,7 @@ export type NotificationInput = {
   notes: string
   tools: readonly ToolLine[]
   toolsNotes: string
+  materials: string
 }
 
 /**
@@ -60,6 +61,7 @@ export function buildSummary(input: NotificationInput): string {
     "Tools:",
     ...input.tools.map((tool) => ` ${tool.name}: ${tool.quantity}`),
     input.toolsNotes ? `\nTool notes: ${input.toolsNotes}` : null,
+    input.materials ? `\nmaterial : ${input.materials}` : null,
   ]
 
   return lines.filter((line) => line !== null).join("\n")

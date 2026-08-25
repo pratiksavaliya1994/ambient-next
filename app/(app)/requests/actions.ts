@@ -64,6 +64,7 @@ export async function createRequestAction(
     notes: values.notes,
     tools: values.tools,
     toolsNotes: values.toolsNotes,
+    materials: values.materials,
   })
 
   let created

@@ -47,6 +47,25 @@ export type ToolType = {
 
 export type FieldPm = { id: string; name: string; company: string | null }
 
+/**
+ * The `materials` table ("All Materials"): one default free-text material
+ * list per job type it's offered for, mirroring `toolstype.realtedTo`. Only
+ * 6 of the 8 `toDo` values have a row — "Fast Request" and "Simple Grind"
+ * don't, unlike `toolTypesFor`, "Fast Request" has no "show everything"
+ * fallback here, since concatenating all 6 lists into one text field
+ * wouldn't be a sensible default.
+ */
+export type MaterialDefault = { id: string; list: string; relatedTo: ToDo[] }
+
+/** The default material text for a job type, or `""` if none is on file. */
+export function defaultMaterialsFor(
+  all: MaterialDefault[],
+  toDo: ToDo | null
+): string {
+  const match = toDo && all.find((entry) => entry.relatedTo.includes(toDo))
+  return match?.list ?? ""
+}
+
 export type TimeSlot = {
   id: string
   label: string
