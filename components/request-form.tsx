@@ -11,7 +11,7 @@ import {
   type CreateRequestState,
 } from "@/app/(app)/requests/action-state"
 import { createRequestAction } from "@/app/(app)/requests/actions"
-import { DatePicker } from "@/components/date-picker"
+import { DateRangePicker } from "@/components/date-range-picker"
 import {
   SelectedTools,
   ToolPickerDialog,
@@ -160,6 +160,8 @@ export function RequestForm({
   })
 
   const toDo = useWatch({ control, name: "toDo" })
+  const startDate = useWatch({ control, name: "startDate" })
+  const endDate = useWatch({ control, name: "endDate" })
 
   const [job, setJob] = useState<Job | null>(null)
   const [movement, setMovement] = useState<Movement>("delivery")
@@ -197,6 +199,14 @@ export function RequestForm({
     setValue("delivery", chosen.delivery)
     setValue("pickup", chosen.pickup)
     void trigger(["delivery", "pickup"])
+  }
+
+  function updateDateRange(next: { startDate: string; endDate: string }) {
+    // Both fields have to change before either is re-validated, same reason
+    // as `updateMovement` below: the end-before-start rule is cross-field.
+    setValue("startDate", next.startDate)
+    setValue("endDate", next.endDate)
+    void trigger(["startDate", "endDate"])
   }
 
   function updateSelected(next: Record<string, number>) {
@@ -374,37 +384,24 @@ export function RequestForm({
                 />
               </Field>
 
-              <Field data-invalid={errors.startDate ? true : undefined}>
-                <FieldLabel htmlFor="startDate">Start date</FieldLabel>
-                <Controller
-                  control={control}
-                  name="startDate"
-                  render={({ field }) => (
-                    <DatePicker
-                      id="startDate"
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      invalid={errors.startDate ? true : undefined}
-                    />
-                  )}
+              <Field
+                data-invalid={
+                  errors.startDate || errors.endDate ? true : undefined
+                }
+              >
+                <FieldLabel htmlFor="dateRange">Date range</FieldLabel>
+                <DateRangePicker
+                  id="dateRange"
+                  startDate={startDate}
+                  endDate={endDate}
+                  onRangeChange={updateDateRange}
+                  invalid={
+                    errors.startDate || errors.endDate ? true : undefined
+                  }
                 />
-                {errors.startDate && <FieldError errors={[errors.startDate]} />}
-              </Field>
+                <FieldDescription>Select Date Range</FieldDescription>
 
-              <Field data-invalid={errors.endDate ? true : undefined}>
-                <FieldLabel htmlFor="endDate">End date</FieldLabel>
-                <Controller
-                  control={control}
-                  name="endDate"
-                  render={({ field }) => (
-                    <DatePicker
-                      id="endDate"
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      invalid={errors.endDate ? true : undefined}
-                    />
-                  )}
-                />
+                {errors.startDate && <FieldError errors={[errors.startDate]} />}
                 {errors.endDate && <FieldError errors={[errors.endDate]} />}
               </Field>
 
@@ -440,9 +437,7 @@ export function RequestForm({
                     </Select>
                   )}
                 />
-                <FieldDescription>
-                  Saved to Bubble as timeRange.
-                </FieldDescription>
+                <FieldDescription>Time slot for Delivery</FieldDescription>
               </Field>
               <Field orientation="horizontal">
                 <Controller
@@ -587,9 +582,9 @@ export function RequestForm({
               )}
               Create request
             </Button>
-            <p className="text-xs text-muted-foreground">
+            {/* <p className="text-xs text-muted-foreground">
               A WhatsApp notification goes out automatically.
-            </p>
+            </p> */}
           </CardFooter>
         </Card>
       </div>
