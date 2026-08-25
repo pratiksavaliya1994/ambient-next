@@ -1,5 +1,12 @@
 # Bubble Studio setup: `create-request` backend workflow
 
+> **Superseded.** This was the original build spec. The workflow was actually
+> built as `new-request` (renamed mid-build) with several additional steps
+> beyond this spec (`jobs.lastRequest`, a `Notifications` row, ClickUp, Outlook
+> Calendar). For what's actually live in Bubble Studio, see
+> `bubble-new-request-workflow-summary.md` instead — this file is kept for
+> history only.
+
 ## Background
 
 A Next.js app (Tipp Floor Covering / Ambient Flooring tool request tool) is
@@ -26,10 +33,14 @@ This workflow needs to be built in Bubble Studio to match that contract. It
 replaces an older flow where the request row and its tool row were created by
 two separate `POST /obj/...` Data API calls, and a WhatsApp message was sent
 by a completely different mechanism (a page workflow triggered from Bubble's
-own UI). **This new workflow is meant to fully replace both** — after it
-exists, the only thing that creates a `request`/`requestedtools` row and sends
-the WhatsApp message for requests coming through this app is this one
-workflow, once per successful call.
+own UI). That old page workflow also stamped the job's `lastRequest` field
+with the new request's id — trivial there because the page already had the
+actual `Job` thing in hand, but this API workflow only receives `job`/`jobId`
+as parameters, so it has to look the row up itself (step 3 below).
+**This new workflow is meant to fully replace the old one** — after it
+exists, the only thing that creates a `request`/`requestedtools` row, updates
+`jobs.lastRequest`, and sends the WhatsApp message for requests coming through
+this app is this one workflow, once per successful call.
 
 ## 0. Branch
 
@@ -58,6 +69,7 @@ the calling code sends these keys verbatim):
 | Parameter | Type |
 |---|---|
 | `job` | text |
+| `jobId` | text (or the `Jobs` thing type — see the note below) |
 | `toDo` | text (or the `toDo` option set type, if your app has one and it's selectable as a parameter type — either works, see step 3) |
 | `weAre` | text (or the `weAre` option set type, same note) |
 | `delivery` | yes/no |
@@ -91,12 +103,33 @@ Notes on a few of these, so the mapping in step 3 makes sense:
 - `color`, `order`, `searchable`, `requestDate*` are pre-computed by the
   calling app (calendar colour, sort order, search string, New-York-timezone
   timestamps) — just store them as given, no computation needed on this side.
+- `requestDateStart` / `requestDateEnd` mark the requested date range, but
+  only `requestDateEnd` is a pure calendar date (midnight New York on the day
+  tools are needed until, no time of its own). `requestDateStart` is the
+  actual delivery **instant** — the range's first day at the picked calendar
+  slot's hour — since it's what a "Make changes to Jobs" or ClickUp/Calendar
+  step downstream would read as the appointment time, not just a date.
+  `requestDate` is sent equal to midnight on that same first day (unlike
+  `requestDateStart`, it never carries a time).
+- `timeRange` is the label of whichever `timelabels` slot the requester picked
+  (e.g. `"06:00 a.m. to 06:30 a.m."`), sent as plain text — not derived from
+  `requestDateStart`/`End` and not guaranteed to be one of the 14 slot labels
+  for every row (older rows and other flows still hold free text like
+  `"Anytime"` or `"TBD"`). Store it verbatim, same as any other text param.
+- `jobId` is the `jobs` row's unique id — separate from `job`, which is just
+  the job's name as text. `request.job` has never linked to `jobs`, so without
+  `jobId` this workflow would have no way to find which `jobs` row to update
+  in step 3 below. If you declare the parameter type as plain `text`, step 3
+  needs a **Search for jobs** to find the row (`unique id = jobId`); if your
+  Bubble version lets you declare the parameter type as the `Jobs` thing
+  itself, the incoming id is resolved to the row automatically and step 3 can
+  reference the parameter directly, no search needed.
 - `toolsSummary` is already formatted as the target app's
   `"Name: quantity", "Name: quantity"` text convention for its tools list —
   store it verbatim.
 - `summary` is the complete, ready-to-send WhatsApp message text (multi-line,
   real `\n` characters already in place) — this workflow only needs to relay
-  it to whatever WhatsApp-sending mechanism is configured (step 5), not build
+  it to whatever WhatsApp-sending mechanism is configured (step 4), not build
   or reformat it.
 
 ## 3. Step 1 — Create a new `request`
@@ -136,7 +169,32 @@ Add a second **Create a new thing** action, type `requestedtools`:
 | `toolsSummary` | `toolsSummary` param |
 | `toolsNotes` | `toolsNotes` param |
 
-## 5. Step 3 — Send the WhatsApp message
+## 5. Step 3 — Update the job's `lastRequest`
+
+The old Bubble page workflow that this replaces had the actual `Job` thing on
+hand (it came from the page's own state) and could set `lastRequest` on it
+directly. This workflow only receives `job`/`jobId` as parameters, so it has
+to find the row first:
+
+Add a **Make changes to a thing** action:
+
+- **Thing to change**: if `jobId` is typed as plain text, use
+  **Search for jobs** constrained to `unique id = jobId` param, and take its
+  **first item**. If `jobId` is typed as the `Jobs` thing itself, reference
+  the `jobId` param directly here — no search needed.
+- **Field to change**: `lastRequest` = *Result of step 1*'s unique id, **as
+  text** (same convention as `requestedtools.requestID`: `lastRequest` is a
+  plain text field holding the request's id as a string, not a linked-thing
+  field, so no "as text" conversion is available or needed beyond the field
+  already being text).
+
+If the search finds no row (a stale or deleted job somehow reached this
+workflow), skip this step rather than erroring the whole workflow — the
+`request` and `requestedtools` rows from steps 1–2 should still be created and
+the WhatsApp message in step 4 should still send even if this one bookkeeping
+update can't find its target.
+
+## 6. Step 4 — Send the WhatsApp message
 
 Add whatever action sends to WhatsApp/Whapi in this Bubble app — most likely
 an **API Connector** call (if one already exists for a similar purpose
@@ -164,7 +222,7 @@ send a similar message, it's a different trigger path and doesn't run for
 requests created via this API workflow, so it's not a double-send concern
 here.
 
-## 6. Step 4 — Return data from API
+## 7. Step 5 — Return data from API
 
 Add a **Return data from API** action:
 
@@ -175,14 +233,15 @@ Add a **Return data from API** action:
 This is what the calling app reads back to confirm the request was created
 and to show its id/confirmation in its own UI.
 
-## 7. Test before relying on it
+## 8. Test before relying on it
 
 Before treating this as done:
 
 1. Use Bubble's own "Run" / test feature on the workflow with sample parameter
    values, and check the server logs to confirm: a `request` row appears, a
-   `requestedtools` row appears linked to it by id, a WhatsApp message
-   actually arrives, and the returned data contains `requestId`.
+   `requestedtools` row appears linked to it by id, the `jobs` row for
+   `jobId` now has `lastRequest` set to the new request's id, a WhatsApp
+   message actually arrives, and the returned data contains `requestId`.
 2. Only after that, expect the calling Next.js app's "create request" form to
    work end-to-end — submitting it will now create a real row in the live
    database and send a real WhatsApp message, so treat every test submission

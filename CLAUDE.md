@@ -179,7 +179,7 @@ An option-set write with an unrecognised value fails silently in Bubble.
 Three pre-existing ones must not be broken: `/wf/googleDataToDB`,
 `/wf/Set Location`, `/wf/Set Status`. This app doesn't call them.
 
-This app *does* call one workflow of its own: `/wf/create-request` (see
+This app *does* call one workflow of its own: `/wf/new-request` (see
 "Creating a request" below) — the one exception to "everything is Data API
 CRUD." It creates the `request` row, the `requestedtools` row, and sends the
 WhatsApp notification as one server-side unit in Bubble, rather than this app
@@ -199,9 +199,10 @@ The header row. 24 business fields; the ones this app writes:
 | `toDo` | option set | Job type. Also filters the tool catalogue — see `toolstype.realtedTo`. |
 | `weAre` | option set | `Ambient` / `Tipp` / `BT Flooring` / `Pyramid Floors` |
 | `delivery`, `pickup` | yes/no | Both can be true. |
-| `requestDate` | date | **Midnight New York** on the delivery day. Not the submission time. |
-| `requestDateStart` / `End` | date | The calendar slot, one hour apart. |
-| `timeRange` | text | Free text, and genuinely free: live values include `Anytime`, `6-8am`, `TBD`, `Joes truck today`. |
+| `requestDate` | date | **Midnight New York** on the first day of the request. Never carries a time. |
+| `requestDateStart` | date | The delivery **instant** — the first day of the request, at the chosen calendar slot's hour. Read by the `new-request` workflow's ClickUp and Outlook Calendar steps as the appointment time. |
+| `requestDateEnd` | date | **Midnight New York** on the day tools are needed until — the other end of the date range, no time of its own (it isn't an appointment). |
+| `timeRange` | text | The chosen calendar slot's label on rows this app writes (e.g. `06:00 a.m. to 06:30 a.m.`) — Bubble has no field of its own for time-of-day as text, so this doubles as it (its hour also feeds `requestDateStart`, see above). Older/other rows hold free text: `Anytime`, `6-8am`, `TBD`, `Joes truck today`. |
 | `floor` | text | `14`, `ground`, `loading dock`, `Suite 139`. |
 | `contact`, `contactPhone` | text | |
 | `fieldPM2` | text | The PM's name. **This is the one that gets written.** |
@@ -258,6 +259,10 @@ Request` appears in no tool's list, so it means "show everything".
 1,445 rows. `name` is what `request.job` stores; `description` is the longer
 `name + details` string that feeds `request.searchable`. Also `gc`, `borough`,
 `details`, `status` (a mix of numbers and words — not a usable filter).
+`lastRequest` is a text field holding the most recent `request._id` created
+for that job — same "id-as-text, no referential integrity" pattern as
+`requestedtools.requestID` — kept up to date by the `new-request` workflow
+(see "Creating a request" below), not by anything in this repo directly.
 
 ### `pms`
 
@@ -268,14 +273,19 @@ appear on recent requests do not have it set.
 ### `timelabels`
 
 The 14 half-hour slots the Bubble calendar lays requests out on
-(`06:00 a.m. to 06:30 a.m.` … `07:00 p.m. to 07:30 p.m.`). They set
-`requestDateStart` / `End`. Separate from the free-text `timeRange`.
+(`06:00 a.m. to 06:30 a.m.` … `07:00 p.m. to 07:30 p.m.`). The request form's
+"Time slot" picker does double duty: the chosen label goes straight into
+`timeRange` (the only field available for it as text), and its hour combines
+with `startDate` to become `requestDateStart` (see `request` above) — so
+`slotHour` (`lib/schemas/request.ts`) and `timeRange` are always set together
+from the same pick, never independently.
 
 ### Types this app does not touch
 
 `tools`, `toolshistory`, `consumables`, `materials`, `materialsfromebom`,
 `requestedmaterials`. `notifications` is also untouched from Next.js — the
-`create-request` workflow writes it from inside Bubble, if it does at all.
+`new-request` workflow writes a copy of the request/summary there from inside
+Bubble (its step 5), mirroring the old page workflow's behavior.
 
 ---
 
@@ -307,11 +317,16 @@ abandoned entries are never cleaned up.
    builds the WhatsApp summary text (`buildSummary` in `lib/notify.ts` — text
    composition only, no send), then makes **one** call:
    `createToolRequest` (`lib/bubble/requests.ts`) →
-   `POST /wf/create-request` with the form values, the tool summary, and the
+   `POST /wf/new-request` with the form values (including the job's
+   `_id` as `jobId`, alongside `job` — its name), the tool summary, and the
    WhatsApp text as one payload. That workflow — built and owned in Bubble
    Studio, not this repo — creates the `request` row, the `requestedtools`
-   row, and sends the WhatsApp message as one server-side unit, and returns
-   `{ requestId }`.
+   row, stamps `jobId`'s `jobs` row's `lastRequest` with the new request's id
+   (`request.job` is only ever the job's name, so `jobId` is what lets the
+   workflow find that row), and sends the WhatsApp/ClickUp/Calendar
+   notifications, all as one server-side unit, returning `{ requestId }` — see
+   `bubble-new-request-workflow-summary.md` for the as-built workflow (the
+   original spec, `bubble-create-request-workflow.md`, is superseded by it).
 4. `revalidatePath('/requests')`.
 
 This replaced an earlier version of this flow that did two direct
@@ -333,7 +348,7 @@ UI writes a fresh one per submit), so lines are merged and quantities summed.
 
 ## WhatsApp notifications
 
-Sending is entirely Bubble's job now, done inside the `create-request`
+Sending is entirely Bubble's job now, done inside the `new-request`
 workflow (see "Creating a request" above) — this app no longer holds a Whapi
 token, writes a `notifications` row, or calls `gate.whapi.cloud` itself.
 `WHAPI_TOKEN` / `WHAPI_GROUP_ID` / `NOTIFY_ON_CREATE` are gone from this app's
@@ -476,7 +491,7 @@ Built and verified against live data:
   time slots
 - `lib/bubble/tools-summary.ts` — the `toolsSummary` codec
 - `lib/bubble/requests.ts` — `listRecentRequests` (reads, unchanged Data API);
-  `createToolRequest` now calls the `create-request` backend workflow instead
+  `createToolRequest` now calls the `new-request` backend workflow instead
   of writing `request`/`requestedtools` directly
 - `lib/notify.ts` — `buildSummary`, WhatsApp text composition only (sending
   moved into the Bubble workflow)
@@ -494,13 +509,22 @@ Built and verified against live data:
   dialog, so the initial `/requests/new` document dropped to ~290KB
 - Auth.js with the flag-gated `dev-login` and Entra providers; login page
 
-**The write path has not been exercised against the live app, and right now it
-cannot be: `/wf/create-request` doesn't exist in Bubble Studio yet.** This
-app's code already calls it; until that workflow is built there (creating
-`request`, creating `requestedtools`, sending the WhatsApp message, returning
-`{ requestId }`), submitting the form fails at that one call. Every read path
-has been exercised — creating a request puts a real row in the live database,
-so exercising the write path is also waiting on that Bubble-side build.
+**The write path has been built on both sides but not yet exercised
+end-to-end.** The Bubble-side workflow is built — see
+`bubble-new-request-workflow-summary.md` for the as-built reference, which
+supersedes the original spec in `bubble-create-request-workflow.md` — but it
+was renamed to `new-request` partway through the build (this app's code has
+been updated to match) and adds several steps beyond the original spec
+(`jobs.lastRequest`, a `Notifications` row, ClickUp, Outlook Calendar). None
+of it has been run against a real submission yet. `requestDateStart` carries
+the delivery instant precisely so the ClickUp and Calendar steps — which read
+it as a single appointment time — keep working unmodified even though
+`requestDateStart`/`requestDateEnd` now span a date range rather than a
+one-hour slot (see `request` above); this needed no Bubble-side change, only
+how `lib/bubble/requests.ts` computes the value it sends. Every read path has
+been exercised — creating a request puts a real row in the live database — so
+exercising the write path is purely a testing task at this point, not a
+build one.
 
 ### Where to go next
 

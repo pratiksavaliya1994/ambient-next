@@ -36,8 +36,6 @@ import type { RequestFormValues } from "@/lib/schemas/request"
 const REQUEST = "request"
 const REQUESTED_TOOLS = "requestedtools"
 
-const SLOT_LENGTH_MS = 60 * 60 * 1000
-
 const requestRow = z.looseObject({
   _id: z.string(),
   "Created Date": z.string().optional(),
@@ -82,7 +80,9 @@ export type ToolRequest = {
   pickup: boolean
   tentative: boolean
   completed: boolean
+  /** `requestDateStart` — the delivery instant (start date + slot time). */
   start: string | null
+  /** `requestDateEnd` — midnight New York on the day tools are needed until, no time of its own. */
   end: string | null
   tools: ToolLine[]
   toolsNotes: string | null
@@ -201,20 +201,24 @@ export type CreatedRequest = {
   job: string
 }
 
-const CREATE_REQUEST_WORKFLOW = "create-request"
+// Named `create-request` during the original spec; renamed to `new-request`
+// partway through the Bubble Studio build. Every call goes through this one
+// constant so that drift can't happen again.
+const NEW_REQUEST_WORKFLOW = "new-request"
 
 const createRequestResult = z.object({
   requestId: z.string(),
 })
 
 /**
- * Creates a request and its tool line via the `create-request` Bubble backend
- * workflow (`POST /wf/create-request`), rather than two direct `/obj/...`
+ * Creates a request and its tool line via the `new-request` Bubble backend
+ * workflow (`POST /wf/new-request`), rather than two direct `/obj/...`
  * writes. That workflow owns creating the `request` row, the `requestedtools`
- * row, and sending the WhatsApp summary as one server-side unit — this only
- * builds its payload. `job` and `summary` (the WhatsApp text, from
- * `buildSummary` in `lib/notify.ts`) come from the caller, which already has
- * the session context (`requestedBy`) needed to build them.
+ * row, updating `jobs.lastRequest`, and sending the WhatsApp/ClickUp/Calendar
+ * notifications as one server-side unit — this only builds its payload.
+ * `job` and `summary` (the WhatsApp text, from `buildSummary` in
+ * `lib/notify.ts`) come from the caller, which already has the session
+ * context (`requestedBy`) needed to build them.
  */
 export async function createToolRequest(
   values: RequestFormValues,
@@ -222,11 +226,23 @@ export async function createToolRequest(
   summary: string
 ): Promise<CreatedRequest> {
   const now = new Date()
-  const start = newYorkInstant(values.day, values.slotHour)
-  const end = new Date(start.getTime() + SLOT_LENGTH_MS)
+  // `requestDateStart` is the actual delivery instant — `startDate` at the
+  // chosen slot's hour — since ClickUp and the Calendar step both read it as
+  // one point in time, not a date. `requestDateEnd` is just the day tools are
+  // needed until, with no appointment of its own, so it stays at midnight.
+  const start = newYorkInstant(values.startDate, values.slotHour)
+  const end = newYorkInstant(values.endDate)
+  // Kept as plain midnight on the delivery day, matching every prior row —
+  // unlike `requestDateStart`, `requestDate` never carried a time of day.
+  const startOfDay = newYorkInstant(values.startDate)
 
-  const raw = await bubbleRunWorkflow(CREATE_REQUEST_WORKFLOW, {
+  const raw = await bubbleRunWorkflow(NEW_REQUEST_WORKFLOW, {
     job: job.name,
+    // `request.job` only ever stores the job's name — this is what lets the
+    // workflow find the actual `jobs` row to stamp `lastRequest` on, the way
+    // the old Bubble page workflow could just reference the Job thing it
+    // already had in hand.
+    jobId: job.id,
     toDo: values.toDo,
     weAre: values.weAre,
     delivery: values.delivery,
@@ -241,8 +257,7 @@ export async function createToolRequest(
     fieldPm: values.fieldPm,
     notes: values.notes,
     timeRange: values.timeRange,
-    // Midnight New York on the delivery day, matching every live row.
-    requestDate: newYorkInstant(values.day).toISOString(),
+    requestDate: startOfDay.toISOString(),
     requestDateStart: start.toISOString(),
     requestDateEnd: end.toISOString(),
     color: requestColor(values.delivery, values.pickup),

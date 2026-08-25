@@ -20,12 +20,24 @@ export const requestFormSchema = z
     weAre: z.enum(WE_ARE),
     delivery: z.boolean(),
     pickup: z.boolean(),
-    /** `yyyy-mm-dd`, read as a New York calendar date. */
-    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date."),
-    /** Start hour of the chosen calendar slot, 0–23 New York time. */
-    slotHour: z.number().int().min(0).max(23),
-    /** Free text, and deliberately so — live rows hold "Anytime", "6-8am", "TBD". */
+    /** `yyyy-mm-dd`, read as New York calendar dates. */
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a start date."),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick an end date."),
+    /**
+     * The chosen calendar slot's label, e.g. `"06:00 a.m. to 06:30 a.m."` —
+     * this is what's written to Bubble's `timeRange` field. Still free text in
+     * the schema because live rows also hold values no picker produced
+     * ("Anytime", "TBD"), just no longer free-typed from this form.
+     */
     timeRange: z.string().trim().max(120),
+    /**
+     * The same slot's start hour, 0–23 New York time — kept alongside
+     * `timeRange` because Bubble has no field of its own for it. This is what
+     * combines with `startDate` to produce the actual delivery instant
+     * (`requestDateStart`); `endDate` is just the day tools are needed until,
+     * with no time of its own.
+     */
+    slotHour: z.number().int().min(0).max(23),
     floor: z.string().trim().max(120),
     contact: z.string().trim().max(120),
     contactPhone: z.string().trim().max(40),
@@ -38,6 +50,10 @@ export const requestFormSchema = z
   .refine((value) => value.delivery || value.pickup, {
     message: "Pick delivery, pickup, or both.",
     path: ["delivery"],
+  })
+  .refine((value) => value.endDate >= value.startDate, {
+    message: "End date can't be before the start date.",
+    path: ["endDate"],
   })
 
 export type RequestFormValues = z.infer<typeof requestFormSchema>

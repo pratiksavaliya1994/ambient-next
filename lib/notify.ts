@@ -3,7 +3,7 @@ import type { ToolLine } from "@/lib/bubble/tools-summary"
 
 /**
  * The WhatsApp summary text for a new request. Composing it is the only part
- * of notifying that lives in Next.js — sending it is the `create-request`
+ * of notifying that lives in Next.js — sending it is the `new-request`
  * Bubble backend workflow's job (see `lib/bubble/requests.ts`), since that
  * workflow is what has WhatsApp/Whapi credentials configured.
  */
@@ -22,6 +22,7 @@ export type NotificationInput = {
   contactPhone: string
   fieldPm: string
   start: string
+  end: string
   timeRange: string
   notes: string
   tools: readonly ToolLine[]
@@ -37,6 +38,10 @@ export function buildSummary(input: NotificationInput): string {
     .filter(Boolean)
     .join(" + ")
 
+  const startDay = newYorkWeekday(input.start)
+  const endDay = newYorkWeekday(input.end)
+  const dateLine = startDay === endDay ? startDay : `${startDay} – ${endDay}`
+
   const lines = [
     `New request from ${input.requestedBy}`,
     "",
@@ -47,7 +52,7 @@ export function buildSummary(input: NotificationInput): string {
     `We Are: ${input.weAre}`,
     input.floor ? `Floor: ${input.floor}` : null,
     `Contact: ${input.contact}${input.contactPhone ? ` Phone no: ${input.contactPhone}` : ""}`,
-    `Date: ${newYorkWeekday(input.start)}`,
+    `Date: ${dateLine}`,
     `Range of time: ${input.timeRange}`,
     input.notes ? `Notes: ${input.notes}` : null,
     `Field PM: ${input.fieldPm}`,

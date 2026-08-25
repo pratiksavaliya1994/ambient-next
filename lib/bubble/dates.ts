@@ -97,6 +97,18 @@ export function newYorkDayLabel(iso: string | null | undefined): string {
   return p ? `${p.weekday} ${p.month}-${p.day}` : "—"
 }
 
+/** `Mon 8-24` for a single day, `Mon 8-24 – Wed 8-26` when the range spans more than one. */
+export function newYorkRangeLabel(
+  startIso: string | null | undefined,
+  endIso: string | null | undefined
+): string {
+  const start = newYorkDayLabel(startIso)
+  const end = newYorkDayLabel(endIso)
+  if (start === "—") return end
+  if (end === "—" || end === start) return start
+  return `${start} – ${end}`
+}
+
 /** `9:00 am` — the clock half of a request's slot. */
 export function newYorkTimeLabel(iso: string | null | undefined): string {
   const p = labelParts(iso)

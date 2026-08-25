@@ -144,9 +144,10 @@ export function RequestForm({
       weAre: DEFAULT_WE_ARE,
       delivery: true,
       pickup: false,
-      day: newYorkToday(),
+      startDate: newYorkToday(),
+      endDate: newYorkToday(),
+      timeRange: timeSlots[2]?.label ?? "Anytime",
       slotHour: timeSlots[2]?.hour ?? 8,
-      timeRange: "Anytime",
       floor: "",
       contact: "",
       contactPhone: "",
@@ -188,8 +189,7 @@ export function RequestForm({
 
   function updateMovement(next: Movement) {
     setMovement(next)
-    const chosen =
-      MOVEMENTS.find((item) => item.value === next) ?? MOVEMENTS[0]
+    const chosen = MOVEMENTS.find((item) => item.value === next) ?? MOVEMENTS[0]
     // Both fields have to change before either is re-validated: the
     // delivery-or-pickup rule is cross-field, so validating `delivery` alone
     // right after setting it (with the old `pickup` still in place) can flag
@@ -227,9 +227,12 @@ export function RequestForm({
     })
   })
 
+  // Keyed by label rather than `slot.hour`: `timeRange` — the Bubble field
+  // this now writes to — is that label text verbatim, and several slots
+  // (e.g. the two halves of 6am) share the same starting hour.
   const slotItems = timeSlots.map((slot) => ({
     label: slot.label,
-    value: String(slot.hour),
+    value: slot.label,
   }))
   const pmItems = fieldPms.map((pm) => ({
     label: pm.company ? `${pm.name} — ${pm.company}` : pm.name,
@@ -349,6 +352,115 @@ export function RequestForm({
               </Field>
 
               <Field>
+                <FieldLabel htmlFor="floor">Floor</FieldLabel>
+                <Input
+                  id="floor"
+                  placeholder="14, ground, loading dock"
+                  {...register("floor")}
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="contact">Site contact</FieldLabel>
+                <Input id="contact" {...register("contact")} />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="contactPhone">Contact phone</FieldLabel>
+                <Input
+                  id="contactPhone"
+                  inputMode="tel"
+                  {...register("contactPhone")}
+                />
+              </Field>
+
+              <Field data-invalid={errors.startDate ? true : undefined}>
+                <FieldLabel htmlFor="startDate">Start date</FieldLabel>
+                <Controller
+                  control={control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <DatePicker
+                      id="startDate"
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      invalid={errors.startDate ? true : undefined}
+                    />
+                  )}
+                />
+                {errors.startDate && <FieldError errors={[errors.startDate]} />}
+              </Field>
+
+              <Field data-invalid={errors.endDate ? true : undefined}>
+                <FieldLabel htmlFor="endDate">End date</FieldLabel>
+                <Controller
+                  control={control}
+                  name="endDate"
+                  render={({ field }) => (
+                    <DatePicker
+                      id="endDate"
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      invalid={errors.endDate ? true : undefined}
+                    />
+                  )}
+                />
+                {errors.endDate && <FieldError errors={[errors.endDate]} />}
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="slot">Time slot</FieldLabel>
+                <Controller
+                  control={control}
+                  name="timeRange"
+                  render={({ field }) => (
+                    <Select
+                      items={slotItems}
+                      value={field.value}
+                      onValueChange={(next) => {
+                        field.onChange(next)
+                        const hour = timeSlots.find(
+                          (slot) => slot.label === next
+                        )?.hour
+                        if (hour !== undefined) setValue("slotHour", hour)
+                      }}
+                    >
+                      <SelectTrigger id="slot" onBlur={field.onBlur}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {slotItems.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <FieldDescription>
+                  Saved to Bubble as timeRange.
+                </FieldDescription>
+              </Field>
+              <Field orientation="horizontal">
+                <Controller
+                  control={control}
+                  name="tentative"
+                  render={({ field }) => (
+                    <Switch
+                      id="tentative"
+                      checked={field.value}
+                      onCheckedChange={(next) => field.onChange(next === true)}
+                    />
+                  )}
+                />
+                <FieldLabel htmlFor="tentative">
+                  Tentative — the date may still move
+                </FieldLabel>
+              </Field>
+              <Field>
                 <FieldLabel htmlFor="weAre">We are</FieldLabel>
                 <Controller
                   control={control}
@@ -373,83 +485,6 @@ export function RequestForm({
                       </SelectContent>
                     </Select>
                   )}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="floor">Floor</FieldLabel>
-                <Input
-                  id="floor"
-                  placeholder="14, ground, loading dock"
-                  {...register("floor")}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="contact">Site contact</FieldLabel>
-                <Input id="contact" {...register("contact")} />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="contactPhone">Contact phone</FieldLabel>
-                <Input
-                  id="contactPhone"
-                  inputMode="tel"
-                  {...register("contactPhone")}
-                />
-              </Field>
-
-              <Field data-invalid={errors.day ? true : undefined}>
-                <FieldLabel htmlFor="day">Date</FieldLabel>
-                <Controller
-                  control={control}
-                  name="day"
-                  render={({ field }) => (
-                    <DatePicker
-                      id="day"
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      invalid={errors.day ? true : undefined}
-                    />
-                  )}
-                />
-                {/* <FieldDescription>New York time.</FieldDescription> */}
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="slot">Calendar slot</FieldLabel>
-                <Controller
-                  control={control}
-                  name="slotHour"
-                  render={({ field }) => (
-                    <Select
-                      items={slotItems}
-                      value={String(field.value)}
-                      onValueChange={(next) => field.onChange(Number(next))}
-                    >
-                      <SelectTrigger id="slot" onBlur={field.onBlur}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {slotItems.map((item) => (
-                            <SelectItem key={item.value} value={item.value}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="timeRange">Time range</FieldLabel>
-                <Input
-                  id="timeRange"
-                  placeholder="Anytime"
-                  {...register("timeRange")}
                 />
               </Field>
 
@@ -487,23 +522,6 @@ export function RequestForm({
               <Field className="sm:col-span-2">
                 <FieldLabel htmlFor="notes">Notes</FieldLabel>
                 <Textarea id="notes" rows={2} {...register("notes")} />
-              </Field>
-
-              <Field orientation="horizontal" className="sm:col-span-2">
-                <Controller
-                  control={control}
-                  name="tentative"
-                  render={({ field }) => (
-                    <Switch
-                      id="tentative"
-                      checked={field.value}
-                      onCheckedChange={(next) => field.onChange(next === true)}
-                    />
-                  )}
-                />
-                <FieldLabel htmlFor="tentative">
-                  Tentative — the date may still move
-                </FieldLabel>
               </Field>
             </FieldGroup>
           </CardContent>
