@@ -67,8 +67,6 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
   const { base, token } = config()
 
-  console.log(`${base}${path}`, init, token)
-
   for (let attempt = 1; ; attempt++) {
     const res = await fetch(`${base}${path}`, {
       ...init,
