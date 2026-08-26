@@ -26,6 +26,7 @@ import type { RequestFormValues } from "@/lib/schemas/request"
 
 const REQUEST = "request"
 const REQUESTED_TOOLS = "requestedtools"
+const REQUESTED_MATERIALS = "requestedmaterials"
 
 const requestRow = z.looseObject({
   _id: z.string(),
@@ -55,6 +56,21 @@ const requestedToolsRow = z.looseObject({
   toolsNotes: z.string().optional(),
 })
 
+const requestedMaterialsRow = z.looseObject({
+  _id: z.string(),
+  requestID: z.string().optional(),
+  materials: z.string().optional(),
+})
+
+/** `materials` is one line per item, free text — no `Name: qty` structure to lean on. */
+function parseMaterialsList(text: string | undefined): string[] {
+  if (!text) return []
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
 export type ToolRequest = {
   id: string
   createdAt: string | null
@@ -77,6 +93,8 @@ export type ToolRequest = {
   end: string | null
   tools: ToolLine[]
   toolsNotes: string | null
+  /** Lines from the request's `requestedmaterials` row(s), free text. */
+  materials: string[]
 }
 
 /** Stands in for `request.job` when the Bubble row has none. */
@@ -93,11 +111,21 @@ const NO_JOB = "(no job)"
  */
 export function hasContent(request: ToolRequest): boolean {
   return (
-    request.job !== NO_JOB || request.delivery || request.pickup || request.start !== null || request.tools.length > 0
+    request.job !== NO_JOB ||
+    request.delivery ||
+    request.pickup ||
+    request.start !== null ||
+    request.tools.length > 0 ||
+    request.materials.length > 0
   )
 }
 
-function toToolRequest(row: z.infer<typeof requestRow>, lines: ToolLine[], toolsNotes: string | null): ToolRequest {
+function toToolRequest(
+  row: z.infer<typeof requestRow>,
+  lines: ToolLine[],
+  toolsNotes: string | null,
+  materials: string[]
+): ToolRequest {
   return {
     id: row._id,
     createdAt: row["Created Date"] ?? null,
@@ -118,6 +146,7 @@ function toToolRequest(row: z.infer<typeof requestRow>, lines: ToolLine[], tools
     end: row.requestDateEnd ?? null,
     tools: lines,
     toolsNotes,
+    materials,
   }
 }
 
@@ -144,9 +173,14 @@ export async function listRecentRequests(limit = 25): Promise<ToolRequest[]> {
   // Paged through rather than capped at one page: several `requestedtools`
   // rows per request means a single 100-row page runs out before the last
   // request does, which showed up as cards claiming "No tools listed".
-  const toolRows = await bubbleListAll(REQUESTED_TOOLS, {
-    constraints: [{ key: "requestID", constraint_type: "in", value: ids }],
-  })
+  const [toolRows, materialRows] = await Promise.all([
+    bubbleListAll(REQUESTED_TOOLS, {
+      constraints: [{ key: "requestID", constraint_type: "in", value: ids }],
+    }),
+    bubbleListAll(REQUESTED_MATERIALS, {
+      constraints: [{ key: "requestID", constraint_type: "in", value: ids }],
+    }),
+  ])
 
   const byRequest = new Map<string, { lines: Map<string, number>; notes: string[] }>()
   for (const raw of toolRows) {
@@ -164,12 +198,22 @@ export async function listRecentRequests(limit = 25): Promise<ToolRequest[]> {
     byRequest.set(row.requestID, bucket)
   }
 
+  const materialsByRequest = new Map<string, string[]>()
+  for (const raw of materialRows) {
+    const row = requestedMaterialsRow.parse(raw)
+    if (!row.requestID) continue
+
+    const lines = materialsByRequest.get(row.requestID) ?? []
+    lines.push(...parseMaterialsList(row.materials))
+    materialsByRequest.set(row.requestID, lines)
+  }
+
   return rows.map((row) => {
     const bucket = byRequest.get(row._id)
     const lines = [...(bucket?.lines ?? [])]
       .map(([name, quantity]) => ({ name, quantity }))
       .sort((a, b) => a.name.localeCompare(b.name))
-    return toToolRequest(row, lines, bucket?.notes.join("\n\n") || null)
+    return toToolRequest(row, lines, bucket?.notes.join("\n\n") || null, materialsByRequest.get(row._id) ?? [])
   })
 }
 

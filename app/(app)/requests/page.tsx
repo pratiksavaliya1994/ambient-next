@@ -238,6 +238,26 @@ function RequestCard({ request }: { request: ToolRequest }) {
             )}
           </div>
 
+          {request.materials.length > 0 && (
+            <div className="overflow-hidden rounded-lg border bg-background/70">
+              <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+                <FactLabel>Materials</FactLabel>
+
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {request.materials.length} {request.materials.length === 1 ? "line" : "lines"}
+                </span>
+              </div>
+
+              <ul className="divide-y">
+                {request.materials.map((line, index) => (
+                  <li key={index} className="px-3 py-2 text-sm wrap-anywhere">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {hasNotes && (
             <div className="flex flex-col gap-2 border-t pt-4">
               {request.notes && <Note label="Notes">{request.notes}</Note>}
