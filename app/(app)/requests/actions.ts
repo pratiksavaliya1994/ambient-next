@@ -17,7 +17,7 @@ import type { CreateRequestState } from "./action-state"
  * browser's validation is not a security boundary.
  */
 export async function createRequestAction(input: unknown): Promise<CreateRequestState> {
-  const session = await requireSession()
+  // const session = await requireSession()
 
   const parsed = requestFormSchema.safeParse(input)
   if (!parsed.success) {

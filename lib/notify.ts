@@ -42,9 +42,8 @@ export function buildSummary(input: NotificationInput): string {
   const dateLine = startDay === endDay ? startDay : `${startDay} – ${endDay}`
 
   const lines = [
-    `New request from ${input.requestedBy}`,
+    `New {${input.delivery ? "Delivery" : "Pickup"}} Request from ${input.requestedBy}`,
     "",
-    `${input.toDo} (${movement})`,
     `Address: ${input.job}`,
     input.jobDetails ? `Details: ${input.jobDetails}` : null,
     input.gc ? `GC: ${input.gc}` : null,
@@ -59,7 +58,7 @@ export function buildSummary(input: NotificationInput): string {
     "Tools:",
     ...input.tools.map((tool) => ` ${tool.name}: ${tool.quantity}`),
     input.toolsNotes ? `\nTool notes: ${input.toolsNotes}` : null,
-    input.materials ? `\nmaterial : ${input.materials}` : null,
+    input.materials ? `\nmaterial :\n ${input.materials}` : null,
   ]
 
   return lines.filter((line) => line !== null).join("\n")

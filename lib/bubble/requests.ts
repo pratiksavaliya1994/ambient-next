@@ -216,7 +216,7 @@ export async function createToolRequest(values: RequestFormValues, job: Job, sum
     // the old Bubble page workflow could just reference the Job thing it
     // already had in hand.
     jobId: job.id,
-    toDo: values.toDo,
+    todo: values.toDo,
     weAre: values.weAre,
     delivery: values.delivery,
     pickup: values.pickup,
