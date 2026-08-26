@@ -8,6 +8,7 @@ import { DEFAULT_REQUEST_ORDER, requestColor } from "@/lib/bubble/enums"
 import type { Job } from "@/lib/bubble/reference-types"
 import { formatToolsSummary, parseToolsSummary, type ToolLine } from "@/lib/bubble/tools-summary"
 import type { RequestFormValues } from "@/lib/schemas/request"
+import type { PickupRequestFormValues } from "@/lib/schemas/pickup-request"
 
 /**
  * Reading and writing `request` + `requestedtools`.
@@ -227,9 +228,84 @@ export type CreatedRequest = {
 // constant so that drift can't happen again.
 const NEW_REQUEST_WORKFLOW = "new-request"
 
+// A separate Bubble Studio workflow, mirroring `new-request`'s steps for the
+// Pickup flow (built there, not in this repo) — see
+// `bubble-new-request-workflow-summary.md` for the steps to mirror.
+const NEW_PICKUP_REQUEST_WORKFLOW = "new-pickup-request"
+
 const createRequestResult = z.object({
   requestId: z.string(),
 })
+
+/**
+ * The payload shape both `new-request` and `new-pickup-request` accept —
+ * shared here so the two write paths can't drift apart silently. Callers
+ * compute the date fields and `notes`/`delivery`/`pickup` themselves, since
+ * those differ between a date range and a single pickup date.
+ */
+type RequestPayloadInput = {
+  job: Job
+  toDo: string
+  weAre: string
+  delivery: boolean
+  pickup: boolean
+  tentative: boolean
+  floor: string
+  contact: string
+  contactPhone: string
+  fieldPm: string
+  notes: string
+  timeRange: string
+  requestDate: Date
+  requestDateStart: Date
+  requestDateEnd: Date
+  toolsSummary: string
+  toolsNotes: string
+  materials: string
+  summary: string
+  now: Date
+}
+
+function buildRequestPayload(input: RequestPayloadInput): Record<string, unknown> {
+  return {
+    job: input.job.name,
+    // `request.job` only ever stores the job's name — this is what lets the
+    // workflow find the actual `jobs` row to stamp `lastRequest` on, the way
+    // the old Bubble page workflow could just reference the Job thing it
+    // already had in hand.
+    jobId: input.job.id,
+    todo: input.toDo,
+    weAre: input.weAre,
+    delivery: input.delivery,
+    pickup: input.pickup,
+    tentative: input.tentative,
+    floor: input.floor,
+    contact: input.contact,
+    contactPhone: input.contactPhone,
+    // `fieldPM` is the option set and `fieldPM2` the text copy. Every live row
+    // written in the last two years fills the text field and leaves the option
+    // set empty, so this does the same.
+    fieldPm: input.fieldPm,
+    notes: input.notes,
+    timeRange: input.timeRange,
+    requestDate: input.requestDate.toISOString(),
+    requestDateStart: input.requestDateStart.toISOString(),
+    requestDateEnd: input.requestDateEnd.toISOString(),
+    color: requestColor(input.delivery, input.pickup),
+    order: DEFAULT_REQUEST_ORDER,
+    // What the Bubble UI's search box matches on: the job's long description
+    // followed by a New York timestamp.
+    searchable: `${input.job.description} - ${newYorkStamp(input.now)}`,
+    toolsSummary: input.toolsSummary,
+    toolsNotes: input.toolsNotes,
+    // Forward-compatible: the workflow doesn't act on this yet — it's meant to
+    // create a `requestedmaterials` row (`materials` + `toDo` as `jobType`)
+    // when this is non-empty, once that step is added on the Bubble side. The
+    // WhatsApp line for it is already live — see `buildSummary`.
+    materials: input.materials,
+    summary: input.summary,
+  }
+}
 
 /**
  * Creates a request and its tool line via the `new-request` Bubble backend
@@ -253,44 +329,84 @@ export async function createToolRequest(values: RequestFormValues, job: Job, sum
   // unlike `requestDateStart`, `requestDate` never carried a time of day.
   const startOfDay = newYorkInstant(values.startDate)
 
-  const raw = await bubbleRunWorkflow(NEW_REQUEST_WORKFLOW, {
-    job: job.name,
-    // `request.job` only ever stores the job's name — this is what lets the
-    // workflow find the actual `jobs` row to stamp `lastRequest` on, the way
-    // the old Bubble page workflow could just reference the Job thing it
-    // already had in hand.
-    jobId: job.id,
-    todo: values.toDo,
-    weAre: values.weAre,
-    delivery: values.delivery,
-    pickup: values.pickup,
-    tentative: values.tentative,
-    floor: values.floor,
-    contact: values.contact,
-    contactPhone: values.contactPhone,
-    // `fieldPM` is the option set and `fieldPM2` the text copy. Every live row
-    // written in the last two years fills the text field and leaves the option
-    // set empty, so this does the same.
-    fieldPm: values.fieldPm,
-    notes: values.notes,
-    timeRange: values.timeRange,
-    requestDate: startOfDay.toISOString(),
-    requestDateStart: start.toISOString(),
-    requestDateEnd: end.toISOString(),
-    color: requestColor(values.delivery, values.pickup),
-    order: DEFAULT_REQUEST_ORDER,
-    // What the Bubble UI's search box matches on: the job's long description
-    // followed by a New York timestamp.
-    searchable: `${job.description} - ${newYorkStamp(now)}`,
-    toolsSummary: formatToolsSummary(values.tools),
-    toolsNotes: values.toolsNotes,
-    // Forward-compatible: the `new-request` workflow doesn't act on this yet —
-    // it's meant to create a `requestedmaterials` row (`materials` + `toDo` as
-    // `jobType`) when this is non-empty, once that step is added on the Bubble
-    // side. The WhatsApp line for it is already live — see `buildSummary`.
-    materials: values.materials,
-    summary,
-  })
+  const raw = await bubbleRunWorkflow(
+    NEW_REQUEST_WORKFLOW,
+    buildRequestPayload({
+      job,
+      toDo: values.toDo,
+      weAre: values.weAre,
+      delivery: values.delivery,
+      pickup: values.pickup,
+      tentative: values.tentative,
+      floor: values.floor,
+      contact: values.contact,
+      contactPhone: values.contactPhone,
+      fieldPm: values.fieldPm,
+      notes: values.notes,
+      timeRange: values.timeRange,
+      requestDate: startOfDay,
+      requestDateStart: start,
+      requestDateEnd: end,
+      toolsSummary: formatToolsSummary(values.tools),
+      toolsNotes: values.toolsNotes,
+      materials: values.materials,
+      summary,
+      now,
+    })
+  )
+
+  const result = createRequestResult.parse(raw)
+  return { requestId: result.requestId, job: job.name }
+}
+
+/**
+ * The Pickup counterpart to `createToolRequest`. A pickup is a single visit,
+ * so `requestDateEnd` is the same instant as `requestDateStart` plus the
+ * chosen slot's 30-minute duration — **not** midnight of the same day, which
+ * would land *before* `requestDateStart` (start-of-day plus the slot hour)
+ * and broke the Calendar step's "end after start" requirement in practice.
+ * `cleanup` has no Bubble field of its own — folded into `notes` as a line of
+ * free text instead, since adding a field isn't an option here (see
+ * `CLAUDE.md`).
+ */
+export async function createPickupToolRequest(
+  values: PickupRequestFormValues,
+  job: Job,
+  summary: string
+): Promise<CreatedRequest> {
+  const now = new Date()
+  const start = newYorkInstant(values.date, values.slotHour)
+  const startOfDay = newYorkInstant(values.date)
+  const end = new Date(start.getTime() + 30 * 60 * 1000)
+  const notes = values.cleanup
+    ? [values.notes, "Cleanup the Site requested."].filter(Boolean).join("\n")
+    : values.notes
+
+  const raw = await bubbleRunWorkflow(
+    NEW_PICKUP_REQUEST_WORKFLOW,
+    buildRequestPayload({
+      job,
+      toDo: values.toDo,
+      weAre: values.weAre,
+      delivery: false,
+      pickup: true,
+      tentative: values.tentative,
+      floor: values.floor,
+      contact: values.contact,
+      contactPhone: values.contactPhone,
+      fieldPm: values.fieldPm,
+      notes,
+      timeRange: values.timeRange,
+      requestDate: startOfDay,
+      requestDateStart: start,
+      requestDateEnd: end,
+      toolsSummary: formatToolsSummary(values.tools),
+      toolsNotes: values.toolsNotes,
+      materials: values.materials,
+      summary,
+      now,
+    })
+  )
 
   const result = createRequestResult.parse(raw)
   return { requestId: result.requestId, job: job.name }

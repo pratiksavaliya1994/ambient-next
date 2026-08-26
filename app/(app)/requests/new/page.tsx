@@ -1,10 +1,11 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 
 import { RequestForm } from "@/components/request-form"
 import { listFieldPms, listJobs, listMaterialDefaults, listTimeSlots, listToolTypes } from "@/lib/bubble/reference"
 import { toJobOption } from "@/lib/bubble/reference-types"
 
-export const metadata: Metadata = { title: "New tool request" }
+export const metadata: Metadata = { title: "New delivery request" }
 
 export default async function NewRequestPage() {
   // Five independent lookups, so fetch them together rather than in sequence.
@@ -19,9 +20,14 @@ export default async function NewRequestPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-medium">New Digital request</h1>
-        <p className="text-sm text-muted-foreground">Enter details for a new tool request.</p>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-medium">New delivery request</h1>
+          <p className="text-sm text-muted-foreground">Enter details for a new tool request.</p>
+        </div>
+        <Link href="/requests/new/pickup" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+          Pickup instead?
+        </Link>
       </div>
 
       <RequestForm

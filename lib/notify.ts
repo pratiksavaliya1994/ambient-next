@@ -42,7 +42,7 @@ export function buildSummary(input: NotificationInput): string {
   const dateLine = startDay === endDay ? startDay : `${startDay} – ${endDay}`
 
   const lines = [
-    `New {${input.delivery ? "Delivery" : "Pickup"}} Request from ${input.requestedBy}`,
+    `New ${input.delivery ? "Delivery" : "Pickup"} Request from ${input.requestedBy}`,
     "",
     `Address: ${input.job}`,
     input.jobDetails ? `Details: ${input.jobDetails}` : null,

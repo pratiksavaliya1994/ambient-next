@@ -153,31 +153,41 @@ export function SelectedTools({
   }
 
   return (
-    <ItemGroup className="max-h-88 gap-1 overflow-y-auto rounded-lg border p-1">
-      {lines.map((line) => (
-        <Item key={line.name} size="sm" variant="muted">
-          <ItemContent>
-            <ItemTitle className="line-clamp-2">{line.name}</ItemTitle>
-          </ItemContent>
-          <ItemActions>
-            <Stepper name={line.name} quantity={line.quantity} selected={selected} onChange={onChange} />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Remove ${line.name}`}
-              onClick={() => {
-                const next = { ...selected }
-                delete next[line.name]
-                onChange(next)
-              }}
-            >
-              <XIcon className="pointer-events-none font-bold text-red-500" />
-            </Button>
-          </ItemActions>
-        </Item>
-      ))}
-    </ItemGroup>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {lines.length} tool {lines.length === 1 ? "type" : "types"} selected
+        </p>
+        <Button type="button" variant="ghost" size="sm" onClick={() => onChange({})}>
+          Clear all
+        </Button>
+      </div>
+      <ItemGroup className="max-h-88 gap-1 overflow-y-auto rounded-lg border p-1">
+        {lines.map((line) => (
+          <Item key={line.name} size="sm" variant="muted">
+            <ItemContent>
+              <ItemTitle className="line-clamp-2">{line.name}</ItemTitle>
+            </ItemContent>
+            <ItemActions>
+              <Stepper name={line.name} quantity={line.quantity} selected={selected} onChange={onChange} />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Remove ${line.name}`}
+                onClick={() => {
+                  const next = { ...selected }
+                  delete next[line.name]
+                  onChange(next)
+                }}
+              >
+                <XIcon className="pointer-events-none font-bold text-red-500" />
+              </Button>
+            </ItemActions>
+          </Item>
+        ))}
+      </ItemGroup>
+    </div>
   )
 }
 

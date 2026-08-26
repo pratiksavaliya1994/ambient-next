@@ -6,11 +6,11 @@ import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { AlertCircleIcon, PlusIcon, SendIcon } from "lucide-react"
 
+import { createPickupRequestAction, fetchToolsForJobAction } from "@/app/(app)/requests/new/pickup/actions"
 import { INITIAL_CREATE_STATE, type CreateRequestState } from "@/app/(app)/requests/action-state"
-import { createRequestAction } from "@/app/(app)/requests/actions"
-import { DateRangePicker } from "@/components/date-range-picker"
+import { DatePicker } from "@/components/date-picker"
 import { MaterialDialog } from "@/components/material-dialog"
-import { SelectedTools, ToolPickerDialog, toolLinesOf } from "@/components/tool-picker"
+import { PickupToolPickerDialog, SelectedPickupTools, toolLinesOfPickup } from "@/components/pickup-tool-picker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,43 +31,31 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { newYorkToday } from "@/lib/bubble/dates"
-import { DEFAULT_WE_ARE, TO_DO, UNFILTERED_TO_DO, WE_ARE } from "@/lib/bubble/enums"
+import { DEFAULT_WE_ARE, UNFILTERED_TO_DO, TO_DO, WE_ARE } from "@/lib/bubble/enums"
+import type { PickupTool } from "@/lib/bubble/pickup-tools"
 import {
   defaultMaterialsFor,
   Job,
-  toolTypesFor,
   type FieldPm,
   type MaterialDefault,
-  // type JobOption,
   type TimeSlot,
-  type ToolType,
 } from "@/lib/bubble/reference-types"
-import { formatToolsSummary } from "@/lib/bubble/tools-summary"
-import { requestFormSchema, type RequestFormValues } from "@/lib/schemas/request"
+import { pickupRequestFormSchema, type PickupRequestFormValues } from "@/lib/schemas/pickup-request"
 
 /**
- * The whole request form as one client island.
- *
- * The Bubble schema has no draft state — a request either exists or it does
- * not — so everything here stays in browser state until the submit button, and
- * the server action writes both rows in one go. Abandoning the page leaves the
- * database untouched, which is the opposite of what the old Bubble UI does.
- *
- * Laid out as one form column beside a tool column rather than as three
- * stacked cards. Two fields to a row and the 112-row catalogue moved into a
- * dialog, so the fields a PM actually fills in fit on one screen; what stays
- * beside them is the selection, not the catalogue. Below `lg` the columns
- * stack, tools last.
+ * The Pickup counterpart to `RequestForm` — same two-column shell, three real
+ * differences: a single date instead of a range, individual physical tools
+ * (checkbox, always quantity 1, fetched live per job from Bubble's `tools`
+ * table) instead of the `toolstype` catalogue, and a "Cleanup the Site"
+ * toggle that auto-selects (but doesn't lock) all of a job's tools.
  */
-export function RequestForm({
+export function PickupRequestForm({
   jobs,
-  toolTypes,
   fieldPms,
   timeSlots,
   materialDefaults,
 }: {
   jobs: Job[]
-  toolTypes: ToolType[]
   fieldPms: FieldPm[]
   timeSlots: TimeSlot[]
   materialDefaults: MaterialDefault[]
@@ -75,6 +63,7 @@ export function RequestForm({
   const router = useRouter()
   const [state, setState] = useState<CreateRequestState>(INITIAL_CREATE_STATE)
   const [pending, startTransition] = useTransition()
+  const [toolsPending, startToolsTransition] = useTransition()
 
   const {
     register,
@@ -82,18 +71,14 @@ export function RequestForm({
     handleSubmit,
     setValue,
     setError,
-    trigger,
     formState: { errors, isValid },
-  } = useForm<RequestFormValues>({
-    resolver: zodResolver(requestFormSchema),
+  } = useForm<PickupRequestFormValues>({
+    resolver: zodResolver(pickupRequestFormSchema),
     defaultValues: {
       jobId: "",
       toDo: UNFILTERED_TO_DO,
       weAre: DEFAULT_WE_ARE,
-      delivery: true,
-      pickup: false,
-      startDate: newYorkToday(),
-      endDate: newYorkToday(),
+      date: newYorkToday(),
       timeRange: timeSlots[2]?.label ?? "Anytime",
       slotHour: timeSlots[2]?.hour ?? 8,
       floor: "",
@@ -104,56 +89,69 @@ export function RequestForm({
       toolsNotes: "",
       materials: "",
       tentative: false,
+      cleanup: false,
       tools: [],
     },
   })
 
-  const toDo = useWatch({ control, name: "toDo" })
-  const startDate = useWatch({ control, name: "startDate" })
-  const endDate = useWatch({ control, name: "endDate" })
+  const date = useWatch({ control, name: "date" })
   const materials = useWatch({ control, name: "materials" })
+  const toDo = useWatch({ control, name: "toDo" })
 
   const [job, setJob] = useState<Job | null>(null)
-  const [selected, setSelected] = useState<Record<string, number>>({})
+  const [selectedToolNames, setSelectedToolNames] = useState<Set<string>>(new Set())
+  const [toolsForJob, setToolsForJob] = useState<PickupTool[]>([])
 
-  const tools = useMemo(() => toolLinesOf(selected), [selected])
+  const tools = useMemo(() => toolLinesOfPickup(selectedToolNames), [selectedToolNames])
 
-  // The job type filters the catalogue, so switching it can strand a tool that
-  // is no longer offered. Stranded picks stay selected on purpose — dropping
-  // someone's choices silently because they changed a dropdown is worse than
-  // showing them a list that no longer matches.
-  const offered = useMemo(() => toolTypesFor(toolTypes, toDo), [toolTypes, toDo])
-
-  // `job` and `selected` live outside react-hook-form because the widgets
-  // that edit them (Combobox, the tool picker) need more than the one schema
-  // field each maps onto — the Job object for display, or a quantity map.
-  // Their `onChange` handlers push the derived schema value into the form;
-  // `shouldValidate` only re-checks the field being set, so picking a job
-  // doesn't prematurely flag the tools list.
+  // `job` and the tool selection live outside react-hook-form for the same
+  // reason as the Delivery form: their widgets need more than the one schema
+  // field each maps onto.
   function updateJob(next: Job | null) {
     setJob(next)
     setValue("jobId", next?.id ?? "", { shouldValidate: true })
+    // A new job means a different set of tools entirely — the previous
+    // job's picks and fetched list can't carry over.
+    setSelectedToolNames(new Set())
+    setValue("tools", [], { shouldValidate: true })
+    setValue("cleanup", false)
+    setToolsForJob([])
   }
 
-  function updateDateRange(next: { startDate: string; endDate: string }) {
-    // Both fields have to change before either is re-validated: the
-    // end-before-start rule is cross-field.
-    setValue("startDate", next.startDate)
-    setValue("endDate", next.endDate)
-    void trigger(["startDate", "endDate"])
+  function updateSelected(next: Set<string>) {
+    setSelectedToolNames(next)
+    setValue("tools", toolLinesOfPickup(next), { shouldValidate: true })
   }
 
-  function updateSelected(next: Record<string, number>) {
-    setSelected(next)
-    setValue("tools", toolLinesOf(next), { shouldValidate: true })
+  /**
+   * Fetched fresh every time — on dialog open and on the Cleanup toggle —
+   * rather than cached, since which tools are actually on site changes
+   * between visits (see `lib/bubble/pickup-tools.ts`).
+   */
+  function loadToolsForJob(target: Job): Promise<PickupTool[]> {
+    return new Promise((resolve) => {
+      startToolsTransition(async () => {
+        try {
+          const fetched = await fetchToolsForJobAction(target.name)
+          setToolsForJob(fetched)
+          resolve(fetched)
+        } catch (error) {
+          toast.add({
+            title: "Couldn't load tools",
+            description: error instanceof Error ? error.message : "Try again.",
+          })
+          resolve([])
+        }
+      })
+    })
   }
 
   const onSubmit = handleSubmit((values) => {
     startTransition(async () => {
-      const result = await createRequestAction(values)
+      const result = await createPickupRequestAction(values)
       if (result.status === "invalid") {
         for (const [key, message] of Object.entries(result.fieldErrors)) {
-          setError(key as keyof RequestFormValues, {
+          setError(key as keyof PickupRequestFormValues, {
             type: "server",
             message,
           })
@@ -163,7 +161,7 @@ export function RequestForm({
 
       if (result.status === "created") {
         toast.add({
-          title: "Request created",
+          title: "Pickup request created",
           description: `${result.job} is on the board.`,
         })
         router.push("/requests")
@@ -171,9 +169,6 @@ export function RequestForm({
     })
   })
 
-  // Keyed by label rather than `slot.hour`: `timeRange` — the Bubble field
-  // this now writes to — is that label text verbatim, and several slots
-  // (e.g. the two halves of 6am) share the same starting hour.
   const slotItems = timeSlots.map((slot) => ({
     label: slot.label,
     value: slot.label,
@@ -182,7 +177,6 @@ export function RequestForm({
     label: pm.company ? `${pm.name} — ${pm.company}` : pm.name,
     value: pm.name,
   }))
-  const units = tools.reduce((sum, line) => sum + line.quantity, 0)
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
@@ -197,10 +191,8 @@ export function RequestForm({
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <Card>
           <CardHeader>
-            <CardTitle>Request details</CardTitle>
-            <CardDescription>
-              Where the tools are going, when they are needed, and who to ask for on site.
-            </CardDescription>
+            <CardTitle>Pickup details</CardTitle>
+            <CardDescription>Where the tools are coming from, when, and who to ask for on site.</CardDescription>
           </CardHeader>
           <CardContent>
             <FieldGroup className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -267,7 +259,7 @@ export function RequestForm({
                     </Select>
                   )}
                 />
-                <FieldDescription>Filters the tool list.</FieldDescription>
+                <FieldDescription>Sets the default materials list.</FieldDescription>
               </Field>
 
               <Field>
@@ -285,19 +277,15 @@ export function RequestForm({
                 <Input id="contactPhone" inputMode="tel" {...register("contactPhone")} />
               </Field>
 
-              <Field data-invalid={errors.startDate || errors.endDate ? true : undefined}>
-                <FieldLabel htmlFor="dateRange">Date range</FieldLabel>
-                <DateRangePicker
-                  id="dateRange"
-                  startDate={startDate}
-                  endDate={endDate}
-                  onRangeChange={updateDateRange}
-                  invalid={errors.startDate || errors.endDate ? true : undefined}
+              <Field data-invalid={errors.date ? true : undefined}>
+                <FieldLabel htmlFor="date">Pickup date</FieldLabel>
+                <DatePicker
+                  id="date"
+                  value={date}
+                  onValueChange={(next) => setValue("date", next, { shouldValidate: true })}
+                  invalid={errors.date ? true : undefined}
                 />
-                <FieldDescription>Select the date range during which the tools are required.</FieldDescription>
-
-                {errors.startDate && <FieldError errors={[errors.startDate]} />}
-                {errors.endDate && <FieldError errors={[errors.endDate]} />}
+                {errors.date && <FieldError errors={[errors.date]} />}
               </Field>
 
               <Field>
@@ -330,8 +318,9 @@ export function RequestForm({
                     </Select>
                   )}
                 />
-                <FieldDescription>Time slot for Delivery</FieldDescription>
+                <FieldDescription>Time slot for the pickup</FieldDescription>
               </Field>
+
               <Field orientation="horizontal">
                 <Controller
                   control={control}
@@ -346,6 +335,31 @@ export function RequestForm({
                 />
                 <FieldLabel htmlFor="tentative">Tentative — the date may still move</FieldLabel>
               </Field>
+
+              <Field orientation="horizontal">
+                <Controller
+                  control={control}
+                  name="cleanup"
+                  render={({ field }) => (
+                    <Switch
+                      id="cleanup"
+                      checked={field.value}
+                      disabled={!job}
+                      onCheckedChange={(next) => {
+                        const checked = next === true
+                        field.onChange(checked)
+                        if (checked && job) {
+                          void loadToolsForJob(job).then((fetched) => {
+                            updateSelected(new Set(fetched.map((tool) => tool.name)))
+                          })
+                        }
+                      }}
+                    />
+                  )}
+                />
+                <FieldLabel htmlFor="cleanup">Cleanup the Site — take everything on file</FieldLabel>
+              </Field>
+
               <Field>
                 <FieldLabel htmlFor="weAre">We are</FieldLabel>
                 <Controller
@@ -396,7 +410,6 @@ export function RequestForm({
                     </Select>
                   )}
                 />
-                {/* <FieldDescription>Saved to fieldPM2, the text field the live app reads.</FieldDescription> */}
               </Field>
 
               <Field className="sm:col-span-2">
@@ -411,19 +424,20 @@ export function RequestForm({
           <CardHeader>
             <CardTitle>Tools</CardTitle>
             <CardDescription>
-              {tools.length === 0
-                ? `${offered.length} offered for ${toDo}`
-                : `${tools.length} ${tools.length === 1 ? "type" : "types"}, ${units} in total`}
+              {!job ? "Pick a job to see its tools." : `${tools.length} tool${tools.length === 1 ? "" : "s"} selected`}
             </CardDescription>
             <CardAction>
-              <ToolPickerDialog
-                toolTypes={offered}
-                selected={selected}
+              <PickupToolPickerDialog
+                tools={toolsForJob}
+                loading={toolsPending}
+                selected={selectedToolNames}
                 onChange={updateSelected}
-                toDo={toDo}
-                catalogueSize={toolTypes.length}
+                onOpenChange={(open) => {
+                  if (open && job) void loadToolsForJob(job)
+                }}
+                jobName={job?.name ?? ""}
                 trigger={
-                  <Button type="button" variant="outline" size="sm">
+                  <Button type="button" variant="outline" size="sm" disabled={!job}>
                     <PlusIcon data-icon="inline-start" />
                     Add tools
                   </Button>
@@ -434,8 +448,9 @@ export function RequestForm({
           <CardContent>
             <FieldGroup className="gap-6">
               <Field data-invalid={errors.tools ? true : undefined}>
-                <SelectedTools selected={selected} onChange={updateSelected} />
+                <SelectedPickupTools selected={selectedToolNames} onChange={updateSelected} />
                 {errors.tools && <FieldError errors={[errors.tools]} />}
+                {!job && <FieldDescription>Pick a job before adding tools.</FieldDescription>}
               </Field>
 
               <Field>
@@ -474,15 +489,6 @@ export function RequestForm({
                 )}
               </Field>
 
-              {/* {tools.length > 0 && (
-                <Field>
-                  <FieldLabel>Saved to Bubble as</FieldLabel>
-                  <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs">
-                    {formatToolsSummary(tools)}
-                  </pre>
-                </Field>
-              )} */}
-
               <Field>
                 <FieldLabel htmlFor="toolsNotes">Tool notes</FieldLabel>
                 <Textarea
@@ -497,11 +503,8 @@ export function RequestForm({
           <CardFooter className="flex-col items-stretch gap-3">
             <Button type="submit" disabled={!isValid || pending}>
               {pending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
-              Create request
+              Create pickup request
             </Button>
-            {/* <p className="text-xs text-muted-foreground">
-              A WhatsApp notification goes out automatically.
-            </p> */}
           </CardFooter>
         </Card>
       </div>
