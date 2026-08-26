@@ -294,7 +294,7 @@ export function RequestForm({
                   onRangeChange={updateDateRange}
                   invalid={errors.startDate || errors.endDate ? true : undefined}
                 />
-                <FieldDescription>Select Date Range</FieldDescription>
+                <FieldDescription>Select the date range during which the tools are required.</FieldDescription>
 
                 {errors.startDate && <FieldError errors={[errors.startDate]} />}
                 {errors.endDate && <FieldError errors={[errors.endDate]} />}
@@ -396,7 +396,7 @@ export function RequestForm({
                     </Select>
                   )}
                 />
-                <FieldDescription>Saved to fieldPM2, the text field the live app reads.</FieldDescription>
+                {/* <FieldDescription>Saved to fieldPM2, the text field the live app reads.</FieldDescription> */}
               </Field>
 
               <Field className="sm:col-span-2">
