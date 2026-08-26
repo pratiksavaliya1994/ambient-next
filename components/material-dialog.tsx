@@ -50,9 +50,7 @@ export function MaterialDialog({
       <DialogContent className="flex max-h-[85svh] flex-col gap-4 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add material</DialogTitle>
-          <DialogDescription>
-            Free text, sent to the warehouse as-is.
-          </DialogDescription>
+          <DialogDescription>Free text, sent to the warehouse as-is.</DialogDescription>
         </DialogHeader>
 
         <Textarea

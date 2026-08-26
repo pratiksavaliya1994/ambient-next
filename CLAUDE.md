@@ -16,7 +16,7 @@ A Next.js frontend for the Tipp Floor Covering / Ambient Flooring tool
 workflow. Bubble.io stays as the database and backend. Next.js replaces the UI.
 
 **Current scope:** the request creation flow. A PM picks a job, a job type,
-a date and slot, and a set of tool *types with quantities*, plus an optional
+a date and slot, and a set of tool _types with quantities_, plus an optional
 free-text materials list; submitting writes one `request` row and one
 `requestedtools` row (the materials text is sent along too, but the Bubble
 side doesn't act on it yet — see the `materials` / `requestedmaterials`
@@ -82,10 +82,10 @@ Auth.js v5, `session: { strategy: 'jwt' }`, no adapter, no database.
 
 ### Two providers, both behind flags
 
-| Flag | Provider | Status |
-| --- | --- | --- |
-| `ALLOW_DEV_LOGIN` | `dev-login` (Credentials) | **On.** Temporary. |
-| `ALLOW_ENTRA` | Microsoft Entra ID | Off until the credentials exist. |
+| Flag              | Provider                  | Status                           |
+| ----------------- | ------------------------- | -------------------------------- |
+| `ALLOW_DEV_LOGIN` | `dev-login` (Credentials) | **On.** Temporary.               |
+| `ALLOW_ENTRA`     | Microsoft Entra ID        | Off until the credentials exist. |
 
 **`dev-login` checks nothing.** Type a name, get a session. It exists only
 because the Entra credentials are not in hand yet. Anyone who can reach the
@@ -165,13 +165,13 @@ No bulk write endpoint, and no transactions.
 
 ### Type mapping
 
-| Bubble type | API representation |
-| --- | --- |
-| linked thing | the `_id` string |
-| option set | the **display text**, e.g. `"Grind & Epoxy"` |
-| date | ISO 8601 string |
-| yes/no | boolean |
-| list | array |
+| Bubble type  | API representation                           |
+| ------------ | -------------------------------------------- |
+| linked thing | the `_id` string                             |
+| option set   | the **display text**, e.g. `"Grind & Epoxy"` |
+| date         | ISO 8601 string                              |
+| yes/no       | boolean                                      |
+| list         | array                                        |
 
 Swagger marks option-set fields as `"option set"` but **does not expose their
 values**. The values in `lib/bubble/enums.ts` were read off live rows instead.
@@ -182,7 +182,7 @@ An option-set write with an unrecognised value fails silently in Bubble.
 Three pre-existing ones must not be broken: `/wf/googleDataToDB`,
 `/wf/Set Location`, `/wf/Set Status`. This app doesn't call them.
 
-This app *does* call one workflow of its own: `/wf/new-request` (see
+This app _does_ call one workflow of its own: `/wf/new-request` (see
 "Creating a request" below) — the one exception to "everything is Data API
 CRUD." It creates the `request` row, the `requestedtools` row, and sends the
 WhatsApp notification as one server-side unit in Bubble, rather than this app
@@ -196,25 +196,25 @@ doing two `/obj/...` writes and its own WhatsApp send.
 
 The header row. 24 business fields; the ones this app writes:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `job` | text | The job **name**, e.g. `"107 Greenwich St - J24-0407"`. Not a link to `jobs`. |
-| `toDo` | option set | Job type. Also filters the tool catalogue — see `toolstype.realtedTo`. |
-| `weAre` | option set | `Ambient` / `Tipp` / `BT Flooring` / `Pyramid Floors` |
-| `delivery`, `pickup` | yes/no | Both can be true. |
-| `requestDate` | date | **Midnight New York** on the first day of the request. Never carries a time. |
-| `requestDateStart` | date | The delivery **instant** — the first day of the request, at the chosen calendar slot's hour. Read by the `new-request` workflow's ClickUp and Outlook Calendar steps as the appointment time. |
-| `requestDateEnd` | date | **Midnight New York** on the day tools are needed until — the other end of the date range, no time of its own (it isn't an appointment). |
-| `timeRange` | text | The chosen calendar slot's label on rows this app writes (e.g. `06:00 a.m. to 06:30 a.m.`) — Bubble has no field of its own for time-of-day as text, so this doubles as it (its hour also feeds `requestDateStart`, see above). Older/other rows hold free text: `Anytime`, `6-8am`, `TBD`, `Joes truck today`. |
-| `floor` | text | `14`, `ground`, `loading dock`, `Suite 139`. |
-| `contact`, `contactPhone` | text | |
-| `fieldPM2` | text | The PM's name. **This is the one that gets written.** |
-| `fieldPM` | option set | Legacy. Empty on all 200 recent rows. Not written. |
-| `notes` | text | |
-| `tentative`, `completed` | yes/no | |
-| `color` | text | Calendar event colour: `#2299ff` when delivery, `#ff7744` for pickup-only. |
-| `order` | number | Always `100` on every live row. |
-| `searchable` | text | What the Bubble search box matches: `` `${jobs.description} - ${M-D-YYYY h:mm am ET}` ``. |
+| Field                     | Type       | Notes                                                                                                                                                                                                                                                                                                           |
+| ------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `job`                     | text       | The job **name**, e.g. `"107 Greenwich St - J24-0407"`. Not a link to `jobs`.                                                                                                                                                                                                                                   |
+| `toDo`                    | option set | Job type. Also filters the tool catalogue — see `toolstype.realtedTo`.                                                                                                                                                                                                                                          |
+| `weAre`                   | option set | `Ambient` / `Tipp` / `BT Flooring` / `Pyramid Floors`                                                                                                                                                                                                                                                           |
+| `delivery`, `pickup`      | yes/no     | Both can be true.                                                                                                                                                                                                                                                                                               |
+| `requestDate`             | date       | **Midnight New York** on the first day of the request. Never carries a time.                                                                                                                                                                                                                                    |
+| `requestDateStart`        | date       | The delivery **instant** — the first day of the request, at the chosen calendar slot's hour. Read by the `new-request` workflow's ClickUp and Outlook Calendar steps as the appointment time.                                                                                                                   |
+| `requestDateEnd`          | date       | **Midnight New York** on the day tools are needed until — the other end of the date range, no time of its own (it isn't an appointment).                                                                                                                                                                        |
+| `timeRange`               | text       | The chosen calendar slot's label on rows this app writes (e.g. `06:00 a.m. to 06:30 a.m.`) — Bubble has no field of its own for time-of-day as text, so this doubles as it (its hour also feeds `requestDateStart`, see above). Older/other rows hold free text: `Anytime`, `6-8am`, `TBD`, `Joes truck today`. |
+| `floor`                   | text       | `14`, `ground`, `loading dock`, `Suite 139`.                                                                                                                                                                                                                                                                    |
+| `contact`, `contactPhone` | text       |                                                                                                                                                                                                                                                                                                                 |
+| `fieldPM2`                | text       | The PM's name. **This is the one that gets written.**                                                                                                                                                                                                                                                           |
+| `fieldPM`                 | option set | Legacy. Empty on all 200 recent rows. Not written.                                                                                                                                                                                                                                                              |
+| `notes`                   | text       |                                                                                                                                                                                                                                                                                                                 |
+| `tentative`, `completed`  | yes/no     |                                                                                                                                                                                                                                                                                                                 |
+| `color`                   | text       | Calendar event colour: `#2299ff` when delivery, `#ff7744` for pickup-only.                                                                                                                                                                                                                                      |
+| `order`                   | number     | Always `100` on every live row.                                                                                                                                                                                                                                                                                 |
+| `searchable`              | text       | What the Bubble search box matches: `` `${jobs.description} - ${M-D-YYYY h:mm am ET}` ``.                                                                                                                                                                                                                       |
 
 Not written by this app: `pictures`, `onClickUp`, `realGC`, `Slug`.
 
@@ -222,11 +222,11 @@ Not written by this app: `pictures`, `onClickUp`, `realGC`, `Slug`.
 
 **One row per request, not per tool and not per unit.** Three business fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `requestID` | text | The request `_id`. Not a link — no referential integrity. |
-| `toolsSummary` | text | The entire tool list, as one string. |
-| `toolsNotes` | text | Free text. |
+| Field          | Type | Notes                                                     |
+| -------------- | ---- | --------------------------------------------------------- |
+| `requestID`    | text | The request `_id`. Not a link — no referential integrity. |
+| `toolsSummary` | text | The entire tool list, as one string.                      |
+| `toolsNotes`   | text | Free text.                                                |
 
 `toolsSummary` format, from live rows:
 
@@ -246,13 +246,13 @@ codec live in `lib/bubble/tools-summary.ts` so they cannot drift.
 
 The catalogue, 112 rows.
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `name` | text | The identifier, as far as `toolsSummary` is concerned. |
-| `realtedTo` | list of option set | **The misspelling is Bubble's — keep it.** Which job types the tool is offered for. |
-| `consumable` | yes/no | |
-| `notes` | text | |
-| `quantity`, `order`, `clickUpID` | | Mostly empty. |
+| Field                            | Type               | Notes                                                                               |
+| -------------------------------- | ------------------ | ----------------------------------------------------------------------------------- |
+| `name`                           | text               | The identifier, as far as `toolsSummary` is concerned.                              |
+| `realtedTo`                      | list of option set | **The misspelling is Bubble's — keep it.** Which job types the tool is offered for. |
+| `consumable`                     | yes/no             |                                                                                     |
+| `notes`                          | text               |                                                                                     |
+| `quantity`, `order`, `clickUpID` |                    | Mostly empty.                                                                       |
 
 `realtedTo` holds `toDo` values, which is what filters the picker. `Fast
 Request` appears in no tool's list, so it means "show everything".
@@ -289,7 +289,7 @@ from the same pick, never independently.
 values do; "Fast Request" and "Simple Grind" have no row. `List` is the
 default free-text list (e.g. `"Concrete: \n6x6 welded wire: \n..."`),
 `realtedTo` the same misspelled option-set-list shape as `toolstype.realtedTo`.
-This is a *starting point* for the request form's "Materials" popup, not a
+This is a _starting point_ for the request form's "Materials" popup, not a
 picker — a PM types free text, there's no catalogue of individual materials to
 select from.
 
@@ -485,13 +485,13 @@ No `DATABASE_URL`. None of these are `NEXT_PUBLIC_`.
 
 Run from `next-ambient/`:
 
-| | |
-| --- | --- |
-| `npm run dev` | dev server |
-| `npm run build` | production build |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | eslint |
-| `npm run format` | prettier |
+|                        |                                                      |
+| ---------------------- | ---------------------------------------------------- |
+| `npm run dev`          | dev server                                           |
+| `npm run build`        | production build                                     |
+| `npm run typecheck`    | `tsc --noEmit`                                       |
+| `npm run lint`         | eslint                                               |
+| `npm run format`       | prettier                                             |
 | `npm run check-bubble` | **read-only** smoke test against the live Bubble app |
 
 `check-bubble` needs `tsx --conditions=react-server` — the modules it imports

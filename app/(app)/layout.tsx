@@ -4,11 +4,7 @@ import Link from "next/link"
 import { ALLOW_DEV_LOGIN } from "@/auth"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Separator } from "@/components/ui/separator"
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar"
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/toast"
 import { displayNameOf, requireSessionOrRedirect } from "@/lib/auth/session"
 
@@ -17,11 +13,7 @@ import { displayNameOf, requireSessionOrRedirect } from "@/lib/auth/session"
  * toggle. There are no roles in the Bubble schema, so there is nothing to
  * branch the navigation on — every signed-in user sees everything.
  */
-export default async function AppLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSessionOrRedirect("/requests")
 
   // `SidebarProvider` writes this cookie on every toggle. Reading it here
@@ -46,8 +38,7 @@ export default async function AppLayout({
           </header>
           {ALLOW_DEV_LOGIN && (
             <p className="border-b bg-destructive/10 px-6 py-2 text-center text-sm text-destructive">
-              Development sign-in is on — no password was checked. Writes still
-              go to the live Bubble database.
+              Development sign-in is on — no password was checked. Writes still go to the live Bubble database.
             </p>
           )}
           <div className="flex-1 p-4 sm:p-6">{children}</div>

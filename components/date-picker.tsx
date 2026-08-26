@@ -5,11 +5,7 @@ import { CalendarIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 /**
  * A `yyyy-mm-dd` calendar date, picked from a real calendar rather than the
@@ -61,9 +57,7 @@ export function DatePicker({
       <PopoverTrigger
         id={id}
         aria-invalid={invalid ? true : undefined}
-        render={
-          <Button variant="outline" className="w-full justify-between px-3" />
-        }
+        render={<Button variant="outline" className="w-full justify-between px-3" />}
       >
         <span className={selected ? undefined : "text-muted-foreground"}>
           {selected ? LABEL.format(selected) : "Pick a date"}

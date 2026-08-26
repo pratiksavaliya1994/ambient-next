@@ -31,8 +31,7 @@ export default async function LoginPage({
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-[0.06]"
           style={{
-            backgroundImage:
-              "repeating-linear-gradient(115deg, transparent 0 78px, currentColor 78px 79px)",
+            backgroundImage: "repeating-linear-gradient(115deg, transparent 0 78px, currentColor 78px 79px)",
           }}
         />
         <div
@@ -48,9 +47,7 @@ export default async function LoginPage({
           <span className="flex size-8 items-center justify-center rounded-md border border-[#c6a664]/40 text-xs font-semibold tracking-wide text-[#c6a664]">
             AF
           </span>
-          <span className="text-sm font-medium tracking-[0.25em] text-white/70 uppercase">
-            Ambient Flooring
-          </span>
+          <span className="text-sm font-medium tracking-[0.25em] text-white/70 uppercase">Ambient Flooring</span>
         </div>
 
         <div className="relative z-10 max-w-md">
@@ -61,8 +58,8 @@ export default async function LoginPage({
             Brilliance beneath every job site.
           </h1>
           <p className="mt-4 text-base leading-relaxed text-balance text-white/60">
-            Request, schedule, and track tools and equipment across every
-            Ambient Flooring project, from one unified workspace.
+            Request, schedule, and track tools and equipment across every Ambient Flooring project, from one unified
+            workspace.
           </p>
         </div>
 
@@ -72,26 +69,19 @@ export default async function LoginPage({
       </div>
 
       <div className="flex min-w-0 flex-col items-center justify-center gap-8 p-6 md:p-10">
-        <div className="flex w-full min-w-0 max-w-sm flex-col gap-6">
+        <div className="flex w-full max-w-sm min-w-0 flex-col gap-6">
           <div className="flex items-center justify-center gap-2.5 lg:hidden">
             <span className="flex size-8 items-center justify-center rounded-md bg-[#0b1220] text-xs font-semibold tracking-wide text-[#c6a664]">
               AF
             </span>
-            <span className="text-sm font-medium tracking-[0.25em] text-foreground/80 uppercase">
-              Ambient Flooring
-            </span>
+            <span className="text-sm font-medium tracking-[0.25em] text-foreground/80 uppercase">Ambient Flooring</span>
           </div>
 
           <LoginForm
             callbackUrl={callbackUrl}
             allowEntra={ALLOW_ENTRA}
             allowDevLogin={ALLOW_DEV_LOGIN}
-            initialError={
-              error
-                ? (AUTH_ERRORS[error] ??
-                  "Could not sign you in. Please try again.")
-                : undefined
-            }
+            initialError={error ? (AUTH_ERRORS[error] ?? "Could not sign you in. Please try again.") : undefined}
           />
         </div>
       </div>

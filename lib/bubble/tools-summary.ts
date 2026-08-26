@@ -24,9 +24,7 @@ export function formatToolsSummary(lines: readonly ToolLine[]): string {
  * Split on the *last* colon, not the first: live rows include names that
  * contain one, e.g. `"Concrete Mixer: The green one: 2"`.
  */
-export function parseToolsSummary(
-  summary: string | null | undefined
-): ToolLine[] {
+export function parseToolsSummary(summary: string | null | undefined): ToolLine[] {
   if (!summary) return []
 
   const lines: ToolLine[] = []

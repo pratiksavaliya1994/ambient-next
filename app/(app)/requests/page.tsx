@@ -5,28 +5,11 @@ import { PlusIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkRangeLabel } from "@/lib/bubble/dates"
-import {
-  hasContent,
-  listRecentRequests,
-  type ToolRequest,
-} from "@/lib/bubble/requests"
+import { hasContent, listRecentRequests, type ToolRequest } from "@/lib/bubble/requests"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Tool requests" }
@@ -48,8 +31,7 @@ const FETCH_MULTIPLE = 4
  * down to one on a phone. `min(…, 100%)` stops that floor from overflowing a
  * viewport narrower than a single card.
  */
-const GRID =
-  "grid grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] gap-6"
+const GRID = "grid grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] gap-6"
 
 export default function RequestsPage() {
   return (
@@ -179,10 +161,7 @@ function RequestCard({ request }: { request: ToolRequest }) {
   const hasActions = request.pickup || request.delivery
 
   return (
-    <Card
-      data-size="sm"
-      className={cn("flex h-130 flex-col gap-0 overflow-hidden", theme.card)}
-    >
+    <Card data-size="sm" className={cn("flex h-130 flex-col gap-0 overflow-hidden", theme.card)}>
       {/* Fixed Header */}
       <CardHeader className="shrink-0 gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -191,9 +170,7 @@ function RequestCard({ request }: { request: ToolRequest }) {
           {request.tentative && <Badge variant="outline">Tentative</Badge>}
         </div>
 
-        <CardTitle className="text-base leading-snug wrap-anywhere">
-          {request.job}
-        </CardTitle>
+        <CardTitle className="text-base leading-snug wrap-anywhere">{request.job}</CardTitle>
 
         {(request.toDo || request.weAre) && (
           <CardDescription className="flex flex-wrap gap-1.5">
@@ -207,13 +184,9 @@ function RequestCard({ request }: { request: ToolRequest }) {
       <CardContent className="my-3 min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-4">
           <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">
-            <Fact label="Dates">
-              {newYorkRangeLabel(request.start, request.end)}
-            </Fact>
+            <Fact label="Dates">{newYorkRangeLabel(request.start, request.end)}</Fact>
 
-            {request.timeRange && (
-              <Fact label="Time slot">{request.timeRange}</Fact>
-            )}
+            {request.timeRange && <Fact label="Time slot">{request.timeRange}</Fact>}
 
             {request.floor && <Fact label="Floor">{request.floor}</Fact>}
 
@@ -238,27 +211,18 @@ function RequestCard({ request }: { request: ToolRequest }) {
 
               {request.tools.length > 0 && (
                 <span className="text-xs text-muted-foreground tabular-nums">
-                  {request.tools.length}{" "}
-                  {request.tools.length === 1 ? "tool" : "tools"} · {totalTools}{" "}
-                  total items
+                  {request.tools.length} {request.tools.length === 1 ? "tool" : "tools"} · {totalTools} total items
                 </span>
               )}
             </div>
 
             {request.tools.length === 0 ? (
-              <p className="px-3 py-2.5 text-sm text-muted-foreground">
-                No tools listed.
-              </p>
+              <p className="px-3 py-2.5 text-sm text-muted-foreground">No tools listed.</p>
             ) : (
               <ul className="divide-y">
                 {request.tools.map((tool) => (
-                  <li
-                    key={tool.name}
-                    className="flex items-center justify-between gap-4 px-3 py-2"
-                  >
-                    <span className="min-w-0 flex-1 text-sm wrap-anywhere">
-                      {tool.name}
-                    </span>
+                  <li key={tool.name} className="flex items-center justify-between gap-4 px-3 py-2">
+                    <span className="min-w-0 flex-1 text-sm wrap-anywhere">{tool.name}</span>
 
                     <span
                       className={cn(
@@ -278,9 +242,7 @@ function RequestCard({ request }: { request: ToolRequest }) {
             <div className="flex flex-col gap-2 border-t pt-4">
               {request.notes && <Note label="Notes">{request.notes}</Note>}
 
-              {request.toolsNotes && (
-                <Note label="Tool notes">{request.toolsNotes}</Note>
-              )}
+              {request.toolsNotes && <Note label="Tool notes">{request.toolsNotes}</Note>}
             </div>
           )}
         </div>
@@ -307,21 +269,11 @@ function RequestCard({ request }: { request: ToolRequest }) {
 }
 
 function FactLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-      {children}
-    </span>
-  )
+  return <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{children}</span>
 }
 
 /** A `dt`/`dd` pair, so it has to be a fragment inside the `dl`'s grid. */
-function Fact({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <>
       <dt>
@@ -336,9 +288,7 @@ function Note({ label, children }: { label: string; children: string }) {
   return (
     <div className="flex flex-col gap-0.5">
       <FactLabel>{label}</FactLabel>
-      <p className="wrap-anywhere whitespace-pre-line text-muted-foreground">
-        {children}
-      </p>
+      <p className="wrap-anywhere whitespace-pre-line text-muted-foreground">{children}</p>
     </div>
   )
 }

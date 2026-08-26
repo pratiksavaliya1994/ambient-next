@@ -35,9 +35,7 @@ export type NotificationInput = {
  * the way out, and hand-escaping here produces a literal `\n` in the message.
  */
 export function buildSummary(input: NotificationInput): string {
-  const movement = [input.delivery && "Delivery", input.pickup && "Pickup"]
-    .filter(Boolean)
-    .join(" + ")
+  const movement = [input.delivery && "Delivery", input.pickup && "Pickup"].filter(Boolean).join(" + ")
 
   const startDay = newYorkWeekday(input.start)
   const endDay = newYorkWeekday(input.end)

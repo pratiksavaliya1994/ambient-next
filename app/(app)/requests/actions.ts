@@ -16,9 +16,7 @@ import type { CreateRequestState } from "./action-state"
  * what the client did: a server action is reachable by direct POST, and the
  * browser's validation is not a security boundary.
  */
-export async function createRequestAction(
-  input: unknown
-): Promise<CreateRequestState> {
+export async function createRequestAction(input: unknown): Promise<CreateRequestState> {
   const session = await requireSession()
 
   const parsed = requestFormSchema.safeParse(input)
@@ -46,7 +44,7 @@ export async function createRequestAction(
   // request's id — so the one Bubble workflow call can carry it alongside
   // everything else instead of composing it afterward.
   const summary = buildSummary({
-    requestedBy: displayNameOf(session),
+    requestedBy: values.fieldPm,
     job: job.name,
     jobDetails: job.description,
     gc: job.gc,
@@ -74,9 +72,7 @@ export async function createRequestAction(
     return {
       status: "error",
       message:
-        error instanceof Error
-          ? `Bubble rejected the request: ${error.message}`
-          : "Bubble rejected the request.",
+        error instanceof Error ? `Bubble rejected the request: ${error.message}` : "Bubble rejected the request.",
     }
   }
 

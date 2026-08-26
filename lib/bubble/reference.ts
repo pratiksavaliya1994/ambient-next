@@ -4,13 +4,7 @@ import { z } from "zod"
 
 import { bubbleListAll } from "@/lib/bubble/client"
 import { TO_DO, type ToDo } from "@/lib/bubble/enums"
-import type {
-  FieldPm,
-  Job,
-  MaterialDefault,
-  TimeSlot,
-  ToolType,
-} from "@/lib/bubble/reference-types"
+import type { FieldPm, Job, MaterialDefault, TimeSlot, ToolType } from "@/lib/bubble/reference-types"
 
 export type { FieldPm, Job, MaterialDefault, TimeSlot, ToolType }
 export { defaultMaterialsFor, toolTypesFor } from "@/lib/bubble/reference-types"
@@ -110,9 +104,7 @@ export function listToolTypes(): Promise<ToolType[]> {
         name: row.name!.trim(),
         notes: row.notes ?? null,
         consumable: row.consumable ?? false,
-        relatedTo: (row.realtedTo ?? []).filter((value): value is ToDo =>
-          IS_TO_DO.has(value)
-        ),
+        relatedTo: (row.realtedTo ?? []).filter((value): value is ToDo => IS_TO_DO.has(value)),
       }))
       .sort((a, b) => a.name.localeCompare(b.name))
   })
@@ -139,9 +131,7 @@ export function listMaterialDefaults(): Promise<MaterialDefault[]> {
       .map((row) => ({
         id: row._id,
         list: row.List ?? "",
-        relatedTo: (row.realtedTo ?? []).filter((value): value is ToDo =>
-          IS_TO_DO.has(value)
-        ),
+        relatedTo: (row.realtedTo ?? []).filter((value): value is ToDo => IS_TO_DO.has(value)),
       }))
   })
 }

@@ -7,11 +7,7 @@ import type { DateRange } from "react-day-picker"
 import { formatDay, parseDay } from "@/components/date-picker"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 const LABEL = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -69,13 +65,9 @@ export function DateRangePicker({
       <PopoverTrigger
         id={id}
         aria-invalid={invalid ? true : undefined}
-        render={
-          <Button variant="outline" className="w-full justify-between px-3" />
-        }
+        render={<Button variant="outline" className="w-full justify-between px-3" />}
       >
-        <span className={range?.from ? undefined : "text-muted-foreground"}>
-          {label}
-        </span>
+        <span className={range?.from ? undefined : "text-muted-foreground"}>{label}</span>
         <CalendarIcon data-icon="inline-end" />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-0">

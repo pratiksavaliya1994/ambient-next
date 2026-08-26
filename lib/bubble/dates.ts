@@ -32,9 +32,10 @@ const STAMP = new Intl.DateTimeFormat("en-US", {
 })
 
 function partsOf(formatter: Intl.DateTimeFormat, at: Date) {
-  return Object.fromEntries(
-    formatter.formatToParts(at).map((part) => [part.type, part.value])
-  ) as Record<string, string>
+  return Object.fromEntries(formatter.formatToParts(at).map((part) => [part.type, part.value])) as Record<
+    string,
+    string
+  >
 }
 
 /** How far Eastern wall-clock time is ahead of UTC at a given instant. */
@@ -98,10 +99,7 @@ export function newYorkDayLabel(iso: string | null | undefined): string {
 }
 
 /** `Mon 8-24` for a single day, `Mon 8-24 – Wed 8-26` when the range spans more than one. */
-export function newYorkRangeLabel(
-  startIso: string | null | undefined,
-  endIso: string | null | undefined
-): string {
+export function newYorkRangeLabel(startIso: string | null | undefined, endIso: string | null | undefined): string {
   const start = newYorkDayLabel(startIso)
   const end = newYorkDayLabel(endIso)
   if (start === "—") return end

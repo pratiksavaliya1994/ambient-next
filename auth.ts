@@ -79,8 +79,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // userPrincipalName — as this one is — expose the address as
         // `preferred_username` instead. The dev provider supplies neither.
         token.name = token.name ?? user?.name ?? profile?.name ?? null
-        token.email =
-          token.email ?? user?.email ?? profile?.preferred_username ?? null
+        token.email = token.email ?? user?.email ?? profile?.preferred_username ?? null
       }
       return token
     },

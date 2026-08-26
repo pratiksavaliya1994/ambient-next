@@ -3,26 +3,11 @@
 import { useState } from "react"
 import { AlertCircleIcon, LogInIcon, TriangleAlertIcon } from "lucide-react"
 
-import {
-  signInAsDevUser,
-  signInWithMicrosoft,
-} from "@/app/(auth)/login/actions"
+import { signInAsDevUser, signInWithMicrosoft } from "@/app/(auth)/login/actions"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldSeparator,
-} from "@/components/ui/field"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -67,9 +52,7 @@ export function LoginForm({
       <div className="h-1 w-full bg-linear-to-r from-[#0b1220] via-[#c6a664] to-[#0b1220]" />
       <CardHeader className="gap-1.5 pt-6">
         <CardTitle className="text-xl">Sign in to your workspace</CardTitle>
-        <CardDescription>
-          Manage tool and equipment requests for Ambient Flooring job sites.
-        </CardDescription>
+        <CardDescription>Manage tool and equipment requests for Ambient Flooring job sites.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 pt-2 pb-6">
         {error && (
@@ -85,8 +68,7 @@ export function LoginForm({
               <TriangleAlertIcon />
               <AlertTitle>Development sign-in</AlertTitle>
               <AlertDescription>
-                No password is checked. Your name is only used to label requests
-                on screen.
+                No password is checked. Your name is only used to label requests on screen.
               </AlertDescription>
             </Alert>
 
@@ -103,9 +85,7 @@ export function LoginForm({
                     autoFocus
                     className="h-10"
                   />
-                  <FieldDescription>
-                    The Field PM on a request is picked separately, on the form.
-                  </FieldDescription>
+                  <FieldDescription>The Field PM on a request is picked separately, on the form.</FieldDescription>
                 </Field>
                 <Button
                   type="submit"
@@ -113,11 +93,7 @@ export function LoginForm({
                   className="w-full"
                   disabled={name.trim().length < 2 || pending !== null}
                 >
-                  {pending === "dev" ? (
-                    <Spinner data-icon="inline-start" />
-                  ) : (
-                    <LogInIcon data-icon="inline-start" />
-                  )}
+                  {pending === "dev" ? <Spinner data-icon="inline-start" /> : <LogInIcon data-icon="inline-start" />}
                   Continue
                 </Button>
               </FieldGroup>
@@ -149,8 +125,7 @@ export function LoginForm({
             <AlertCircleIcon />
             <AlertTitle>No sign-in is enabled</AlertTitle>
             <AlertDescription>
-              Set ALLOW_ENTRA or ALLOW_DEV_LOGIN in .env.local and restart the
-              dev server.
+              Set ALLOW_ENTRA or ALLOW_DEV_LOGIN in .env.local and restart the dev server.
             </AlertDescription>
           </Alert>
         )}

@@ -18,10 +18,7 @@ export async function signInWithMicrosoft(callbackUrl?: string) {
   })
 }
 
-export async function signInAsDevUser(
-  raw: unknown,
-  callbackUrl?: string
-): Promise<{ error: string } | undefined> {
+export async function signInAsDevUser(raw: unknown, callbackUrl?: string): Promise<{ error: string } | undefined> {
   const parsed = devLoginSchema.safeParse(raw)
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Enter a name." }

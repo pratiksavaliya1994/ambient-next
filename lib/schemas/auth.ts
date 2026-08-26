@@ -6,11 +6,7 @@ import { z } from "zod"
  * one against and no intention of adding one. See the note in `auth.ts`.
  */
 export const devLoginSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(2, "Enter a name.")
-    .max(80, "That name is too long."),
+  name: z.string().trim().min(2, "Enter a name.").max(80, "That name is too long."),
 })
 
 export type DevLoginInput = z.infer<typeof devLoginSchema>

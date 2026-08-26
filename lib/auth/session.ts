@@ -36,8 +36,6 @@ export async function requireSessionOrRedirect(returnTo: string) {
 }
 
 /** What to put on a request when the schema has no requester field: a display name. */
-export function displayNameOf(session: {
-  user?: { name?: string | null; email?: string | null }
-}): string {
+export function displayNameOf(session: { user?: { name?: string | null; email?: string | null } }): string {
   return session.user?.name || session.user?.email || "Unknown"
 }

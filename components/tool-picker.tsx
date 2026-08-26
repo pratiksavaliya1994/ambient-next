@@ -2,13 +2,7 @@
 
 import * as React from "react"
 import { useMemo, useState } from "react"
-import {
-  MinusIcon,
-  PlusIcon,
-  SearchIcon,
-  WrenchIcon,
-  XIcon,
-} from "lucide-react"
+import { MinusIcon, PlusIcon, SearchIcon, WrenchIcon, XIcon } from "lucide-react"
 
 import type { ToolType } from "@/lib/bubble/reference-types"
 import type { ToolLine } from "@/lib/bubble/tools-summary"
@@ -24,26 +18,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group"
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemTitle,
-} from "@/components/ui/item"
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item"
 
 /**
  * Picking tool *types* with quantities, not individual tools.
@@ -90,8 +67,7 @@ export function ToolPickerDialog({
         <DialogHeader>
           <DialogTitle>Add tools</DialogTitle>
           <DialogDescription>
-            {toolTypes.length} of {catalogueSize} tool types are offered for{" "}
-            {toDo}.
+            {toolTypes.length} of {catalogueSize} tool types are offered for {toDo}.
           </DialogDescription>
         </DialogHeader>
 
@@ -111,10 +87,7 @@ export function ToolPickerDialog({
           <Empty className="border">
             <EmptyHeader>
               <EmptyTitle>No tools match</EmptyTitle>
-              <EmptyDescription>
-                Try a different search, or switch the job type to widen the
-                list.
-              </EmptyDescription>
+              <EmptyDescription>Try a different search, or switch the job type to widen the list.</EmptyDescription>
               {trigger}
             </EmptyHeader>
           </Empty>
@@ -123,29 +96,16 @@ export function ToolPickerDialog({
             {visible.map((type) => {
               const quantity = selected[type.name] ?? 0
               return (
-                <Item
-                  key={type.id}
-                  size="sm"
-                  variant={quantity > 0 ? "muted" : "default"}
-                >
+                <Item key={type.id} size="sm" variant={quantity > 0 ? "muted" : "default"}>
                   <ItemContent>
                     <ItemTitle>
                       {type.name}
-                      {type.consumable && (
-                        <Badge variant="secondary">Consumable</Badge>
-                      )}
+                      {type.consumable && <Badge variant="secondary">Consumable</Badge>}
                     </ItemTitle>
-                    {type.notes && (
-                      <ItemDescription>{type.notes}</ItemDescription>
-                    )}
+                    {type.notes && <ItemDescription>{type.notes}</ItemDescription>}
                   </ItemContent>
                   <ItemActions>
-                    <Stepper
-                      name={type.name}
-                      quantity={quantity}
-                      selected={selected}
-                      onChange={onChange}
-                    />
+                    <Stepper name={type.name} quantity={quantity} selected={selected} onChange={onChange} />
                   </ItemActions>
                 </Item>
               )
@@ -187,9 +147,7 @@ export function SelectedTools({
           </EmptyMedia>
           <EmptyTitle>No tools yet</EmptyTitle>
         </EmptyHeader>
-        <EmptyDescription>
-          A request needs at least one tool type.
-        </EmptyDescription>
+        <EmptyDescription>A request needs at least one tool type.</EmptyDescription>
       </Empty>
     )
   }
@@ -202,12 +160,7 @@ export function SelectedTools({
             <ItemTitle className="line-clamp-2">{line.name}</ItemTitle>
           </ItemContent>
           <ItemActions>
-            <Stepper
-              name={line.name}
-              quantity={line.quantity}
-              selected={selected}
-              onChange={onChange}
-            />
+            <Stepper name={line.name} quantity={line.quantity} selected={selected} onChange={onChange} />
             <Button
               type="button"
               variant="ghost"
@@ -260,13 +213,7 @@ function Stepper({
         <MinusIcon />
       </Button>
       <span className="w-6 text-center text-sm tabular-nums">{quantity}</span>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon-sm"
-        aria-label={`Add one ${name}`}
-        onClick={() => step(1)}
-      >
+      <Button type="button" variant="outline" size="icon-sm" aria-label={`Add one ${name}`} onClick={() => step(1)}>
         <PlusIcon />
       </Button>
     </>

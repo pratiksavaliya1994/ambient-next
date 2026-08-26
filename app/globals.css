@@ -6,21 +6,9 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --color-card-both: color-mix(
-    in oklab,
-    var(--both) var(--card-wash),
-    var(--card)
-  );
-  --color-card-pickup: color-mix(
-    in oklab,
-    var(--pickup) var(--card-wash),
-    var(--card)
-  );
-  --color-card-delivery: color-mix(
-    in oklab,
-    var(--delivery) var(--card-wash),
-    var(--card)
-  );
+  --color-card-both: color-mix(in oklab, var(--both) var(--card-wash), var(--card));
+  --color-card-pickup: color-mix(in oklab, var(--pickup) var(--card-wash), var(--card));
+  --color-card-delivery: color-mix(in oklab, var(--delivery) var(--card-wash), var(--card));
   --color-both-foreground: var(--both-foreground);
   --color-both: var(--both);
   --color-pickup-foreground: var(--pickup-foreground);

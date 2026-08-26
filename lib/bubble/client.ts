@@ -52,10 +52,7 @@ function config() {
   const base = process.env.BUBBLE_API_BASE
   const token = process.env.BUBBLE_API_TOKEN
   if (!base || !token) {
-    throw new BubbleError(
-      "BUBBLE_API_BASE and BUBBLE_API_TOKEN must be set",
-      500
-    )
+    throw new BubbleError("BUBBLE_API_BASE and BUBBLE_API_TOKEN must be set", 500)
   }
   return { base: base.replace(/\/$/, ""), token }
 }
@@ -67,10 +64,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
  * are retried with exponential backoff. 4xx other than 429 fail immediately —
  * retrying a bad request just burns quota.
  */
-async function request(
-  path: string,
-  init: RequestInit = {}
-): Promise<Response> {
+async function request(path: string, init: RequestInit = {}): Promise<Response> {
   const { base, token } = config()
 
   for (let attempt = 1; ; attempt++) {
@@ -96,11 +90,7 @@ async function request(
     }
 
     const retryAfter = Number(res.headers.get("retry-after"))
-    await sleep(
-      Number.isFinite(retryAfter) && retryAfter > 0
-        ? retryAfter * 1000
-        : 2 ** attempt * 250
-    )
+    await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2 ** attempt * 250)
   }
 }
 
@@ -114,10 +104,7 @@ export type ListOptions = {
 }
 
 /** One page of results. `limit` is capped at 100 by Bubble. */
-export async function bubbleList(
-  type: string,
-  options: ListOptions = {}
-): Promise<ListPage> {
+export async function bubbleList(type: string, options: ListOptions = {}): Promise<ListPage> {
   const params = new URLSearchParams({
     limit: String(Math.min(options.limit ?? MAX_LIMIT, MAX_LIMIT)),
     cursor: String(options.cursor ?? 0),
@@ -158,10 +145,7 @@ export async function bubbleListAll(
   }
 }
 
-export async function bubbleGet(
-  type: string,
-  id: string
-): Promise<BubbleThing | null> {
+export async function bubbleGet(type: string, id: string): Promise<BubbleThing | null> {
   try {
     const res = await request(`/obj/${type}/${id}`)
     const json = (await res.json()) as { response?: BubbleThing }
@@ -172,10 +156,7 @@ export async function bubbleGet(
   }
 }
 
-export async function bubbleCreate(
-  type: string,
-  data: Record<string, unknown>
-): Promise<string> {
+export async function bubbleCreate(type: string, data: Record<string, unknown>): Promise<string> {
   const res = await request(`/obj/${type}`, {
     method: "POST",
     body: JSON.stringify(data),
@@ -198,10 +179,7 @@ export async function bubbleCreate(
  * workflow response shape — this falls back to the raw body if `response`
  * isn't present, so a caller's own schema is what actually enforces the shape.
  */
-export async function bubbleRunWorkflow(
-  name: string,
-  data: Record<string, unknown>
-): Promise<unknown> {
+export async function bubbleRunWorkflow(name: string, data: Record<string, unknown>): Promise<unknown> {
   const res = await request(`/wf/${name}`, {
     method: "POST",
     body: JSON.stringify(data),
@@ -210,11 +188,7 @@ export async function bubbleRunWorkflow(
   return json.response ?? json
 }
 
-export async function bubblePatch(
-  type: string,
-  id: string,
-  data: Record<string, unknown>
-): Promise<void> {
+export async function bubblePatch(type: string, id: string, data: Record<string, unknown>): Promise<void> {
   await request(`/obj/${type}/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),

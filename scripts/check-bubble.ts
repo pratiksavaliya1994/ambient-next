@@ -10,12 +10,7 @@
  * `server-only`, which throws under plain Node.
  */
 import { listRecentRequests } from "@/lib/bubble/requests"
-import {
-  listFieldPms,
-  listJobs,
-  listTimeSlots,
-  listToolTypes,
-} from "@/lib/bubble/reference"
+import { listFieldPms, listJobs, listTimeSlots, listToolTypes } from "@/lib/bubble/reference"
 
 async function main() {
   const [jobs, toolTypes, pms, slots] = await Promise.all([
@@ -33,8 +28,7 @@ async function main() {
   const requests = await listRecentRequests(5)
   console.log(`\nlast ${requests.length} requests:`)
   for (const request of requests) {
-    const tools =
-      request.tools.map((t) => `${t.name} x${t.quantity}`).join(", ") || "—"
+    const tools = request.tools.map((t) => `${t.name} x${t.quantity}`).join(", ") || "—"
     console.log(`  ${request.job}\n    ${request.toDo ?? "—"} · ${tools}`)
   }
 }

@@ -2,20 +2,11 @@ import "server-only"
 
 import { z } from "zod"
 
-import {
-  bubbleList,
-  bubbleListAll,
-  bubbleRunWorkflow,
-  type BubbleThing,
-} from "@/lib/bubble/client"
+import { bubbleList, bubbleListAll, bubbleRunWorkflow, type BubbleThing } from "@/lib/bubble/client"
 import { newYorkInstant, newYorkStamp } from "@/lib/bubble/dates"
 import { DEFAULT_REQUEST_ORDER, requestColor } from "@/lib/bubble/enums"
 import type { Job } from "@/lib/bubble/reference-types"
-import {
-  formatToolsSummary,
-  parseToolsSummary,
-  type ToolLine,
-} from "@/lib/bubble/tools-summary"
+import { formatToolsSummary, parseToolsSummary, type ToolLine } from "@/lib/bubble/tools-summary"
 import type { RequestFormValues } from "@/lib/schemas/request"
 
 /**
@@ -102,19 +93,11 @@ const NO_JOB = "(no job)"
  */
 export function hasContent(request: ToolRequest): boolean {
   return (
-    request.job !== NO_JOB ||
-    request.delivery ||
-    request.pickup ||
-    request.start !== null ||
-    request.tools.length > 0
+    request.job !== NO_JOB || request.delivery || request.pickup || request.start !== null || request.tools.length > 0
   )
 }
 
-function toToolRequest(
-  row: z.infer<typeof requestRow>,
-  lines: ToolLine[],
-  toolsNotes: string | null
-): ToolRequest {
+function toToolRequest(row: z.infer<typeof requestRow>, lines: ToolLine[], toolsNotes: string | null): ToolRequest {
   return {
     id: row._id,
     createdAt: row["Created Date"] ?? null,
@@ -165,10 +148,7 @@ export async function listRecentRequests(limit = 25): Promise<ToolRequest[]> {
     constraints: [{ key: "requestID", constraint_type: "in", value: ids }],
   })
 
-  const byRequest = new Map<
-    string,
-    { lines: Map<string, number>; notes: string[] }
-  >()
+  const byRequest = new Map<string, { lines: Map<string, number>; notes: string[] }>()
   for (const raw of toolRows) {
     const row = requestedToolsRow.parse(raw)
     if (!row.requestID) continue
@@ -178,10 +158,7 @@ export async function listRecentRequests(limit = 25): Promise<ToolRequest[]> {
       notes: [],
     }
     for (const line of parseToolsSummary(row.toolsSummary)) {
-      bucket.lines.set(
-        line.name,
-        (bucket.lines.get(line.name) ?? 0) + line.quantity
-      )
+      bucket.lines.set(line.name, (bucket.lines.get(line.name) ?? 0) + line.quantity)
     }
     if (row.toolsNotes?.trim()) bucket.notes.push(row.toolsNotes.trim())
     byRequest.set(row.requestID, bucket)
@@ -220,11 +197,7 @@ const createRequestResult = z.object({
  * `lib/notify.ts`) come from the caller, which already has the session
  * context (`requestedBy`) needed to build them.
  */
-export async function createToolRequest(
-  values: RequestFormValues,
-  job: Job,
-  summary: string
-): Promise<CreatedRequest> {
+export async function createToolRequest(values: RequestFormValues, job: Job, summary: string): Promise<CreatedRequest> {
   const now = new Date()
   // `requestDateStart` is the actual delivery instant — `startDate` at the
   // chosen slot's hour — since ClickUp and the Calendar step both read it as

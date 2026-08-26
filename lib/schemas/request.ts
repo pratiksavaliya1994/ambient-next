@@ -57,12 +57,9 @@ export const requestFormSchema = z
     message: "End date can't be before the start date.",
     path: ["endDate"],
   })
-  .refine(
-    (value) => value.tools.length > 0 || value.materials.trim().length > 3,
-    {
-      message: "Add at least one tool or enter materials.",
-      path: ["tools"],
-    }
-  )
+  .refine((value) => value.tools.length > 0 || value.materials.trim().length > 3, {
+    message: "Add at least one tool or enter materials.",
+    path: ["tools"],
+  })
 
 export type RequestFormValues = z.infer<typeof requestFormSchema>

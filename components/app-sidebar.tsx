@@ -2,12 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import {
-  ClipboardListIcon,
-  LogOutIcon,
-  PlusIcon,
-  WrenchIcon,
-} from "lucide-react"
+import { ClipboardListIcon, LogOutIcon, PlusIcon, WrenchIcon } from "lucide-react"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import {
@@ -56,21 +51,13 @@ export function AppSidebar({ userName }: { userName: string }) {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton
-                size="lg"
-                tooltip="Tool workflow"
-                render={<Link href="/requests" />}
-              >
+              <SidebarMenuButton size="lg" tooltip="Tool workflow" render={<Link href="/requests" />}>
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
                   <WrenchIcon />
                 </div>
                 <div className="flex min-w-0 flex-col leading-tight">
-                  <span className="truncate text-sm font-medium">
-                    Ambient Flooring
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    Tool workflow
-                  </span>
+                  <span className="truncate text-sm font-medium">Ambient Flooring</span>
+                  <span className="truncate text-xs text-muted-foreground">Tool workflow</span>
                 </div>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -110,11 +97,7 @@ export function AppSidebar({ userName }: { userName: string }) {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <form action={signOutAction}>
-                <SidebarMenuButton
-                  type="submit"
-                  tooltip="Sign out"
-                  className="w-full"
-                >
+                <SidebarMenuButton type="submit" tooltip="Sign out" className="w-full">
                   <LogOutIcon />
                   <span>Sign out</span>
                 </SidebarMenuButton>

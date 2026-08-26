@@ -66,30 +66,30 @@ wrong branch means the calling app will get 404s.
 Add these parameters, with these exact names and types (case-sensitive —
 the calling code sends these keys verbatim):
 
-| Parameter | Type |
-|---|---|
-| `job` | text |
-| `jobId` | text (or the `Jobs` thing type — see the note below) |
-| `toDo` | text (or the `toDo` option set type, if your app has one and it's selectable as a parameter type — either works, see step 3) |
-| `weAre` | text (or the `weAre` option set type, same note) |
-| `delivery` | yes/no |
-| `pickup` | yes/no |
-| `tentative` | yes/no |
-| `floor` | text |
-| `contact` | text |
-| `contactPhone` | text |
-| `fieldPm` | text |
-| `notes` | text |
-| `timeRange` | text |
-| `requestDate` | date |
-| `requestDateStart` | date |
-| `requestDateEnd` | date |
-| `color` | text |
-| `order` | number |
-| `searchable` | text |
-| `toolsSummary` | text |
-| `toolsNotes` | text |
-| `summary` | text |
+| Parameter          | Type                                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `job`              | text                                                                                                                         |
+| `jobId`            | text (or the `Jobs` thing type — see the note below)                                                                         |
+| `toDo`             | text (or the `toDo` option set type, if your app has one and it's selectable as a parameter type — either works, see step 3) |
+| `weAre`            | text (or the `weAre` option set type, same note)                                                                             |
+| `delivery`         | yes/no                                                                                                                       |
+| `pickup`           | yes/no                                                                                                                       |
+| `tentative`        | yes/no                                                                                                                       |
+| `floor`            | text                                                                                                                         |
+| `contact`          | text                                                                                                                         |
+| `contactPhone`     | text                                                                                                                         |
+| `fieldPm`          | text                                                                                                                         |
+| `notes`            | text                                                                                                                         |
+| `timeRange`        | text                                                                                                                         |
+| `requestDate`      | date                                                                                                                         |
+| `requestDateStart` | date                                                                                                                         |
+| `requestDateEnd`   | date                                                                                                                         |
+| `color`            | text                                                                                                                         |
+| `order`            | number                                                                                                                       |
+| `searchable`       | text                                                                                                                         |
+| `toolsSummary`     | text                                                                                                                         |
+| `toolsNotes`       | text                                                                                                                         |
+| `summary`          | text                                                                                                                         |
 
 Notes on a few of these, so the mapping in step 3 makes sense:
 
@@ -137,37 +137,37 @@ Notes on a few of these, so the mapping in step 3 makes sense:
 Add a **Create a new thing** action, type `request`. Map fields to
 parameters:
 
-| `request` field | Value |
-|---|---|
-| `job` | `job` param |
-| `toDo` | `toDo` param |
-| `weAre` | `weAre` param |
-| `delivery` | `delivery` param |
-| `pickup` | `pickup` param |
-| `tentative` | `tentative` param |
-| `completed` | `no` (fixed — new requests always start incomplete) |
-| `floor` | `floor` param |
-| `contact` | `contact` param |
-| `contactPhone` | `contactPhone` param |
-| `fieldPM2` | `fieldPm` param — **note the field name mismatch**: the target table has both a legacy `fieldPM` option set (leave it empty — every recently-written row leaves it empty) and a `fieldPM2` text field (this is the one that actually gets read by the live app) |
-| `notes` | `notes` param |
-| `timeRange` | `timeRange` param |
-| `requestDate` | `requestDate` param |
-| `requestDateStart` | `requestDateStart` param |
-| `requestDateEnd` | `requestDateEnd` param |
-| `color` | `color` param |
-| `order` | `order` param |
-| `searchable` | `searchable` param |
+| `request` field    | Value                                                                                                                                                                                                                                                           |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `job`              | `job` param                                                                                                                                                                                                                                                     |
+| `toDo`             | `toDo` param                                                                                                                                                                                                                                                    |
+| `weAre`            | `weAre` param                                                                                                                                                                                                                                                   |
+| `delivery`         | `delivery` param                                                                                                                                                                                                                                                |
+| `pickup`           | `pickup` param                                                                                                                                                                                                                                                  |
+| `tentative`        | `tentative` param                                                                                                                                                                                                                                               |
+| `completed`        | `no` (fixed — new requests always start incomplete)                                                                                                                                                                                                             |
+| `floor`            | `floor` param                                                                                                                                                                                                                                                   |
+| `contact`          | `contact` param                                                                                                                                                                                                                                                 |
+| `contactPhone`     | `contactPhone` param                                                                                                                                                                                                                                            |
+| `fieldPM2`         | `fieldPm` param — **note the field name mismatch**: the target table has both a legacy `fieldPM` option set (leave it empty — every recently-written row leaves it empty) and a `fieldPM2` text field (this is the one that actually gets read by the live app) |
+| `notes`            | `notes` param                                                                                                                                                                                                                                                   |
+| `timeRange`        | `timeRange` param                                                                                                                                                                                                                                               |
+| `requestDate`      | `requestDate` param                                                                                                                                                                                                                                             |
+| `requestDateStart` | `requestDateStart` param                                                                                                                                                                                                                                        |
+| `requestDateEnd`   | `requestDateEnd` param                                                                                                                                                                                                                                          |
+| `color`            | `color` param                                                                                                                                                                                                                                                   |
+| `order`            | `order` param                                                                                                                                                                                                                                                   |
+| `searchable`       | `searchable` param                                                                                                                                                                                                                                              |
 
 ## 4. Step 2 — Create a new `requestedtools`
 
 Add a second **Create a new thing** action, type `requestedtools`:
 
-| `requestedtools` field | Value |
-|---|---|
-| `requestID` | *Result of step 1*'s unique id, **as text** (this field is a plain text field holding the request's id as a string, not a linked-thing field — there is no referential integrity between the two tables in this schema, so it must be the id-as-text, not a "thing" reference) |
-| `toolsSummary` | `toolsSummary` param |
-| `toolsNotes` | `toolsNotes` param |
+| `requestedtools` field | Value                                                                                                                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `requestID`            | _Result of step 1_'s unique id, **as text** (this field is a plain text field holding the request's id as a string, not a linked-thing field — there is no referential integrity between the two tables in this schema, so it must be the id-as-text, not a "thing" reference) |
+| `toolsSummary`         | `toolsSummary` param                                                                                                                                                                                                                                                           |
+| `toolsNotes`           | `toolsNotes` param                                                                                                                                                                                                                                                             |
 
 ## 5. Step 3 — Update the job's `lastRequest`
 
@@ -182,7 +182,7 @@ Add a **Make changes to a thing** action:
   **Search for jobs** constrained to `unique id = jobId` param, and take its
   **first item**. If `jobId` is typed as the `Jobs` thing itself, reference
   the `jobId` param directly here — no search needed.
-- **Field to change**: `lastRequest` = *Result of step 1*'s unique id, **as
+- **Field to change**: `lastRequest` = _Result of step 1_'s unique id, **as
   text** (same convention as `requestedtools.requestID`: `lastRequest` is a
   plain text field holding the request's id as a string, not a linked-thing
   field, so no "as text" conversion is available or needed beyond the field
@@ -214,7 +214,7 @@ further text building needed on this side). Whatever WhatsApp group id and
 Whapi token this app already uses elsewhere for similar messages should be
 reused here.
 
-This is the *only* place a WhatsApp message goes out for requests created
+This is the _only_ place a WhatsApp message goes out for requests created
 through the calling app, so nothing else should also be sending on `request`
 creation for this path — if there's an old, separate mechanism (e.g. a page
 workflow tied to a "create request" button in Bubble's own UI) that used to
@@ -228,7 +228,7 @@ Add a **Return data from API** action:
 
 - Key: `requestId`
 - Type: text
-- Value: *Result of step 1*'s unique id
+- Value: _Result of step 1_'s unique id
 
 This is what the calling app reads back to confirm the request was created
 and to show its id/confirmation in its own UI.

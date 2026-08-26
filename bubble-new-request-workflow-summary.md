@@ -38,36 +38,37 @@ Content-Type: application/json
 ```
 
 Response:
+
 ```json
 { "requestId": "<the new request's unique id>" }
 ```
 
 ## Parameters (22 total, all plain scalar types — no thing-type params)
 
-| Parameter | Type |
-|---|---|
-| `job` | text |
-| `jobId` | text — **Bubble's internal unique id** (`_id`), not the custom `id` field on jobs |
-| `toDo` | text |
-| `weAre` | text |
-| `delivery` | yes/no |
-| `pickup` | yes/no |
-| `tentative` | yes/no |
-| `floor` | text |
-| `contact` | text |
-| `contactPhone` | text |
-| `fieldPm` | text |
-| `notes` | text |
-| `timeRange` | text |
-| `requestDate` | date |
-| `requestDateStart` | date |
-| `requestDateEnd` | date |
-| `color` | text |
-| `order` | number |
-| `searchable` | text |
-| `toolsSummary` | text |
-| `toolsNotes` | text |
-| `summary` | text — full multi-line WhatsApp-ready message, real `\n` already in place |
+| Parameter          | Type                                                                              |
+| ------------------ | --------------------------------------------------------------------------------- |
+| `job`              | text                                                                              |
+| `jobId`            | text — **Bubble's internal unique id** (`_id`), not the custom `id` field on jobs |
+| `toDo`             | text                                                                              |
+| `weAre`            | text                                                                              |
+| `delivery`         | yes/no                                                                            |
+| `pickup`           | yes/no                                                                            |
+| `tentative`        | yes/no                                                                            |
+| `floor`            | text                                                                              |
+| `contact`          | text                                                                              |
+| `contactPhone`     | text                                                                              |
+| `fieldPm`          | text                                                                              |
+| `notes`            | text                                                                              |
+| `timeRange`        | text                                                                              |
+| `requestDate`      | date                                                                              |
+| `requestDateStart` | date                                                                              |
+| `requestDateEnd`   | date                                                                              |
+| `color`            | text                                                                              |
+| `order`            | number                                                                            |
+| `searchable`       | text                                                                              |
+| `toolsSummary`     | text                                                                              |
+| `toolsNotes`       | text                                                                              |
+| `summary`          | text — full multi-line WhatsApp-ready message, real `\n` already in place         |
 
 `toDo` and `weAre` are declared as plain text and converted inside the
 workflow via `: converted to toDo` / `: converted to weAre` (must exactly
@@ -87,12 +88,14 @@ param is `fieldPm`, field is `fieldPM2`]**, `notes`, `timeRange`,
 `searchable`). The legacy `fieldPM` option-set field is left untouched/empty.
 
 **2. Create a new `requestedtools`**
+
 - `requestID` = Step 1's unique id (as text — plain text field, no real
   reference/link to `request`)
 - `toolsSummary` / `toolsNotes` = params directly
 - Gated: `Only when Result of step 1 is not empty` (defensive addition)
 
 **3. Make changes to Jobs**
+
 - Thing to change: `Search for jobs (unique id = jobId):first item`
 - Sets `lastRequest` = Step 1's unique id (as text)
 - If the search finds no job (bad `jobId`), this silently no-ops — Bubble
@@ -100,15 +103,18 @@ param is `fieldPm`, field is `fieldPM2`]**, `notes`, `timeRange`,
   guard needed for this.
 
 **4. Whapi Notifications — Send Text Notification**
+
 - `to` = static, reused from wherever else in the app already sends to this
   WhatsApp group
 - `body` = `summary` param, sent as-is
 
 **5. Create a new Notifications**
+
 - Stores a copy of the request/summary data (mirrors old app behavior)
 
 **6. ClickUp API — Add New Request in CU**
 Fires for **both delivery and pickup** requests (single action, not split).
+
 - `toCUjobid` = Result of step 3 → **`id`** (the custom text field on jobs —
   this is the ClickUp list id, distinct from Bubble's unique id used in
   step 3's search)
@@ -132,6 +138,7 @@ Static body (grant_type, client_id, client_secret, scope) — copied as-is
 from the old workflow.
 
 **8. Microsoft Calendar Events — Add Event**
+
 - `Authorization` header = `Bearer ` + Step 7 → `access_token`
 - `subject` = confirmed working as configured (built from job name +
   `: formatted as text` on the delivery/pickup booleans — not fully
@@ -143,6 +150,7 @@ from the old workflow.
   identified; may or may not matter for output quality)
 
 **9. Return data from API**
+
 - Key: `requestId`, Type: text, Value: Step 1's unique id
 - Correctly positioned as the **last** action in the workflow.
 
@@ -177,6 +185,7 @@ from the old workflow.
 
 No end-to-end test run has been performed yet. Before relying on this in
 production:
+
 1. Point the Next.js app at `/wf/new-request` (or test via Postman/curl
    directly against the endpoint with the admin bearer token first).
 2. Submit one real test request with a real existing `jobId`.

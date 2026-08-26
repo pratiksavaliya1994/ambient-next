@@ -6,29 +6,14 @@ import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { AlertCircleIcon, PlusIcon, SendIcon } from "lucide-react"
 
-import {
-  INITIAL_CREATE_STATE,
-  type CreateRequestState,
-} from "@/app/(app)/requests/action-state"
+import { INITIAL_CREATE_STATE, type CreateRequestState } from "@/app/(app)/requests/action-state"
 import { createRequestAction } from "@/app/(app)/requests/actions"
 import { DateRangePicker } from "@/components/date-range-picker"
 import { MaterialDialog } from "@/components/material-dialog"
-import {
-  SelectedTools,
-  ToolPickerDialog,
-  toolLinesOf,
-} from "@/components/tool-picker"
+import { SelectedTools, ToolPickerDialog, toolLinesOf } from "@/components/tool-picker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Combobox,
   ComboboxContent,
@@ -37,40 +22,17 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox"
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import {
-  Item,
-  ItemContent,
-  ItemDescription,
-  ItemTitle,
-} from "@/components/ui/item"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { newYorkToday } from "@/lib/bubble/dates"
-import {
-  DEFAULT_WE_ARE,
-  TO_DO,
-  UNFILTERED_TO_DO,
-  WE_ARE,
-} from "@/lib/bubble/enums"
+import { DEFAULT_WE_ARE, TO_DO, UNFILTERED_TO_DO, WE_ARE } from "@/lib/bubble/enums"
 import {
   defaultMaterialsFor,
   Job,
@@ -82,10 +44,7 @@ import {
   type ToolType,
 } from "@/lib/bubble/reference-types"
 import { formatToolsSummary } from "@/lib/bubble/tools-summary"
-import {
-  requestFormSchema,
-  type RequestFormValues,
-} from "@/lib/schemas/request"
+import { requestFormSchema, type RequestFormValues } from "@/lib/schemas/request"
 
 /**
  * `delivery` and `pickup` are two independent yes/no fields in Bubble and both
@@ -180,10 +139,7 @@ export function RequestForm({
   // is no longer offered. Stranded picks stay selected on purpose — dropping
   // someone's choices silently because they changed a dropdown is worse than
   // showing them a list that no longer matches.
-  const offered = useMemo(
-    () => toolTypesFor(toolTypes, toDo),
-    [toolTypes, toDo]
-  )
+  const offered = useMemo(() => toolTypesFor(toolTypes, toDo), [toolTypes, toDo])
 
   // `job`, `movement` and `selected` live outside react-hook-form because the
   // widgets that edit them (Combobox, ToggleGroup, the tool picker) need more
@@ -290,16 +246,12 @@ export function RequestForm({
           <CardHeader>
             <CardTitle>Request details</CardTitle>
             <CardDescription>
-              Where the tools are going, when they are needed, and who to ask
-              for on site.
+              Where the tools are going, when they are needed, and who to ask for on site.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <FieldGroup className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              <Field
-                className="sm:col-span-2"
-                data-invalid={errors.jobId ? true : undefined}
-              >
+              <Field className="sm:col-span-2" data-invalid={errors.jobId ? true : undefined}>
                 <FieldLabel htmlFor="job">Job</FieldLabel>
                 <Combobox
                   items={jobs}
@@ -321,13 +273,10 @@ export function RequestForm({
                         <ComboboxItem key={item.id} value={item}>
                           <Item size="xs" className="p-0">
                             <ItemContent>
-                              <ItemTitle className="whitespace-nowrap">
-                                {item.name}
-                              </ItemTitle>
+                              <ItemTitle className="whitespace-nowrap">{item.name}</ItemTitle>
                               <ItemDescription>
-                                {[item.gc, item.borough, item.description]
-                                  .filter(Boolean)
-                                  .join(" · ") || "No GC on file"}
+                                {[item.gc, item.borough, item.description].filter(Boolean).join(" · ") ||
+                                  "No GC on file"}
                               </ItemDescription>
                             </ItemContent>
                           </Item>
@@ -370,11 +319,7 @@ export function RequestForm({
 
               <Field>
                 <FieldLabel htmlFor="floor">Floor</FieldLabel>
-                <Input
-                  id="floor"
-                  placeholder="14, ground, loading dock"
-                  {...register("floor")}
-                />
+                <Input id="floor" placeholder="14, ground, loading dock" {...register("floor")} />
               </Field>
 
               <Field>
@@ -384,27 +329,17 @@ export function RequestForm({
 
               <Field>
                 <FieldLabel htmlFor="contactPhone">Contact phone</FieldLabel>
-                <Input
-                  id="contactPhone"
-                  inputMode="tel"
-                  {...register("contactPhone")}
-                />
+                <Input id="contactPhone" inputMode="tel" {...register("contactPhone")} />
               </Field>
 
-              <Field
-                data-invalid={
-                  errors.startDate || errors.endDate ? true : undefined
-                }
-              >
+              <Field data-invalid={errors.startDate || errors.endDate ? true : undefined}>
                 <FieldLabel htmlFor="dateRange">Date range</FieldLabel>
                 <DateRangePicker
                   id="dateRange"
                   startDate={startDate}
                   endDate={endDate}
                   onRangeChange={updateDateRange}
-                  invalid={
-                    errors.startDate || errors.endDate ? true : undefined
-                  }
+                  invalid={errors.startDate || errors.endDate ? true : undefined}
                 />
                 <FieldDescription>Select Date Range</FieldDescription>
 
@@ -423,9 +358,7 @@ export function RequestForm({
                       value={field.value}
                       onValueChange={(next) => {
                         field.onChange(next)
-                        const hour = timeSlots.find(
-                          (slot) => slot.label === next
-                        )?.hour
+                        const hour = timeSlots.find((slot) => slot.label === next)?.hour
                         if (hour !== undefined) setValue("slotHour", hour)
                       }}
                     >
@@ -458,9 +391,7 @@ export function RequestForm({
                     />
                   )}
                 />
-                <FieldLabel htmlFor="tentative">
-                  Tentative — the date may still move
-                </FieldLabel>
+                <FieldLabel htmlFor="tentative">Tentative — the date may still move</FieldLabel>
               </Field>
               <Field>
                 <FieldLabel htmlFor="weAre">We are</FieldLabel>
@@ -496,11 +427,7 @@ export function RequestForm({
                   control={control}
                   name="fieldPm"
                   render={({ field }) => (
-                    <Select
-                      items={pmItems}
-                      value={field.value}
-                      onValueChange={(next) => field.onChange(String(next))}
-                    >
+                    <Select items={pmItems} value={field.value} onValueChange={(next) => field.onChange(String(next))}>
                       <SelectTrigger id="fieldPm" onBlur={field.onBlur}>
                         <SelectValue />
                       </SelectTrigger>
@@ -516,9 +443,7 @@ export function RequestForm({
                     </Select>
                   )}
                 />
-                <FieldDescription>
-                  Saved to fieldPM2, the text field the live app reads.
-                </FieldDescription>
+                <FieldDescription>Saved to fieldPM2, the text field the live app reads.</FieldDescription>
               </Field>
 
               <Field className="sm:col-span-2">
@@ -566,9 +491,7 @@ export function RequestForm({
                   <MaterialDialog
                     value={materials}
                     defaultText={defaultMaterialsFor(materialDefaults, toDo)}
-                    onChange={(next) =>
-                      setValue("materials", next, { shouldValidate: true })
-                    }
+                    onChange={(next) => setValue("materials", next, { shouldValidate: true })}
                     trigger={
                       <Button type="button" variant="outline" size="sm">
                         <PlusIcon data-icon="inline-start" />
@@ -608,11 +531,7 @@ export function RequestForm({
           </CardContent>
           <CardFooter className="flex-col items-stretch gap-3">
             <Button type="submit" disabled={!isValid || pending}>
-              {pending ? (
-                <Spinner data-icon="inline-start" />
-              ) : (
-                <SendIcon data-icon="inline-start" />
-              )}
+              {pending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
               Create request
             </Button>
             {/* <p className="text-xs text-muted-foreground">
