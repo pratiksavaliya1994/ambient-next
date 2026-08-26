@@ -30,7 +30,6 @@ import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { newYorkToday } from "@/lib/bubble/dates"
 import { DEFAULT_WE_ARE, TO_DO, UNFILTERED_TO_DO, WE_ARE } from "@/lib/bubble/enums"
 import {
@@ -45,21 +44,6 @@ import {
 } from "@/lib/bubble/reference-types"
 import { formatToolsSummary } from "@/lib/bubble/tools-summary"
 import { requestFormSchema, type RequestFormValues } from "@/lib/schemas/request"
-
-/**
- * `delivery` and `pickup` are two independent yes/no fields in Bubble and both
- * can be true, but as two checkboxes they read as an invalid-by-default state
- * — untick both and the form breaks. As three mutually exclusive tabs the same
- * three combinations are reachable and none of them is empty, so the
- * "pick delivery, pickup, or both" error can no longer be provoked from here.
- */
-const MOVEMENTS = [
-  { value: "delivery", label: "Delivery", delivery: true, pickup: false },
-  { value: "pickup", label: "Pickup", delivery: false, pickup: true },
-  { value: "both", label: "Both", delivery: true, pickup: true },
-] as const
-
-type Movement = (typeof MOVEMENTS)[number]["value"]
 
 /**
  * The whole request form as one client island.
@@ -130,7 +114,6 @@ export function RequestForm({
   const materials = useWatch({ control, name: "materials" })
 
   const [job, setJob] = useState<Job | null>(null)
-  const [movement, setMovement] = useState<Movement>("delivery")
   const [selected, setSelected] = useState<Record<string, number>>({})
 
   const tools = useMemo(() => toolLinesOf(selected), [selected])
@@ -141,32 +124,20 @@ export function RequestForm({
   // showing them a list that no longer matches.
   const offered = useMemo(() => toolTypesFor(toolTypes, toDo), [toolTypes, toDo])
 
-  // `job`, `movement` and `selected` live outside react-hook-form because the
-  // widgets that edit them (Combobox, ToggleGroup, the tool picker) need more
-  // than the one schema field each maps onto — the Job object for display, or
-  // two booleans from one three-way toggle. Their `onChange` handlers push the
-  // derived schema value into the form; `shouldValidate` only re-checks the
-  // field being set, so picking a job doesn't prematurely flag the tools list.
+  // `job` and `selected` live outside react-hook-form because the widgets
+  // that edit them (Combobox, the tool picker) need more than the one schema
+  // field each maps onto — the Job object for display, or a quantity map.
+  // Their `onChange` handlers push the derived schema value into the form;
+  // `shouldValidate` only re-checks the field being set, so picking a job
+  // doesn't prematurely flag the tools list.
   function updateJob(next: Job | null) {
     setJob(next)
     setValue("jobId", next?.id ?? "", { shouldValidate: true })
   }
 
-  function updateMovement(next: Movement) {
-    setMovement(next)
-    const chosen = MOVEMENTS.find((item) => item.value === next) ?? MOVEMENTS[0]
-    // Both fields have to change before either is re-validated: the
-    // delivery-or-pickup rule is cross-field, so validating `delivery` alone
-    // right after setting it (with the old `pickup` still in place) can flag
-    // an error that a lone, later `pickup` validation pass never clears.
-    setValue("delivery", chosen.delivery)
-    setValue("pickup", chosen.pickup)
-    void trigger(["delivery", "pickup"])
-  }
-
   function updateDateRange(next: { startDate: string; endDate: string }) {
-    // Both fields have to change before either is re-validated, same reason
-    // as `updateMovement` below: the end-before-start rule is cross-field.
+    // Both fields have to change before either is re-validated: the
+    // end-before-start rule is cross-field.
     setValue("startDate", next.startDate)
     setValue("endDate", next.endDate)
     void trigger(["startDate", "endDate"])
@@ -222,24 +193,6 @@ export function RequestForm({
           <AlertDescription>{state.message}</AlertDescription>
         </Alert>
       )}
-
-      <ToggleGroup
-        value={[movement]}
-        onValueChange={(next) => {
-          if (next[0]) updateMovement(next[0] as Movement)
-        }}
-        spacing={0}
-        variant="outline"
-        className="w-full *:flex-1"
-        aria-label="Request type"
-      >
-        {MOVEMENTS.map((item) => (
-          <ToggleGroupItem key={item.value} value={item.value}>
-            {item.label}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
-      {errors.delivery && <FieldError errors={[errors.delivery]} />}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <Card>
