@@ -17,6 +17,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { signOutAction } from "@/lib/auth/actions"
 
@@ -44,6 +45,8 @@ const NAV_ITEMS = [
  */
 export function AppSidebar({ userName }: { userName: string }) {
   const pathname = usePathname()
+  const { isMobile, setOpenMobile } = useSidebar()
+  const closeOnMobile = () => isMobile && setOpenMobile(false)
 
   return (
     <TooltipProvider>
@@ -51,7 +54,11 @@ export function AppSidebar({ userName }: { userName: string }) {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton size="lg" tooltip="Tool workflow" render={<Link href="/requests" />}>
+              <SidebarMenuButton
+                size="lg"
+                tooltip="Tool workflow"
+                render={<Link href="/requests" onClick={closeOnMobile} />}
+              >
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
                   <WrenchIcon />
                 </div>
@@ -76,7 +83,7 @@ export function AppSidebar({ userName }: { userName: string }) {
                       // prefix matching would light both rows up at once.
                       isActive={pathname === item.href}
                       tooltip={item.title}
-                      render={<Link href={item.href} />}
+                      render={<Link href={item.href} onClick={closeOnMobile} />}
                     >
                       <item.icon />
                       <span>{item.title}</span>
