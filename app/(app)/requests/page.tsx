@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
-import Link from "next/link"
 import { Suspense } from "react"
-import { PlusIcon } from "lucide-react"
 
+import { NewRequestDialog, NewRequestFab } from "@/components/new-request-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,16 +43,15 @@ export default function RequestsPage() {
             request&rsquo;s requestedtools row.
           </p> */}
         </div>
-        <Button render={<Link href="/requests/new" />} nativeButton={false}>
-          <PlusIcon data-icon="inline-start" />
-          New request
-        </Button>
+        <NewRequestDialog />
       </div>
 
       {/* Bubble needs two round trips for this and is not fast; stream it. */}
       <Suspense fallback={<RequestListSkeleton />}>
         <RequestList />
       </Suspense>
+
+      <NewRequestFab />
     </div>
   )
 }
@@ -83,9 +81,7 @@ async function RequestList() {
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button render={<Link href="/requests/new" />} nativeButton={false}>
-            New request
-          </Button>
+          <NewRequestDialog />
         </EmptyContent>
       </Empty>
     )
