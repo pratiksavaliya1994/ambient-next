@@ -205,7 +205,9 @@ export function RequestForm({
           <CardContent>
             <FieldGroup className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Field className="sm:col-span-2" data-invalid={errors.jobId ? true : undefined}>
-                <FieldLabel htmlFor="job">Job</FieldLabel>
+                <FieldLabel htmlFor="job">
+                  Job <span className="text-destructive">*</span>
+                </FieldLabel>
                 <Combobox
                   items={jobs}
                   value={job}
@@ -287,7 +289,9 @@ export function RequestForm({
               </Field>
 
               <Field data-invalid={errors.startDate || errors.endDate ? true : undefined}>
-                <FieldLabel htmlFor="dateRange">Date range</FieldLabel>
+                <FieldLabel htmlFor="dateRange">
+                  Date range <span className="text-destructive">*</span>
+                </FieldLabel>
                 <DateRangePicker
                   id="dateRange"
                   startDate={startDate}
@@ -410,7 +414,9 @@ export function RequestForm({
 
         <Card className="lg:sticky lg:top-18">
           <CardHeader>
-            <CardTitle>Tools</CardTitle>
+            <CardTitle>
+              Tools <span className="text-destructive">*</span>
+            </CardTitle>
             <CardDescription>
               {tools.length === 0
                 ? `${offered.length} offered for ${toDo}`

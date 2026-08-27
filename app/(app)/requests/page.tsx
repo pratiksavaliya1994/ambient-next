@@ -3,8 +3,7 @@ import { Suspense } from "react"
 
 import { NewRequestDialog, NewRequestFab } from "@/components/new-request-dialog"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkRangeLabel } from "@/lib/bubble/dates"
@@ -112,34 +111,29 @@ async function RequestList() {
  * tokens in `globals.css`; the first two are the hues `request.color` already
  * paints Bubble calendar events with.
  *
- * Each accent lands on the left rail, the card wash, the movement badge and the
- * tool quantities, so a card reads as one theme rather than as decoration.
+ * The accent shows only on the header's movement badge — the rest of the card
+ * stays neutral so the badge is what carries the theme, not a colored wash.
  */
 const MOVEMENT_THEMES = {
   delivery: {
     label: "Delivery",
-    card: "border-l-delivery bg-card-delivery",
-    badge: "bg-delivery/15 text-delivery-foreground",
-    quantity: "bg-delivery/20 text-delivery-foreground",
+    badge: "bg-delivery/50 text-white",
+    header: "bg-delivery/15",
   },
   pickup: {
     label: "Pickup",
-    card: "border-l-pickup bg-card-pickup",
-    badge: "bg-pickup/15 text-pickup-foreground",
-    quantity: "bg-pickup/20 text-pickup-foreground",
+    badge: "bg-pickup/50 text-white",
+    header: "bg-pickup/15",
   },
   both: {
     label: "Delivery + Pickup",
-    card: "border-l-both bg-card-both",
-    badge: "bg-both/15 text-both-foreground",
-    quantity: "bg-both/20 text-both-foreground",
+    badge: "bg-both/50 text-white",
+    header: "bg-both/15",
   },
-  // The form will not submit one of these, but rows predating it exist.
   neither: {
     label: "No movement set",
-    card: "border-l-border bg-card",
     badge: "bg-muted text-muted-foreground",
-    quantity: "bg-muted text-foreground",
+    header: "bg-muted/50",
   },
 } as const
 
@@ -150,24 +144,45 @@ function themeFor(request: ToolRequest) {
   return MOVEMENT_THEMES.neither
 }
 
+/**
+ * A request is a delivery date, a pickup date, or (rarely) both spanning one
+ * range — so the date box's own label follows suit rather than always
+ * reading the generic "Dates" a two-sided request needs.
+ */
+function dateLabelFor(request: ToolRequest) {
+  if (request.pickup && !request.delivery) return "Pickup date"
+  if (request.delivery && !request.pickup) return "Drop date"
+  return "Dates"
+}
+
 function RequestCard({ request }: { request: ToolRequest }) {
   const theme = themeFor(request)
   const totalTools = request.tools.reduce((sum, tool) => sum + tool.quantity, 0)
-
   const hasNotes = request.notes || request.toolsNotes
-  const hasActions = request.pickup || request.delivery
+
+  const facts = [
+    request.fieldPm && { label: "Field PM", value: request.fieldPm },
+    request.floor && { label: "Floor", value: request.floor },
+    request.contact && { label: "Contact", value: request.contact, sub: request.contactPhone },
+  ].filter((fact): fact is { label: string; value: string; sub?: string | null } => Boolean(fact))
 
   return (
-    <Card data-size="sm" className={cn("flex h-130 flex-col gap-0 overflow-hidden", theme.card)}>
-      {/* Fixed Header */}
-      <CardHeader className="shrink-0 gap-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge className={theme.badge}>{theme.label}</Badge>
-          {request.completed && <Badge>Completed</Badge>}
-          {request.tentative && <Badge variant="outline">Tentative</Badge>}
-        </div>
-
+    <Card data-size="sm" className="flex h-130 flex-col gap-0 overflow-hidden p-0">
+      <div className={cn("flex justify-between gap-2 border-b px-4 py-3", theme.header)}>
         <CardTitle className="text-base leading-snug wrap-anywhere">{request.job}</CardTitle>
+        <Badge className={cn("items-center justify-center tracking-wide uppercase", theme.badge)}>{theme.label}</Badge>
+      </div>
+      <CardHeader className="shrink-0 gap-2 pt-3">
+        {(request.completed || request.tentative) && (
+          <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {request.completed && <Badge>Completed</Badge>}
+              {request.tentative && <Badge variant="outline">Tentative</Badge>}
+            </div>
+          </div>
+        )}
+
+        {/* <CardTitle className="text-lg leading-snug wrap-anywhere">{request.job}</CardTitle> */}
 
         {(request.toDo || request.weAre) && (
           <CardDescription className="flex flex-wrap gap-1.5">
@@ -178,29 +193,41 @@ function RequestCard({ request }: { request: ToolRequest }) {
       </CardHeader>
 
       {/* Scrollable Content */}
-      <CardContent className="my-3 min-h-0 flex-1 overflow-y-auto">
+      <CardContent className="my-1 min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-4">
-          <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">
-            <Fact label="Dates">{newYorkRangeLabel(request.start, request.end)}</Fact>
+          {/* Date + window, side by side like a dispatch slip */}
+          <div className="grid grid-cols-[auto_1fr] divide-x overflow-hidden rounded-lg border bg-background/70">
+            <div className="flex min-w-28 flex-col gap-1 p-3">
+              <FactLabel>{dateLabelFor(request)}</FactLabel>
+              <span className="text-base leading-tight font-semibold wrap-anywhere">
+                {newYorkRangeLabel(request.start, request.end)}
+              </span>
+            </div>
 
-            {request.timeRange && <Fact label="Time slot">{request.timeRange}</Fact>}
+            <div className="flex flex-col gap-1 p-3">
+              <FactLabel>Window</FactLabel>
+              <span className="text-sm leading-snug wrap-anywhere">{request.timeRange || "Not set"}</span>
+            </div>
+          </div>
 
-            {request.floor && <Fact label="Floor">{request.floor}</Fact>}
-
-            {request.fieldPm && <Fact label="Field PM">{request.fieldPm}</Fact>}
-
-            {request.contact && (
-              <Fact label="Contact">
-                {request.contact}
-                {request.contactPhone && (
-                  <span className="text-muted-foreground">
-                    {" · "}
-                    {request.contactPhone}
-                  </span>
-                )}
-              </Fact>
-            )}
-          </dl>
+          {/* Remaining facts as a tiled grid, hairline dividers between cells */}
+          {facts.length > 0 && (
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border">
+              {facts.map((fact, index) => (
+                <div
+                  key={fact.label}
+                  className={cn(
+                    "flex flex-col gap-0.5 bg-background/70 p-3",
+                    facts.length % 2 === 1 && index === facts.length - 1 && "col-span-2"
+                  )}
+                >
+                  <FactLabel>{fact.label}</FactLabel>
+                  <span className="text-sm font-medium wrap-anywhere">{fact.value}</span>
+                  {fact.sub && <span className="text-xs wrap-anywhere text-muted-foreground">{fact.sub}</span>}
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="overflow-hidden rounded-lg border bg-background/70">
             <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
@@ -221,12 +248,7 @@ function RequestCard({ request }: { request: ToolRequest }) {
                   <li key={tool.name} className="flex items-center justify-between gap-4 px-3 py-2">
                     <span className="min-w-0 flex-1 text-sm wrap-anywhere">{tool.name}</span>
 
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 items-center rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
-                        theme.quantity
-                      )}
-                    >
+                    <span className="inline-flex shrink-0 items-center rounded-md bg-muted px-2 py-1 text-xs font-semibold tabular-nums">
                       Qty: {tool.quantity}
                     </span>
                   </li>
@@ -264,41 +286,12 @@ function RequestCard({ request }: { request: ToolRequest }) {
           )}
         </div>
       </CardContent>
-
-      {/* Always Fixed at Bottom */}
-      {/* {hasActions && (
-        <CardFooter className="mt-auto shrink-0 gap-2 border-t">
-          {request.pickup && (
-            <Button size="sm" className="flex-1">
-              Accept Pickup
-            </Button>
-          )}
-
-          {request.delivery && (
-            <Button size="sm" variant="outline" className="flex-1">
-              Assign Tools
-            </Button>
-          )}
-        </CardFooter>
-      )} */}
     </Card>
   )
 }
 
 function FactLabel({ children }: { children: React.ReactNode }) {
   return <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{children}</span>
-}
-
-/** A `dt`/`dd` pair, so it has to be a fragment inside the `dl`'s grid. */
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <>
-      <dt>
-        <FactLabel>{label}</FactLabel>
-      </dt>
-      <dd className="min-w-0 wrap-anywhere">{children}</dd>
-    </>
-  )
 }
 
 function Note({ label, children }: { label: string; children: string }) {

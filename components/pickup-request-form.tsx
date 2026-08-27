@@ -206,7 +206,9 @@ export function PickupRequestForm({
           <CardContent>
             <FieldGroup className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Field className="sm:col-span-2" data-invalid={errors.jobId ? true : undefined}>
-                <FieldLabel htmlFor="job">Job</FieldLabel>
+                <FieldLabel htmlFor="job">
+                  Job <span className="text-destructive">*</span>
+                </FieldLabel>
                 <Combobox
                   items={jobs}
                   value={job}
@@ -289,7 +291,9 @@ export function PickupRequestForm({
               </Field>
 
               <Field data-invalid={errors.date ? true : undefined}>
-                <FieldLabel htmlFor="date">Pickup date</FieldLabel>
+                <FieldLabel htmlFor="date">
+                  Pickup date <span className="text-destructive">*</span>
+                </FieldLabel>
                 <DatePicker
                   id="date"
                   value={date}
@@ -445,7 +449,9 @@ export function PickupRequestForm({
 
         <Card className="lg:sticky lg:top-18">
           <CardHeader>
-            <CardTitle>Tools</CardTitle>
+            <CardTitle>
+              Tools <span className="text-destructive">*</span>
+            </CardTitle>
             <CardDescription>
               {!job ? "Pick a job to see its tools." : `${tools.length} tool${tools.length === 1 ? "" : "s"} selected`}
             </CardDescription>
