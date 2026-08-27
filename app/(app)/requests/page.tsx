@@ -265,7 +265,7 @@ function RequestCard({ request }: { request: ToolRequest }) {
       </CardContent>
 
       {/* Always Fixed at Bottom */}
-      {hasActions && (
+      {/* {hasActions && (
         <CardFooter className="mt-auto shrink-0 gap-2 border-t">
           {request.pickup && (
             <Button size="sm" className="flex-1">
@@ -279,7 +279,7 @@ function RequestCard({ request }: { request: ToolRequest }) {
             </Button>
           )}
         </CardFooter>
-      )}
+      )} */}
     </Card>
   )
 }

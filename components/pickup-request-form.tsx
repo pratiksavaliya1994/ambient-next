@@ -230,6 +230,8 @@ export function PickupRequestForm({
                     </ComboboxList>
                   </ComboboxContent>
                 </Combobox>
+                {job && <FieldDescription className="font-semibold">GC: {job.gc || "None on file"}</FieldDescription>}
+
                 {errors.jobId && <FieldError errors={[errors.jobId]} />}
               </Field>
 
