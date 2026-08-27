@@ -3,6 +3,7 @@ import Link from "next/link"
 
 import { ALLOW_DEV_LOGIN } from "@/auth"
 import { AppSidebar } from "@/components/app-sidebar"
+import { ModeToggle } from "@/components/mode-toggle"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/toast"
@@ -35,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/requests" className="text-sm font-medium">
               Ambient
             </Link>
+            <ModeToggle className="ml-auto" />
           </header>
           {ALLOW_DEV_LOGIN && (
             <p className="border-b bg-destructive/10 px-6 py-2 text-center text-sm text-destructive">

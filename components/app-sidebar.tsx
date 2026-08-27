@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardListIcon, LogOutIcon, PlusIcon, WrenchIcon } from "lucide-react"
+import { ClipboardListIcon, LogOutIcon, MapPinIcon, PlusIcon, WrenchIcon } from "lucide-react"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import {
@@ -32,6 +32,7 @@ import { signOutAction } from "@/lib/auth/actions"
 const NAV_ITEMS = [
   { title: "Requests", href: "/requests", icon: ClipboardListIcon },
   { title: "New request", href: "/requests/new", icon: PlusIcon },
+  { title: "Tools", href: "/tools", icon: MapPinIcon },
 ] as const
 
 /**

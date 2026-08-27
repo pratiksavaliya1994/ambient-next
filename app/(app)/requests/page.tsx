@@ -26,15 +26,16 @@ const FETCH_MULTIPLE = 4
 
 /**
  * `auto-fill` rather than a fixed column count: the cards keep a readable
- * floor of 21rem and a row simply holds fewer of them as the window narrows,
- * down to one on a phone. `min(…, 100%)` stops that floor from overflowing a
- * viewport narrower than a single card.
+ * floor of 18rem and a row simply holds fewer — or, on a wide warehouse
+ * monitor, more — of them as the window resizes, down to one on a phone.
+ * `min(…, 100%)` stops that floor from overflowing a viewport narrower than
+ * a single card.
  */
-const GRID = "grid grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] gap-6"
+const GRID = "grid grid-cols-[repeat(auto-fill,minmax(min(18rem,100%),1fr))] gap-6"
 
 export default function RequestsPage() {
   return (
-    <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-6">
+    <div className="flex w-full flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-medium">Recent requests</h1>
