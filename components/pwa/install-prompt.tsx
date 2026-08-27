@@ -32,10 +32,18 @@ function wasRecentlyDismissed() {
 }
 
 /**
- * Surfaces a native-install nudge. Chrome/Edge/Android fire `beforeinstallprompt`
- * and get a real one-tap install; iOS Safari never fires that event, so it gets
- * "Share → Add to Home Screen" instructions instead — there's no programmatic
- * install path on iOS.
+ * A supplementary install nudge. It deliberately **never calls
+ * `preventDefault()` on `beforeinstallprompt`** — doing so suppresses the
+ * browser's own install UI, and the Next.js PWA guide recommends letting the
+ * browser prompt automatically rather than replacing it. So the native prompt
+ * (Chrome's omnibox install icon / Android's infobar) always stays intact, and
+ * this card is only ever an extra affordance on top of it:
+ *
+ * - iOS Safari never fires `beforeinstallprompt` and has no automatic prompt,
+ *   so it gets "Share → Add to Home Screen" instructions — the only path there.
+ * - Elsewhere, if the event is captured before this mounts we offer a one-tap
+ *   Install button. If it fired before hydration we simply render nothing and
+ *   the browser's own prompt does the job.
  */
 export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
@@ -52,13 +60,22 @@ export function InstallPrompt() {
       return
     }
 
+    // No preventDefault: the browser keeps showing its own install UI.
     function onBeforeInstallPrompt(event: Event) {
-      event.preventDefault()
       setDeferredPrompt(event as BeforeInstallPromptEvent)
     }
 
+    function onInstalled() {
+      setDeferredPrompt(null)
+      setDismissed(true)
+    }
+
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt)
-    return () => window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt)
+    window.addEventListener("appinstalled", onInstalled)
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt)
+      window.removeEventListener("appinstalled", onInstalled)
+    }
   }, [])
 
   function dismiss() {
@@ -71,11 +88,16 @@ export function InstallPrompt() {
       return
     }
 
-    await deferredPrompt.prompt()
-    const { outcome } = await deferredPrompt.userChoice
-    setDeferredPrompt(null)
-    if (outcome === "accepted") {
-      setDismissed(true)
+    try {
+      await deferredPrompt.prompt()
+      const { outcome } = await deferredPrompt.userChoice
+      if (outcome === "accepted") {
+        setDismissed(true)
+      }
+    } catch {
+      // The browser may have already consumed its own prompt — nothing to add.
+    } finally {
+      setDeferredPrompt(null)
     }
   }
 
@@ -90,7 +112,7 @@ export function InstallPrompt() {
           <CardTitle>Install Ambient</CardTitle>
           <CardDescription>
             {showIosHint
-              ? "Tap Share, then \"Add to Home Screen\" to open Ambient like an app."
+              ? 'Tap Share, then "Add to Home Screen" to open Ambient like an app.'
               : "Add Ambient to your home screen for a faster, full-screen experience."}
           </CardDescription>
           {!showIosHint && (

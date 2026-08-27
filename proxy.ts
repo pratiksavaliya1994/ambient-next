@@ -22,5 +22,12 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   // Everything except the login page, the Auth.js endpoints and static assets.
-  matcher: ["/((?!login|api/auth|_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  //
+  // `manifest.webmanifest` and `sw.js` must stay public: the browser fetches
+  // the manifest without cookies, so gating it behind the session redirects it
+  // to `/login`, and a manifest that parses as HTML makes the app uninstallable.
+  // The service worker is fetched the same way and needs a JS content type.
+  matcher: [
+    "/((?!login|api/auth|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 }
