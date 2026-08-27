@@ -4,7 +4,9 @@ import * as React from "react"
 import { useMemo, useState } from "react"
 import { SearchIcon, WrenchIcon, XIcon } from "lucide-react"
 
+import { DEFAULT_PICKUP_TOOL_STATUS, TOOL_STATUS, type ToolStatus } from "@/lib/bubble/enums"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
+import type { ToolStatusUpdate } from "@/lib/bubble/tool-status-updates"
 import type { ToolLine } from "@/lib/bubble/tools-summary"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -20,7 +22,8 @@ import {
 } from "@/components/ui/dialog"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
-import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item"
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 
 /**
@@ -31,7 +34,21 @@ import { Spinner } from "@/components/ui/spinner"
  * every time this opens (see `PickupRequestForm`), not preloaded like
  * Delivery's `toolstype` catalogue, since which units are actually on site
  * changes between visits.
+ *
+ * Selection is keyed by tool id, not name — writing a status change back to
+ * Bubble needs the `tools` row's `_id`. Checking a tool seeds its status at
+ * `DEFAULT_PICKUP_TOOL_STATUS` ("Ready for Pickup"); the picker then lets it
+ * be changed further. `originalStatus` (the status Bubble had on fetch) rides
+ * along so `changedStatusLines` can tell which tools actually need a write.
  */
+export type PickupSelection = {
+  id: string
+  name: string
+  status: ToolStatus
+  /** The status Bubble had on fetch — not necessarily one of `TOOL_STATUS`, only ever compared against, never written. */
+  originalStatus: string
+}
+
 export function PickupToolPickerDialog({
   tools,
   loading,
@@ -43,8 +60,8 @@ export function PickupToolPickerDialog({
 }: {
   tools: PickupTool[]
   loading: boolean
-  selected: Set<string>
-  onChange: (next: Set<string>) => void
+  selected: Map<string, PickupSelection>
+  onChange: (next: Map<string, PickupSelection>) => void
   onOpenChange: (open: boolean) => void
   jobName: string
   trigger: React.ReactElement
@@ -57,10 +74,26 @@ export function PickupToolPickerDialog({
     return tools.filter((tool) => tool.name.toLowerCase().includes(needle))
   }, [tools, query])
 
-  function setChecked(name: string, checked: boolean) {
-    const next = new Set(selected)
-    if (checked) next.add(name)
-    else next.delete(name)
+  function setChecked(tool: PickupTool, checked: boolean) {
+    const next = new Map(selected)
+    if (checked) {
+      next.set(tool.id, {
+        id: tool.id,
+        name: tool.name,
+        status: DEFAULT_PICKUP_TOOL_STATUS,
+        originalStatus: tool.status,
+      })
+    } else {
+      next.delete(tool.id)
+    }
+    onChange(next)
+  }
+
+  function setStatus(toolId: string, status: ToolStatus) {
+    const current = selected.get(toolId)
+    if (!current) return
+    const next = new Map(selected)
+    next.set(toolId, { ...current, status })
     onChange(next)
   }
 
@@ -106,7 +139,8 @@ export function PickupToolPickerDialog({
         ) : (
           <ItemGroup className="-mx-1 flex-1 gap-1 overflow-y-auto px-1">
             {visible.map((tool, index) => {
-              const checked = selected.has(tool.name)
+              const selection = selected.get(tool.id)
+              const checked = selection !== undefined
               const previous = visible[index - 1]
               const showGroupLabel = tool.typeName && tool.typeName !== previous?.typeName
               return (
@@ -114,21 +148,39 @@ export function PickupToolPickerDialog({
                   {showGroupLabel && (
                     <p className="px-2 pt-2 text-xs font-medium text-muted-foreground">{tool.typeName}</p>
                   )}
-                  <Item
-                    size="sm"
-                    variant={checked ? "muted" : "default"}
-                    className="cursor-pointer"
-                    onClick={() => setChecked(tool.name, !checked)}
-                  >
+                  <Item size="sm" variant={checked ? "muted" : "default"} className="cursor-pointer">
                     <Checkbox
                       checked={checked}
-                      onCheckedChange={(next) => setChecked(tool.name, next === true)}
-                      onClick={(event) => event.stopPropagation()}
+                      onCheckedChange={(next) => setChecked(tool, next === true)}
                       aria-label={tool.name}
                     />
-                    <ItemContent>
+                    <ItemContent onClick={() => setChecked(tool, !checked)}>
                       <ItemTitle>{tool.name}</ItemTitle>
                     </ItemContent>
+                    <ItemActions onClick={(event) => event.stopPropagation()}>
+                      {checked ? (
+                        <Select
+                          items={TOOL_STATUS.map((value) => ({ label: value, value }))}
+                          value={selection.status}
+                          onValueChange={(next) => setStatus(tool.id, next as ToolStatus)}
+                        >
+                          <SelectTrigger size="sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {TOOL_STATUS.map((value) => (
+                                <SelectItem key={value} value={value}>
+                                  {value}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">{tool.status}</span>
+                      )}
+                    </ItemActions>
                   </Item>
                 </React.Fragment>
               )
@@ -152,12 +204,12 @@ export function SelectedPickupTools({
   selected,
   onChange,
 }: {
-  selected: Set<string>
-  onChange: (next: Set<string>) => void
+  selected: Map<string, PickupSelection>
+  onChange: (next: Map<string, PickupSelection>) => void
 }) {
-  const names = [...selected].sort((a, b) => a.localeCompare(b))
+  const entries = [...selected.values()].sort((a, b) => a.name.localeCompare(b.name))
 
-  if (names.length === 0) {
+  if (entries.length === 0) {
     return (
       <Empty className="border border-dashed py-8">
         <EmptyHeader>
@@ -175,27 +227,28 @@ export function SelectedPickupTools({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {names.length} tool{names.length === 1 ? "" : "s"} selected
+          {entries.length} tool{entries.length === 1 ? "" : "s"} selected
         </p>
-        <Button type="button" variant="ghost" size="sm" onClick={() => onChange(new Set())}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => onChange(new Map())}>
           Clear all
         </Button>
       </div>
       <ItemGroup className="max-h-88 gap-1 overflow-y-auto rounded-lg border p-1">
-        {names.map((name) => (
-          <Item key={name} size="sm" variant="muted">
+        {entries.map((entry) => (
+          <Item key={entry.id} size="sm" variant="muted">
             <ItemContent>
-              <ItemTitle className="line-clamp-2">{name}</ItemTitle>
+              <ItemTitle className="line-clamp-2">{entry.name}</ItemTitle>
+              <ItemDescription>{entry.status}</ItemDescription>
             </ItemContent>
             <ItemActions>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label={`Remove ${name}`}
+                aria-label={`Remove ${entry.name}`}
                 onClick={() => {
-                  const next = new Set(selected)
-                  next.delete(name)
+                  const next = new Map(selected)
+                  next.delete(entry.id)
                   onChange(next)
                 }}
               >
@@ -210,6 +263,15 @@ export function SelectedPickupTools({
 }
 
 /** The selection in the order the summary string will carry it — always quantity 1. */
-export function toolLinesOfPickup(selected: Set<string>): ToolLine[] {
-  return [...selected].sort((a, b) => a.localeCompare(b)).map((name) => ({ name, quantity: 1 }))
+export function toolLinesOfPickup(selected: Map<string, PickupSelection>): ToolLine[] {
+  return [...selected.values()]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((entry) => ({ name: entry.name, quantity: 1 }))
+}
+
+/** Only the tools whose status was actually changed from what Bubble had on fetch. */
+export function changedStatusLines(selected: Map<string, PickupSelection>): ToolStatusUpdate[] {
+  return [...selected.values()]
+    .filter((entry) => entry.status !== entry.originalStatus)
+    .map((entry) => ({ toolId: entry.id, status: entry.status }))
 }

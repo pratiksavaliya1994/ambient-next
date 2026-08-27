@@ -36,6 +36,25 @@ export type ToDo = (typeof TO_DO)[number]
 export const UNFILTERED_TO_DO: ToDo = "Fast Request"
 
 /**
+ * `tools.status`, hardcoded per the user rather than read off live data (the
+ * live app only ever had `"Ok"` / `"Missing"` / `"To be Repaired"` rows so
+ * far — this is the full set the Pickup tool picker offers going forward).
+ */
+export const TOOL_STATUS = [
+  "Ok",
+  "Ready for Pickup",
+  "To do Maintenance",
+  "To be Repaired",
+  "Repairing / Under Maintenance",
+  "Discharged",
+  "Missing",
+] as const
+export type ToolStatus = (typeof TOOL_STATUS)[number]
+
+/** What a tool's status is set to the moment it's checked in the Pickup picker. */
+export const DEFAULT_PICKUP_TOOL_STATUS: ToolStatus = "Ready for Pickup"
+
+/**
  * `request.color` drives the event colour in the Bubble calendar. Live rows
  * follow delivery → blue, pickup-only → orange. A third value (#00bc9d) shows
  * up on a handful of hand-edited rows with no discernible rule; it is not

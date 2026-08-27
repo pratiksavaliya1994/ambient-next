@@ -40,10 +40,8 @@ export type PickupTool = {
   name: string
   typeName: string | null
   floor: string | null
+  status: string
 }
-
-/** Tools not in this state (`"Missing"`, `"To be Repaired"`) aren't offered for pickup. */
-const AVAILABLE_STATUS = "Ok"
 
 export async function listToolsForJob(jobName: string): Promise<PickupTool[]> {
   const [rows, toolTypes] = await Promise.all([
@@ -57,12 +55,13 @@ export async function listToolsForJob(jobName: string): Promise<PickupTool[]> {
 
   return rows
     .map((row) => toolRow.parse(row))
-    .filter((row) => row.name && row.status === AVAILABLE_STATUS)
+    .filter((row) => row.name)
     .map((row) => ({
       id: row._id,
       name: row.name!,
       typeName: row.type ? typeNameById.get(row.type) ?? null : null,
       floor: row.floor ?? null,
+      status: row.status ?? "Ok",
     }))
     .sort((a, b) => (a.typeName ?? "").localeCompare(b.typeName ?? "") || a.name.localeCompare(b.name))
 }

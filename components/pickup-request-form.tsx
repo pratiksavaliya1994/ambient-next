@@ -10,7 +10,13 @@ import { createPickupRequestAction, fetchToolsForJobAction } from "@/app/(app)/r
 import { INITIAL_CREATE_STATE, type CreateRequestState } from "@/app/(app)/requests/action-state"
 import { DatePicker } from "@/components/date-picker"
 import { MaterialDialog } from "@/components/material-dialog"
-import { PickupToolPickerDialog, SelectedPickupTools, toolLinesOfPickup } from "@/components/pickup-tool-picker"
+import {
+  changedStatusLines,
+  PickupToolPickerDialog,
+  SelectedPickupTools,
+  toolLinesOfPickup,
+  type PickupSelection,
+} from "@/components/pickup-tool-picker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,7 +37,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { newYorkToday } from "@/lib/bubble/dates"
-import { DEFAULT_WE_ARE, UNFILTERED_TO_DO, TO_DO, WE_ARE } from "@/lib/bubble/enums"
+import { DEFAULT_PICKUP_TOOL_STATUS, DEFAULT_WE_ARE, UNFILTERED_TO_DO, TO_DO, WE_ARE } from "@/lib/bubble/enums"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
 import {
   defaultMaterialsFor,
@@ -91,6 +97,7 @@ export function PickupRequestForm({
       tentative: false,
       cleanup: false,
       tools: [],
+      toolStatusUpdates: [],
     },
   })
 
@@ -99,10 +106,10 @@ export function PickupRequestForm({
   const toDo = useWatch({ control, name: "toDo" })
 
   const [job, setJob] = useState<Job | null>(null)
-  const [selectedToolNames, setSelectedToolNames] = useState<Set<string>>(new Set())
+  const [selectedTools, setSelectedTools] = useState<Map<string, PickupSelection>>(new Map())
   const [toolsForJob, setToolsForJob] = useState<PickupTool[]>([])
 
-  const tools = useMemo(() => toolLinesOfPickup(selectedToolNames), [selectedToolNames])
+  const tools = useMemo(() => toolLinesOfPickup(selectedTools), [selectedTools])
 
   // `job` and the tool selection live outside react-hook-form for the same
   // reason as the Delivery form: their widgets need more than the one schema
@@ -112,15 +119,17 @@ export function PickupRequestForm({
     setValue("jobId", next?.id ?? "", { shouldValidate: true })
     // A new job means a different set of tools entirely — the previous
     // job's picks and fetched list can't carry over.
-    setSelectedToolNames(new Set())
+    setSelectedTools(new Map())
     setValue("tools", [], { shouldValidate: true })
+    setValue("toolStatusUpdates", [])
     setValue("cleanup", false)
     setToolsForJob([])
   }
 
-  function updateSelected(next: Set<string>) {
-    setSelectedToolNames(next)
+  function updateSelected(next: Map<string, PickupSelection>) {
+    setSelectedTools(next)
     setValue("tools", toolLinesOfPickup(next), { shouldValidate: true })
+    setValue("toolStatusUpdates", changedStatusLines(next))
   }
 
   /**
@@ -352,7 +361,19 @@ export function PickupRequestForm({
                         field.onChange(checked)
                         if (checked && job) {
                           void loadToolsForJob(job).then((fetched) => {
-                            updateSelected(new Set(fetched.map((tool) => tool.name)))
+                            updateSelected(
+                              new Map(
+                                fetched.map((tool) => [
+                                  tool.id,
+                                  {
+                                    id: tool.id,
+                                    name: tool.name,
+                                    status: DEFAULT_PICKUP_TOOL_STATUS,
+                                    originalStatus: tool.status,
+                                  },
+                                ])
+                              )
+                            )
                           })
                         }
                       }}
@@ -432,7 +453,7 @@ export function PickupRequestForm({
               <PickupToolPickerDialog
                 tools={toolsForJob}
                 loading={toolsPending}
-                selected={selectedToolNames}
+                selected={selectedTools}
                 onChange={updateSelected}
                 onOpenChange={(open) => {
                   if (open && job) void loadToolsForJob(job)
@@ -450,7 +471,7 @@ export function PickupRequestForm({
           <CardContent>
             <FieldGroup className="gap-6">
               <Field data-invalid={errors.tools ? true : undefined}>
-                <SelectedPickupTools selected={selectedToolNames} onChange={updateSelected} />
+                <SelectedPickupTools selected={selectedTools} onChange={updateSelected} />
                 {errors.tools && <FieldError errors={[errors.tools]} />}
                 {!job && <FieldDescription>Pick a job before adding tools.</FieldDescription>}
               </Field>

@@ -6,6 +6,7 @@ import { bubbleList, bubbleListAll, bubbleRunWorkflow, type BubbleThing } from "
 import { newYorkInstant, newYorkStamp } from "@/lib/bubble/dates"
 import { DEFAULT_REQUEST_ORDER, requestColor } from "@/lib/bubble/enums"
 import type { Job } from "@/lib/bubble/reference-types"
+import { formatToolStatusUpdates } from "@/lib/bubble/tool-status-updates"
 import { formatToolsSummary, parseToolsSummary, type ToolLine } from "@/lib/bubble/tools-summary"
 import type { RequestFormValues } from "@/lib/schemas/request"
 import type { PickupRequestFormValues } from "@/lib/schemas/pickup-request"
@@ -382,9 +383,8 @@ export async function createPickupToolRequest(
     ? [values.notes, "Cleanup the Site requested."].filter(Boolean).join("\n")
     : values.notes
 
-  const raw = await bubbleRunWorkflow(
-    NEW_PICKUP_REQUEST_WORKFLOW,
-    buildRequestPayload({
+  const raw = await bubbleRunWorkflow(NEW_PICKUP_REQUEST_WORKFLOW, {
+    ...buildRequestPayload({
       job,
       toDo: values.toDo,
       weAre: values.weAre,
@@ -405,8 +405,12 @@ export async function createPickupToolRequest(
       materials: values.materials,
       summary,
       now,
-    })
-  )
+    }),
+    // Only the `tools` rows a PM actually changed the status of — see
+    // `lib/bubble/tool-status-updates.ts`. Delivery's `createToolRequest`
+    // has no equivalent, since it never touches the `tools` table.
+    toolStatusUpdates: formatToolStatusUpdates(values.toolStatusUpdates),
+  })
 
   const result = createRequestResult.parse(raw)
   return { requestId: result.requestId, job: job.name }
