@@ -1,8 +1,9 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardListIcon, LogOutIcon, MapPinIcon, ShoppingCartIcon, TruckIcon, WrenchIcon } from "lucide-react"
+import { ClipboardListIcon, LogOutIcon, MapPinIcon, ShoppingCartIcon, TruckIcon } from "lucide-react"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import {
@@ -61,9 +62,7 @@ export function AppSidebar({ userName }: { userName: string }) {
                 tooltip="Tool workflow"
                 render={<Link href="/requests" onClick={closeOnMobile} />}
               >
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-                  <WrenchIcon />
-                </div>
+                <Image src="/icon.svg" alt="" width={32} height={32} className="size-8 shrink-0 rounded-md" />
                 <div className="flex min-w-0 flex-col leading-tight">
                   <span className="truncate text-sm font-medium">Ambient Flooring</span>
                   <span className="truncate text-xs text-muted-foreground">Tool workflow</span>

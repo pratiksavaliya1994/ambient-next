@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import Image from "next/image"
 import { redirect } from "next/navigation"
 
 import { ALLOW_DEV_LOGIN, ALLOW_ENTRA, auth } from "@/auth"
@@ -46,9 +47,13 @@ export default async function LoginPage({
 
       <header className="relative z-10 flex items-center justify-between px-4 py-5 sm:px-6 sm:py-6 md:px-10">
         <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-[#c6a664]/40 text-xs font-semibold tracking-wide text-[#c6a664]">
-            AF
-          </span>
+          <Image
+            src="/icon.svg"
+            alt="Ambient Flooring"
+            width={32}
+            height={32}
+            className="size-8 shrink-0 rounded-md border border-[#c6a664]/40"
+          />
           <span className="truncate text-xs font-medium tracking-[0.15em] text-[#0b1220]/70 uppercase sm:text-sm sm:tracking-[0.25em] dark:text-white/70">
             Ambient Flooring
           </span>
