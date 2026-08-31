@@ -19,12 +19,25 @@ export function ServiceWorkerRegister() {
     }
 
     if (process.env.NODE_ENV !== "production") {
-      navigator.serviceWorker.getRegistrations().then((registrations) => {
-        registrations.forEach((registration) => registration.unregister())
+      // The page that got here may itself have been served from the stale
+      // cache, so clear everything and reload once. `controller` is only set
+      // when a worker actually served this load, and unregistering clears it
+      // for the next one — so this can't loop.
+      const wasControlled = Boolean(navigator.serviceWorker.controller)
+
+      Promise.all([
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((registrations) => Promise.all(registrations.map((r) => r.unregister()))),
+        "caches" in window
+          ? caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+          : Promise.resolve(),
+      ]).then(() => {
+        if (wasControlled) {
+          window.location.reload()
+        }
       })
-      if ("caches" in window) {
-        caches.keys().then((keys) => keys.forEach((key) => caches.delete(key)))
-      }
+
       return
     }
 

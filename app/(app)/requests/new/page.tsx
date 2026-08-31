@@ -1,7 +1,9 @@
+import { ArrowLeftIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
 import { RequestForm } from "@/components/request-form"
+import { buttonVariants } from "@/components/ui/button"
 import { listFieldPms, listJobs, listMaterialDefaults, listTimeSlots, listToolTypes } from "@/lib/bubble/reference"
 import { toJobOption } from "@/lib/bubble/reference-types"
 
@@ -25,8 +27,12 @@ export default async function NewRequestPage() {
           <h1 className="text-xl font-medium">New delivery request</h1>
           <p className="text-sm text-muted-foreground">Enter details for a new tool request.</p>
         </div>
-        <Link href="/requests/new/pickup" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
-          Pickup instead?
+        <Link
+          href="/requests"
+          className={buttonVariants({ variant: "ghost", size: "sm", className: "text-muted-foreground" })}
+        >
+          <ArrowLeftIcon />
+          Back to requests
         </Link>
       </div>
 

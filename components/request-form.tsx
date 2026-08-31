@@ -275,17 +275,17 @@ export function RequestForm({
 
               <Field>
                 <FieldLabel htmlFor="floor">Floor</FieldLabel>
-                <Input id="floor" placeholder="14, ground, loading dock" {...register("floor")} />
+                <Input id="floor" placeholder="Enter floor" {...register("floor")} />
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="contact">Site contact</FieldLabel>
-                <Input id="contact" {...register("contact")} />
+                <Input id="contact" placeholder="Enter contact name" {...register("contact")} />
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="contactPhone">Contact phone</FieldLabel>
-                <Input id="contactPhone" inputMode="tel" {...register("contactPhone")} />
+                <Input id="contactPhone" inputMode="tel" placeholder="Enter phone number" {...register("contactPhone")} />
               </Field>
 
               <Field data-invalid={errors.startDate || errors.endDate ? true : undefined}>
@@ -406,7 +406,7 @@ export function RequestForm({
 
               <Field className="sm:col-span-2">
                 <FieldLabel htmlFor="notes">Notes</FieldLabel>
-                <Textarea id="notes" rows={2} {...register("notes")} />
+                <Textarea id="notes" rows={2} placeholder="Add notes" {...register("notes")} />
               </Field>
             </FieldGroup>
           </CardContent>
