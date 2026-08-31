@@ -77,6 +77,7 @@ export function PickupRequestForm({
     handleSubmit,
     setValue,
     setError,
+    clearErrors,
     formState: { errors, isValid },
   } = useForm<PickupRequestFormValues>({
     resolver: zodResolver(pickupRequestFormSchema),
@@ -114,14 +115,19 @@ export function PickupRequestForm({
   // field each maps onto.
   function updateJob(next: Job | null) {
     setJob(next)
-    setValue("jobId", next?.id ?? "", { shouldValidate: true })
     // A new job means a different set of tools entirely — the previous
     // job's picks and fetched list can't carry over.
     setSelectedTools(new Map())
-    setValue("tools", [], { shouldValidate: true })
+    setValue("tools", [])
     setValue("toolStatusUpdates", [])
     setValue("cleanup", false)
     setToolsForJob([])
+    // Only `jobId` is validated here. The schema's "a tool or materials" rule
+    // hangs off `tools`, so validating that field on job select would flag the
+    // empty picker before the user has had any chance to fill it — the job is
+    // set last so this pass sees the cleared tools in `isValid`.
+    clearErrors("tools")
+    setValue("jobId", next?.id ?? "", { shouldValidate: true })
     // The picker is inline now, so there is no dialog-open moment to fetch on.
     if (next) void loadToolsForJob(next)
   }
@@ -232,8 +238,7 @@ export function PickupRequestForm({
                             <ItemContent>
                               <ItemTitle className="whitespace-nowrap">{item.name}</ItemTitle>
                               <ItemDescription>
-                                {[item.gc, item.borough, item.description].filter(Boolean).join(" · ") ||
-                                  "No GC on file"}
+                                {[item.gc, item.borough, item.description].filter(Boolean).join(" · ") || "No GC Found"}
                               </ItemDescription>
                             </ItemContent>
                           </Item>
@@ -288,7 +293,12 @@ export function PickupRequestForm({
 
               <Field>
                 <FieldLabel htmlFor="contactPhone">Contact phone</FieldLabel>
-                <Input id="contactPhone" inputMode="tel" placeholder="Enter phone number" {...register("contactPhone")} />
+                <Input
+                  id="contactPhone"
+                  inputMode="tel"
+                  placeholder="Enter phone number"
+                  {...register("contactPhone")}
+                />
               </Field>
 
               <Field data-invalid={errors.date ? true : undefined}>

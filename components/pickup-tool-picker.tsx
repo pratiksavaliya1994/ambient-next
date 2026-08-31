@@ -105,7 +105,7 @@ export function PickupToolPicker({
       <Empty className="border border-dashed py-8">
         <EmptyHeader>
           <EmptyTitle>No job picked</EmptyTitle>
-          <EmptyDescription>Pick a job to see the tools on file there.</EmptyDescription>
+          <EmptyDescription>Pick a job to see the tools on the job.</EmptyDescription>
         </EmptyHeader>
       </Empty>
     )
@@ -128,7 +128,7 @@ export function PickupToolPicker({
     return (
       <Empty className="border border-dashed py-8">
         <EmptyHeader>
-          <EmptyTitle>No tools on file</EmptyTitle>
+          <EmptyTitle>No tools on this job</EmptyTitle>
           <EmptyDescription>Nothing is recorded at this job — add materials instead.</EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -138,11 +138,7 @@ export function PickupToolPicker({
   return (
     <div className="flex flex-col gap-2">
       <InputGroup>
-        <InputGroupInput
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search tools"
-        />
+        <InputGroupInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tools" />
         <InputGroupAddon>
           <SearchIcon />
         </InputGroupAddon>
