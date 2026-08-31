@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -12,8 +12,8 @@ import { DatePicker } from "@/components/date-picker"
 import { MaterialDialog } from "@/components/material-dialog"
 import {
   changedStatusLines,
-  PickupToolPickerDialog,
-  SelectedPickupTools,
+  PickupToolPicker,
+  selectionOfTools,
   toolLinesOfPickup,
   type PickupSelection,
 } from "@/components/pickup-tool-picker"
@@ -37,7 +37,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { newYorkToday } from "@/lib/bubble/dates"
-import { DEFAULT_PICKUP_TOOL_STATUS, DEFAULT_WE_ARE, UNFILTERED_TO_DO, TO_DO, WE_ARE } from "@/lib/bubble/enums"
+import { DEFAULT_WE_ARE, UNFILTERED_TO_DO, TO_DO, WE_ARE } from "@/lib/bubble/enums"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
 import {
   defaultMaterialsFor,
@@ -109,8 +109,6 @@ export function PickupRequestForm({
   const [selectedTools, setSelectedTools] = useState<Map<string, PickupSelection>>(new Map())
   const [toolsForJob, setToolsForJob] = useState<PickupTool[]>([])
 
-  const tools = useMemo(() => toolLinesOfPickup(selectedTools), [selectedTools])
-
   // `job` and the tool selection live outside react-hook-form for the same
   // reason as the Delivery form: their widgets need more than the one schema
   // field each maps onto.
@@ -124,6 +122,8 @@ export function PickupRequestForm({
     setValue("toolStatusUpdates", [])
     setValue("cleanup", false)
     setToolsForJob([])
+    // The picker is inline now, so there is no dialog-open moment to fetch on.
+    if (next) void loadToolsForJob(next)
   }
 
   function updateSelected(next: Map<string, PickupSelection>) {
@@ -133,9 +133,10 @@ export function PickupRequestForm({
   }
 
   /**
-   * Fetched fresh every time — on dialog open and on the Cleanup toggle —
-   * rather than cached, since which tools are actually on site changes
-   * between visits (see `lib/bubble/pickup-tools.ts`).
+   * Fetched on job select — and again from the Cleanup toggle only when that
+   * load hasn't produced a list yet. Never cached across jobs, since which
+   * tools are actually on site changes between visits (see
+   * `lib/bubble/pickup-tools.ts`).
    */
   function loadToolsForJob(target: Job): Promise<PickupTool[]> {
     return new Promise((resolve) => {
@@ -197,7 +198,7 @@ export function PickupRequestForm({
         </Alert>
       )}
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_28rem]">
         <Card>
           <CardHeader>
             <CardTitle>Pickup details</CardTitle>
@@ -363,23 +364,17 @@ export function PickupRequestForm({
                       onCheckedChange={(next) => {
                         const checked = next === true
                         field.onChange(checked)
-                        if (checked && job) {
-                          void loadToolsForJob(job).then((fetched) => {
-                            updateSelected(
-                              new Map(
-                                fetched.map((tool) => [
-                                  tool.id,
-                                  {
-                                    id: tool.id,
-                                    name: tool.name,
-                                    status: DEFAULT_PICKUP_TOOL_STATUS,
-                                    originalStatus: tool.status,
-                                  },
-                                ])
-                              )
-                            )
-                          })
+                        if (!checked || !job) return
+                        if (toolsForJob.length > 0) {
+                          // The job-select fetch already landed — select what is
+                          // on screen instead of reloading the same list.
+                          updateSelected(selectionOfTools(toolsForJob))
+                          return
                         }
+                        // Nothing loaded yet (toggled while the job-select fetch
+                        // was still in flight, or it came back empty) — fetch so
+                        // the toggle can't select an empty list.
+                        void loadToolsForJob(job).then((fetched) => updateSelected(selectionOfTools(fetched)))
                       }}
                     />
                   )}
@@ -453,33 +448,40 @@ export function PickupRequestForm({
               Tools <span className="text-destructive">*</span>
             </CardTitle>
             <CardDescription>
-              {!job ? "Pick a job to see its tools." : `${tools.length} tool${tools.length === 1 ? "" : "s"} selected`}
+              {!job
+                ? "Pick a job to see its tools."
+                : toolsPending
+                  ? "Loading tools…"
+                  : `${selectedTools.size} of ${toolsForJob.length} selected`}
             </CardDescription>
-            <CardAction>
-              <PickupToolPickerDialog
-                tools={toolsForJob}
-                loading={toolsPending}
-                selected={selectedTools}
-                onChange={updateSelected}
-                onOpenChange={(open) => {
-                  if (open && job) void loadToolsForJob(job)
-                }}
-                jobName={job?.name ?? ""}
-                trigger={
-                  <Button type="button" variant="outline" size="sm" disabled={!job}>
-                    <PlusIcon data-icon="inline-start" />
-                    Add tools
-                  </Button>
-                }
-              />
+            <CardAction className="flex items-center gap-1">
+              {selectedTools.size > 0 && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => updateSelected(new Map())}>
+                  Clear all
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={toolsForJob.length === 0 || selectedTools.size === toolsForJob.length}
+                onClick={() => updateSelected(selectionOfTools(toolsForJob))}
+              >
+                Select all
+              </Button>
             </CardAction>
           </CardHeader>
           <CardContent>
             <FieldGroup className="gap-6">
               <Field data-invalid={errors.tools ? true : undefined}>
-                <SelectedPickupTools selected={selectedTools} onChange={updateSelected} />
+                <PickupToolPicker
+                  tools={toolsForJob}
+                  loading={toolsPending}
+                  hasJob={job !== null}
+                  selected={selectedTools}
+                  onChange={updateSelected}
+                />
                 {errors.tools && <FieldError errors={[errors.tools]} />}
-                {!job && <FieldDescription>Pick a job before adding tools.</FieldDescription>}
               </Field>
 
               <Field>

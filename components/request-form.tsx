@@ -194,7 +194,7 @@ export function RequestForm({
         </Alert>
       )}
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_28rem]">
         <Card>
           <CardHeader>
             <CardTitle>Request details</CardTitle>
