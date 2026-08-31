@@ -5,7 +5,6 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -20,14 +19,16 @@ import { Textarea } from "@/components/ui/textarea"
  * selection, unlike `ToolPickerDialog`. Bubble's `materials` table only
  * offers a starting point, not a set of choices.
  *
- * Nothing is buffered here: `onChange` commits straight to the form on every
- * keystroke, same as `ToolPickerDialog`'s selection — closing the dialog has
- * nothing of its own left to discard.
+ * Edits are buffered in a local draft and only committed to the form by
+ * "Done". Dismissing the dialog any other way — the X, Escape, a click on the
+ * backdrop — throws the draft away and leaves the form's `materials` exactly
+ * as it was, including leaving it empty.
  *
- * Opening it while the field is still empty pre-fills it from the `toDo`'s
- * default list (`defaultText`, from the `materials` table's `relatedTo`).
- * Once there's real text in it, opening again leaves it alone — a PM's edits
- * aren't overwritten by reopening the popup.
+ * Opening it while the field is still empty seeds the draft from the `toDo`'s
+ * default list (`defaultText`, from the `materials` table's `relatedTo`) —
+ * still only a draft, so backing out adds nothing. Once there's real text in
+ * the field, opening again starts from that text: a PM's edits aren't
+ * overwritten by reopening the popup.
  */
 export function MaterialDialog({
   value,
@@ -40,10 +41,16 @@ export function MaterialDialog({
   onChange: (next: string) => void
   trigger: React.ReactElement
 }) {
+  const [open, setOpen] = React.useState(false)
+  const [draft, setDraft] = React.useState("")
+
   return (
     <Dialog
-      onOpenChange={(open) => {
-        if (open && !value.trim() && defaultText) onChange(defaultText)
+      open={open}
+      onOpenChange={(next) => {
+        // Seed on the way in; on the way out the draft is simply abandoned.
+        if (next) setDraft(value.trim() ? value : defaultText)
+        setOpen(next)
       }}
     >
       <DialogTrigger render={trigger} />
@@ -54,8 +61,8 @@ export function MaterialDialog({
         </DialogHeader>
 
         <Textarea
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
           rows={12}
           autoFocus
           placeholder="List the materials needed for this job"
@@ -63,7 +70,15 @@ export function MaterialDialog({
         />
 
         <DialogFooter>
-          <DialogClose render={<Button type="button" />}>Done</DialogClose>
+          <Button
+            type="button"
+            onClick={() => {
+              onChange(draft)
+              setOpen(false)
+            }}
+          >
+            Done
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

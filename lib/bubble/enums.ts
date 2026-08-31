@@ -61,8 +61,6 @@ export const TOOL_STATUS = [
 ] as const
 export type ToolStatus = (typeof TOOL_STATUS)[number]
 
-/** What a tool's status is set to the moment it's checked in the Pickup picker. */
-export const DEFAULT_PICKUP_TOOL_STATUS: ToolStatus = "Ready for Pickup"
 
 /**
  * `request.color` drives the event colour in the Bubble calendar. Live rows

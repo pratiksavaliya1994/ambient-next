@@ -4,7 +4,7 @@ import * as React from "react"
 import { useMemo, useState } from "react"
 import { SearchIcon } from "lucide-react"
 
-import { DEFAULT_PICKUP_TOOL_STATUS, TOOL_STATUS, type ToolStatus } from "@/lib/bubble/enums"
+import { TOOL_STATUS, type ToolStatus } from "@/lib/bubble/enums"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
 import type { ToolStatusUpdate } from "@/lib/bubble/tool-status-updates"
 import type { ToolLine } from "@/lib/bubble/tools-summary"
@@ -28,20 +28,26 @@ import { Spinner } from "@/components/ui/spinner"
  * a dialog.
  *
  * Selection is keyed by tool id, not name — writing a status change back to
- * Bubble needs the `tools` row's `_id`. Checking a tool seeds its status at
- * `DEFAULT_PICKUP_TOOL_STATUS` ("Ready for Pickup"); the picker then lets it
- * be changed further. `originalStatus` (the status Bubble had on fetch) rides
- * along so `changedStatusLines` can tell which tools actually need a write.
+ * Bubble needs the `tools` row's `_id`. Checking a tool keeps whatever status
+ * Bubble already has — picking a tool for pickup is not itself a status
+ * change; the picker then lets the status be changed deliberately.
+ * `originalStatus` (the status Bubble had on fetch) rides along so
+ * `changedStatusLines` can tell which tools actually need a write.
  */
 export type PickupSelection = {
   id: string
   name: string
-  status: ToolStatus
+  /**
+   * Seeded from the tool's live Bubble status, which is free text and so not
+   * necessarily one of `TOOL_STATUS`. Only a value picked in the picker (always
+   * a `ToolStatus`) ever differs from `originalStatus`, so only those are written.
+   */
+  status: string
   /** The status Bubble had on fetch — not necessarily one of `TOOL_STATUS`, only ever compared against, never written. */
   originalStatus: string
 }
 
-/** Every tool checked, each seeded at the default pickup status — "Select all" and the Cleanup toggle share this. */
+/** Every tool checked, each keeping its current Bubble status — "Select all" and the Cleanup toggle share this. */
 export function selectionOfTools(tools: PickupTool[]): Map<string, PickupSelection> {
   return new Map(
     tools.map((tool) => [
@@ -49,7 +55,7 @@ export function selectionOfTools(tools: PickupTool[]): Map<string, PickupSelecti
       {
         id: tool.id,
         name: tool.name,
-        status: DEFAULT_PICKUP_TOOL_STATUS,
+        status: tool.status,
         originalStatus: tool.status,
       },
     ])
@@ -83,7 +89,7 @@ export function PickupToolPicker({
       next.set(tool.id, {
         id: tool.id,
         name: tool.name,
-        status: DEFAULT_PICKUP_TOOL_STATUS,
+        status: tool.status,
         originalStatus: tool.status,
       })
     } else {
@@ -92,7 +98,7 @@ export function PickupToolPicker({
     onChange(next)
   }
 
-  function setStatus(toolId: string, status: ToolStatus) {
+  function setStatus(toolId: string, status: string) {
     const current = selected.get(toolId)
     if (!current) return
     const next = new Map(selected)
@@ -156,6 +162,13 @@ export function PickupToolPicker({
           {visible.map((tool, index) => {
             const selection = selected.get(tool.id)
             const checked = selection !== undefined
+            /* `tools.status` is free text, so a seeded status can sit outside
+               `TOOL_STATUS` (blank rows included) — carry it as an extra option
+               so the trigger shows the tool's real status instead of nothing. */
+            const statusOptions =
+              selection && selection.status && !(TOOL_STATUS as readonly string[]).includes(selection.status)
+                ? [selection.status, ...TOOL_STATUS]
+                : TOOL_STATUS
             const previous = visible[index - 1]
             const showGroupLabel = tool.typeName && tool.typeName !== previous?.typeName
             return (
@@ -184,16 +197,20 @@ export function PickupToolPicker({
                   <ItemActions className="shrink-0" onClick={(event) => event.stopPropagation()}>
                     {checked ? (
                       <Select
-                        items={TOOL_STATUS.map((value) => ({ label: value, value }))}
+                        items={statusOptions.map((value) => ({ label: value, value }))}
                         value={selection.status}
-                        onValueChange={(next) => setStatus(tool.id, next as ToolStatus)}
+                        onValueChange={(next) => next !== null && setStatus(tool.id, next)}
                       >
                         <SelectTrigger size="sm" className="w-40 overflow-hidden">
                           <SelectValue className="truncate" />
                         </SelectTrigger>
-                        <SelectContent>
+                        {/* The popup defaults to the trigger's width; the trigger is
+                            narrow (`w-40`) to keep the row tight, which clips the
+                            longer statuses ("Repairing / Under Maintenance"), so let
+                            the popup size to its widest option instead. */}
+                        <SelectContent className="w-fit min-w-(--anchor-width) max-w-(--available-width)">
                           <SelectGroup>
-                            {TOOL_STATUS.map((value) => (
+                            {statusOptions.map((value) => (
                               <SelectItem key={value} value={value}>
                                 {value}
                               </SelectItem>
@@ -226,5 +243,7 @@ export function toolLinesOfPickup(selected: Map<string, PickupSelection>): ToolL
 export function changedStatusLines(selected: Map<string, PickupSelection>): ToolStatusUpdate[] {
   return [...selected.values()]
     .filter((entry) => entry.status !== entry.originalStatus)
-    .map((entry) => ({ toolId: entry.id, status: entry.status }))
+    // Safe cast: a status differing from `originalStatus` can only have come
+    // from the picker's Select, which offers nothing but `TOOL_STATUS`.
+    .map((entry) => ({ toolId: entry.id, status: entry.status as ToolStatus }))
 }

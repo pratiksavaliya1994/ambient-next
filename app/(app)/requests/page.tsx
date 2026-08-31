@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
-import { newYorkDaysAgo, newYorkInstant, newYorkRangeLabel } from "@/lib/bubble/dates"
+import { newYorkDayLabel, newYorkDaysAgo, newYorkInstant } from "@/lib/bubble/dates"
 import { hasContent, listRequestsSince, type ToolRequest } from "@/lib/bubble/requests"
 import { cn } from "@/lib/utils"
 
@@ -144,14 +144,14 @@ function themeFor(request: ToolRequest) {
 }
 
 /**
- * A request is a delivery date, a pickup date, or (rarely) both spanning one
- * range — so the date box's own label follows suit rather than always
- * reading the generic "Dates" a two-sided request needs.
+ * A request is a delivery date, a pickup date, or (rarely) both — and either
+ * way only the start date is shown, so the box's own label follows suit
+ * rather than always reading the generic "Date" a two-sided request needs.
  */
 function dateLabelFor(request: ToolRequest) {
   if (request.pickup && !request.delivery) return "Pickup date"
   if (request.delivery && !request.pickup) return "Drop date"
-  return "Dates"
+  return "Date"
 }
 
 function RequestCard({ request }: { request: ToolRequest }) {
@@ -199,7 +199,7 @@ function RequestCard({ request }: { request: ToolRequest }) {
             <div className="flex min-w-28 flex-col gap-1 p-3">
               <FactLabel>{dateLabelFor(request)}</FactLabel>
               <span className="text-base leading-tight font-semibold wrap-anywhere">
-                {newYorkRangeLabel(request.start, request.end)}
+                {newYorkDayLabel(request.start ?? request.end)}
               </span>
             </div>
 
