@@ -168,7 +168,31 @@ export async function listRecentRequests(limit = 25): Promise<ToolRequest[]> {
     descending: true,
   })
 
-  const rows = page.results.map((row: BubbleThing) => requestRow.parse(row))
+  return withLines(page.results.map((row: BubbleThing) => requestRow.parse(row)))
+}
+
+/**
+ * Every request created at or after `since`, newest first, with its tool lines
+ * attached the same way `listRecentRequests` does.
+ *
+ * Paged through rather than capped at one page: a window is however many rows
+ * the days in it happened to produce, not a number this can know up front.
+ * Bubble's `greater than` on a date is exclusive, so a caller wanting a whole
+ * day inclusive should pass that day's midnight — a row created exactly at
+ * midnight is a rounding coincidence, not a boundary worth a second query.
+ */
+export async function listRequestsSince(since: Date): Promise<ToolRequest[]> {
+  const rows = await bubbleListAll(REQUEST, {
+    constraints: [{ key: "Created Date", constraint_type: "greater than", value: since.toISOString() }],
+    sortField: "Created Date",
+    descending: true,
+  })
+
+  return withLines(rows.map((row: BubbleThing) => requestRow.parse(row)))
+}
+
+/** The second half of both list calls: one `in` lookup each for tools and materials. */
+async function withLines(rows: z.infer<typeof requestRow>[]): Promise<ToolRequest[]> {
   const ids = rows.map((row) => row._id)
   if (ids.length === 0) return []
 

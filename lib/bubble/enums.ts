@@ -9,7 +9,17 @@
  * `toolstype` rows.
  */
 
-export const WE_ARE = ["Ambient", "Tipp", "BT Flooring", "Pyramid Floors"] as const
+export const WE_ARE = [
+  "Ambient",
+  "Tipp",
+  "BT Flooring",
+  "Pyramid Floors",
+  "Tangent",
+  "Corridors Flooring",
+  "GP Flooring",
+  "SilverSlate",
+  "Other (Put Name in Notes)",
+] as const
 export type WeAre = (typeof WE_ARE)[number]
 
 export const DEFAULT_WE_ARE: WeAre = "Ambient"

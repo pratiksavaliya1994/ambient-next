@@ -126,6 +126,18 @@ export function newYorkToday(): string {
   return `${p.year}-${p.month}-${p.day}`
 }
 
+/**
+ * `days` days before today in New York, as `yyyy-mm-dd`.
+ *
+ * Plain calendar arithmetic on a UTC date rather than subtracting 24h from an
+ * instant, so a DST changeover day — 23 or 25 hours long — still steps back
+ * exactly one calendar day.
+ */
+export function newYorkDaysAgo(days: number): string {
+  const [year, month, date] = newYorkToday().split("-").map(Number)
+  return new Date(Date.UTC(year, month - 1, date - days)).toISOString().slice(0, 10)
+}
+
 /** `Tuesday 9-3` — the date line in the WhatsApp summary. */
 export function newYorkWeekday(iso: string | null | undefined): string {
   if (!iso) return "—"

@@ -6,22 +6,18 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
-import { newYorkRangeLabel } from "@/lib/bubble/dates"
-import { hasContent, listRecentRequests, type ToolRequest } from "@/lib/bubble/requests"
+import { newYorkDaysAgo, newYorkInstant, newYorkRangeLabel } from "@/lib/bubble/dates"
+import { hasContent, listRequestsSince, type ToolRequest } from "@/lib/bubble/requests"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Tool requests" }
 
-/** Enough to fill three rows of the widest grid, and never fewer than ten. */
-const VISIBLE_REQUESTS = 12
-
 /**
- * How many rows to ask Bubble for to fill those twelve cards. Roughly half of
- * the most recently created rows are abandoned blanks (see `hasContent`), so a
- * window of exactly twelve is mostly empty cards. Four times over still fits in
- * one Bubble page, which caps at 100.
+ * How many New York days of requests the page shows, counting today: 2 is
+ * today and yesterday. A window rather than a fixed card count, so the page
+ * always covers the same stretch of time no matter how busy a day was.
  */
-const FETCH_MULTIPLE = 4
+const DAYS_SHOWN = 5
 
 /**
  * `auto-fill` rather than a fixed column count: the cards keep a readable
@@ -39,7 +35,7 @@ export default function RequestsPage() {
         <div>
           <h1 className="text-xl font-medium">Recent requests</h1>
           {/* <p className="text-sm text-muted-foreground">
-            The {VISIBLE_REQUESTS} newest from Bubble. Tool lines come from each
+            Everything created today and yesterday. Tool lines come from each
             request&rsquo;s requestedtools row.
           </p> */}
         </div>
@@ -57,14 +53,17 @@ export default function RequestsPage() {
 }
 
 async function RequestList() {
-  const recent = await listRecentRequests(VISIBLE_REQUESTS * FETCH_MULTIPLE)
+  // Midnight New York on the oldest day in the window — `DAYS_SHOWN - 1` days
+  // back, since the window counts today as one of its days.
+  const since = newYorkInstant(newYorkDaysAgo(DAYS_SHOWN - 1))
+  const recent = await listRequestsSince(since)
 
-  // Counted while filling rather than over the whole window, so `skipped` is
-  // what was passed over to reach these cards and not a total.
+  // Roughly half the rows Bubble holds are abandoned blanks, so the window is
+  // filtered rather than shown as-is; `skipped` is how many of these two days'
+  // rows were blank.
   const requests: ToolRequest[] = []
   let skipped = 0
   for (const request of recent) {
-    if (requests.length === VISIBLE_REQUESTS) break
     if (hasContent(request)) requests.push(request)
     else skipped++
   }
@@ -76,8 +75,8 @@ async function RequestList() {
           <EmptyTitle>Nothing to show</EmptyTitle>
           <EmptyDescription>
             {skipped > 0
-              ? `The ${skipped} newest rows in Bubble are blank — no job, movement, slot or tools on any of them.`
-              : "Create a request and it will appear here and in the Bubble calendar."}
+              ? `All ${skipped} rows created today and yesterday are blank — no job, movement, slot or tools on any of them.`
+              : "Nothing has been created today or yesterday. Create a request and it will appear here and in the Bubble calendar."}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -91,7 +90,7 @@ async function RequestList() {
     <div className="flex flex-col gap-3">
       {/* {skipped > 0 && (
         <p className="text-sm text-muted-foreground">
-          {skipped} newer {skipped === 1 ? "row" : "rows"} hidden: no job,
+          {skipped} blank {skipped === 1 ? "row" : "rows"} hidden: no job,
           movement, slot or tools on {skipped === 1 ? "it" : "them"}.
         </p>
       )} */}
