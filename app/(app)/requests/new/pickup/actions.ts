@@ -6,11 +6,13 @@ import { listJobs } from "@/lib/bubble/reference"
 import { listToolsForJob, type PickupTool } from "@/lib/bubble/pickup-tools"
 import { newYorkInstant } from "@/lib/bubble/dates"
 import { buildSummary } from "@/lib/notify"
+import { requireSession } from "@/lib/auth/session"
 import { pickupRequestFormSchema } from "@/lib/schemas/pickup-request"
 import type { CreateRequestState } from "@/app/(app)/requests/action-state"
 
 /** The client component can't call server-only Bubble code directly — this is that seam. */
 export async function fetchToolsForJobAction(jobName: string): Promise<PickupTool[]> {
+  await requireSession()
   return listToolsForJob(jobName)
 }
 
@@ -20,6 +22,8 @@ export async function fetchToolsForJobAction(jobName: string): Promise<PickupToo
  * not a security boundary.
  */
 export async function createPickupRequestAction(input: unknown): Promise<CreateRequestState> {
+  await requireSession()
+
   const parsed = pickupRequestFormSchema.safeParse(input)
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {}

@@ -1,12 +1,17 @@
+import { CheckCircle2Icon, ListChecksIcon, PackageOpenIcon, TruckIcon, WrenchIcon } from "lucide-react"
 import type { Metadata } from "next"
+import Link from "next/link"
 import { Suspense } from "react"
 
 import { NewRequestDialog, NewRequestFab } from "@/components/new-request-dialog"
+import { RequestStatusBadge } from "@/components/request-status-badge"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkDayLabel, newYorkDaysAgo, newYorkInstant } from "@/lib/bubble/dates"
+import type { RequestStatus } from "@/lib/bubble/enums"
 import { hasContent, listRequestsSince, type ToolRequest } from "@/lib/bubble/requests"
 import { cn } from "@/lib/utils"
 
@@ -144,6 +149,58 @@ function themeFor(request: ToolRequest) {
 }
 
 /**
+ * The one thing to do next, per status — the same lifecycle step the detail
+ * page's `NextAction` offers, as the second footer button on a card.
+ *
+ * Dispatch (2B) and offload (2C) aren't built, so `href` is null and the step
+ * shows as a disabled button rather than being hidden: the lifecycle is easier
+ * to read when the whole of it is on screen and only the unbuilt part is greyed
+ * out. Each step carries its own `--status-*` ramp from `globals.css` — the
+ * same palette `RequestStatusBadge` uses — so the footer button and the header
+ * badge say the same thing in the same hue: blue while tools are being named,
+ * amber while it is moving, green once it has landed.
+ */
+const NEXT_ACTIONS: Record<
+  RequestStatus,
+  {
+    label: string
+    icon: typeof WrenchIcon
+    /** Appended to `/requests/{id}`; `null` means the step has no screen yet. */
+    href: string | null
+    className: string
+  }
+> = {
+  New: {
+    label: "Assign tools",
+    icon: WrenchIcon,
+    href: "/assign",
+    className:
+      "border-status-active/40 bg-status-active/20 text-status-active-foreground hover:bg-status-active/35 dark:bg-status-active/25",
+  },
+  Assigned: {
+    label: "Dispatch",
+    icon: TruckIcon,
+    href: null,
+    className:
+      "border-status-attention/40 bg-status-attention/25 text-status-attention-foreground hover:bg-status-attention/40 dark:bg-status-attention/30",
+  },
+  "In Transit": {
+    label: "Offload",
+    icon: PackageOpenIcon,
+    href: null,
+    className:
+      "border-status-repair/40 bg-status-repair/25 text-status-repair-foreground hover:bg-status-repair/40 dark:bg-status-repair/30",
+  },
+  Delivered: {
+    label: "Delivered",
+    icon: CheckCircle2Icon,
+    href: null,
+    className:
+      "border-status-ok/40 bg-status-ok/25 text-status-ok-foreground hover:bg-status-ok/40 dark:bg-status-ok/30",
+  },
+}
+
+/**
  * A request is a delivery date, a pickup date, or (rarely) both — and either
  * way only the start date is shown, so the box's own label follows suit
  * rather than always reading the generic "Date" a two-sided request needs.
@@ -156,6 +213,8 @@ function dateLabelFor(request: ToolRequest) {
 
 function RequestCard({ request }: { request: ToolRequest }) {
   const theme = themeFor(request)
+  const action = NEXT_ACTIONS[request.status]
+  const ActionIcon = action.icon
   const totalTools = request.tools.reduce((sum, tool) => sum + tool.quantity, 0)
   const hasNotes = request.notes || request.toolsNotes
 
@@ -168,18 +227,22 @@ function RequestCard({ request }: { request: ToolRequest }) {
   return (
     <Card data-size="sm" className="flex h-130 flex-col gap-0 overflow-hidden p-0">
       <div className={cn("flex justify-between gap-2 border-b px-4 py-3", theme.header)}>
-        <CardTitle className="text-base leading-snug wrap-anywhere">{request.job}</CardTitle>
+        {/* The title is the link rather than the whole card: the card body
+            scrolls, and an overlay covering it to make it clickable would
+            swallow that scroll. */}
+        <CardTitle className="text-base leading-snug wrap-anywhere">
+          <Link href={`/requests/${request.id}`} className="hover:underline">
+            {request.job}
+          </Link>
+        </CardTitle>
         <Badge className={cn("items-center justify-center tracking-wide uppercase", theme.badge)}>{theme.label}</Badge>
       </div>
       <CardHeader className="shrink-0 gap-2 pt-3">
-        {(request.completed || request.tentative) && (
-          <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {request.completed && <Badge>Completed</Badge>}
-              {request.tentative && <Badge variant="outline">Tentative</Badge>}
-            </div>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <RequestStatusBadge status={request.status} />
+          {request.completed && <Badge>Completed</Badge>}
+          {request.tentative && <Badge variant="outline">Tentative</Badge>}
+        </div>
 
         {/* <CardTitle className="text-lg leading-snug wrap-anywhere">{request.job}</CardTitle> */}
 
@@ -285,6 +348,34 @@ function RequestCard({ request }: { request: ToolRequest }) {
           )}
         </div>
       </CardContent>
+
+      {/* The two things to do with a card: read the whole lifecycle, or take
+          the next step in it. Pinned below the scroll area so both stay
+          reachable however long the tool list is. */}
+      <CardFooter className="shrink-0 gap-2 border-t pb-(--card-spacing)">
+        <Link
+          href={`/requests/${request.id}`}
+          className={buttonVariants({ variant: "outline", size: "sm", className: "min-w-0 flex-1" })}
+        >
+          <ListChecksIcon />
+          <span className="truncate">View Request</span>
+        </Link>
+
+        {action.href ? (
+          <Link
+            href={`/requests/${request.id}${action.href}`}
+            className={buttonVariants({ size: "sm", className: cn("min-w-0 flex-1", action.className) })}
+          >
+            <ActionIcon />
+            <span className="truncate">{action.label}</span>
+          </Link>
+        ) : (
+          <Button size="sm" disabled className={cn("min-w-0 flex-1", action.className)}>
+            <ActionIcon />
+            <span className="truncate">{action.label}</span>
+          </Button>
+        )}
+      </CardFooter>
     </Card>
   )
 }

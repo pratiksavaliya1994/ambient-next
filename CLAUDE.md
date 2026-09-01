@@ -8,9 +8,11 @@ The project lives in `next-ambient/` — the working root for all commands. The 
 
 Next.js frontend for the Tipp Floor Covering / Ambient Flooring tool workflow. **Bubble.io stays as the database and backend; there is no application database.** Next.js replaces only the UI.
 
-**Scope built:** request creation. A PM picks a job, job type, date + slot, tool _types with quantities_, and optional free-text materials; submit writes one `request` row and one `requestedtools` row. A list page reads requests back with tool types and counts.
+**Scope built:** request creation (delivery + pickup), and a Tools dashboard. A PM picks a job, job type, date + slot, tool _types with quantities_, and optional free-text materials; submit writes one `request` row and one `requestedtools` row. A list page reads requests back with tool types and counts. The Pickup flow additionally picks physical `tools` rows and writes their `status` back.
 
-**Not built:** assigning specific tools, approve/reject, QR scanning, GPS.
+**In progress — phase 2:** the request lifecycle (assign → dispatch → offload) and the tool location lifecycle. Design and build sheets live in [`docs/phase-2-lifecycle.md`](docs/phase-2-lifecycle.md); **read that before touching `tools`, `assignedtools`, or `request.status`.** The Bubble Studio steps are in [`docs/bubble-request-status-workflow.md`](docs/bubble-request-status-workflow.md).
+
+**Not built:** approve/reject, QR scanning, GPS.
 
 ## Before changing anything
 
@@ -128,9 +130,15 @@ The 14 half-hour slots the Bubble calendar lays requests out on (`06:00 a.m. to 
 
 6 rows, one per job type with a default list ("Fast Request" and "Simple Grind" have none). `List` is the default free text (newline-separated `Concrete:`, `6x6 welded wire:` …); `realtedTo` is the same misspelled option-set-list shape. A _starting point_ for the form's Materials popup, not a picker — PMs type free text; there's no material catalogue.
 
+### `tools`
+
+Individual physical units, distinct from the `toolstype` catalogue. Read by the Pickup flow and the Tools dashboard (`lib/bubble/pickup-tools.ts`), never memoised — status and location are exactly what changes between visits. `name`; `type` (a **real link** to `toolstype._id`); `location` (free text matching a `jobs.name` exactly, or `"Warehouse"`, or blank → `NO_LOCATION`); `status` (option set — see `TOOL_STATUS`); `floor`; `currentUser` (a display-name text, not a `user` link, empty on most rows).
+
+The only write today is the Pickup flow's per-tool `status` write-back, fanned out inside Bubble from `new-pickup-request` — see `bubble-pickup-tool-status-workflow.md`. Phase 2 makes `status` carry a lifecycle and writes `location` on offload; see [`docs/phase-2-lifecycle.md`](docs/phase-2-lifecycle.md). Note the old Bubble UI is a **second writer** of these fields via the pre-existing `/wf/Set Status` and `/wf/Set Location`.
+
 ### Types this app does not touch
 
-`tools`, `toolshistory`, `consumables`, `materialsfromebom`. `notifications` is written from inside Bubble by the `new-request` workflow (step 5), mirroring the old page workflow.
+`toolshistory`, `consumables`, `materialsfromebom`. `notifications` is written from inside Bubble by the `new-request` workflow (step 5), mirroring the old page workflow.
 
 `requestedmaterials` (`jobType` + free-text `materials`, one row per request) isn't written here either — the workflow owns row creation. The form sends `materials` on every submit (empty string when none), but **the workflow doesn't yet turn a non-empty value into a row** — that step still needs adding on the Bubble side. The summary line for it is already live in `buildSummary`.
 
@@ -223,6 +231,6 @@ Two non-obvious bits: the shell's sidebar open/collapsed state round-trips throu
 
 ### Where to go next
 
-- Assigning specific `tools` rows to a request. The schema makes this awkward — `requestedtools` links to nothing, so an assignment has no natural home without a new field, which is a thing to raise rather than invent.
+- Assigning specific `tools` rows to a request — **now phase 2A**, designed and in progress. `requestedtools` links to nothing, so an assignment had no natural home; the answer agreed with the user is a new `assignedtools` child type mirroring `requestedtools`, plus `request.status` and `request.driver`. Start at [`docs/phase-2a-assignment.md`](docs/phase-2a-assignment.md).
 - The `new-request` workflow's `requestedmaterials` step: create a row (`materials` + `toDo` as `jobType`) when the form's `materials` field is non-empty, the same way it already creates `requestedtools`. This app already sends it.
 - `request.pictures` is a text field, unused here.

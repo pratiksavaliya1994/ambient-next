@@ -11,6 +11,13 @@ export type CreateRequestState =
   | { status: "idle" }
   | { status: "invalid"; message: string; fieldErrors: Record<string, string> }
   | { status: "error"; message: string }
-  | { status: "created"; requestId: string; job: string }
+  /**
+   * `warning` is the "it landed, but not all of it" case, used by the assign
+   * action: the `assignedtools` rows committed and a follow-up `tools.status`
+   * write didn't. Reporting that as an error would be a lie about a save that
+   * actually happened, and reporting it as a clean success hides real drift.
+   * The create form never sets it and ignores it.
+   */
+  | { status: "created"; requestId: string; job: string; warning?: string }
 
 export const INITIAL_CREATE_STATE: CreateRequestState = { status: "idle" }

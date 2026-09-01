@@ -2,9 +2,15 @@ import "server-only"
 
 import { z } from "zod"
 
-import { bubbleList, bubbleListAll, bubbleRunWorkflow, type BubbleThing } from "@/lib/bubble/client"
+import { bubbleGet, bubbleList, bubbleListAll, bubbleRunWorkflow, type BubbleThing } from "@/lib/bubble/client"
 import { newYorkInstant, newYorkStamp } from "@/lib/bubble/dates"
-import { DEFAULT_REQUEST_ORDER, requestColor } from "@/lib/bubble/enums"
+import {
+  DEFAULT_REQUEST_ORDER,
+  DEFAULT_REQUEST_STATUS,
+  REQUEST_STATUS,
+  requestColor,
+  type RequestStatus,
+} from "@/lib/bubble/enums"
 import type { Job } from "@/lib/bubble/reference-types"
 import { formatToolStatusUpdates } from "@/lib/bubble/tool-status-updates"
 import { formatToolsSummary, parseToolsSummary, type ToolLine } from "@/lib/bubble/tools-summary"
@@ -49,6 +55,13 @@ const requestRow = z.looseObject({
   requestDate: z.string().optional(),
   requestDateStart: z.string().optional(),
   requestDateEnd: z.string().optional(),
+  // Phase 2. Both are plain text in Bubble and neither exists on the live
+  // schema yet, so both are absent on every row today and read as their
+  // defaults. `status` is an enum rather than a string on purpose: it is text
+  // precisely so that an unexpected value fails loudly here instead of
+  // silently on a Bubble option-set write.
+  status: z.enum(REQUEST_STATUS).optional(),
+  driver: z.string().optional(),
 })
 
 const requestedToolsRow = z.looseObject({
@@ -97,6 +110,10 @@ export type ToolRequest = {
   toolsNotes: string | null
   /** Lines from the request's `requestedmaterials` row(s), free text. */
   materials: string[]
+  /** Phase 2 lifecycle. A row with no `status` is `New`. */
+  status: RequestStatus
+  /** Phase 2B. The driver/PM's name, same free-text convention as `fieldPM2`. */
+  driver: string | null
 }
 
 /** Stands in for `request.job` when the Bubble row has none. */
@@ -149,6 +166,8 @@ function toToolRequest(
     tools: lines,
     toolsNotes,
     materials,
+    status: row.status ?? DEFAULT_REQUEST_STATUS,
+    driver: row.driver?.trim() || null,
   }
 }
 
@@ -189,6 +208,27 @@ export async function listRequestsSince(since: Date): Promise<ToolRequest[]> {
   })
 
   return withLines(rows.map((row: BubbleThing) => requestRow.parse(row)))
+}
+
+/**
+ * One request with its tool and material lines, for the detail and assign
+ * screens.
+ *
+ * Goes through the same `withLines` helper as the list calls, with a one-row
+ * array, rather than reading the request's `requestedtools` row directly: a
+ * request can carry several of them (the Bubble UI writes a fresh one per
+ * submit) and only `withLines` merges the lines and sums the quantities. An
+ * assign screen reading one row would silently offer fewer slots than were
+ * asked for.
+ *
+ * Two calls, not one — `bubbleGet` for the header, then the `in` lookups.
+ */
+export async function getRequest(id: string): Promise<ToolRequest | null> {
+  const row = await bubbleGet(REQUEST, id)
+  if (!row) return null
+
+  const [request] = await withLines([requestRow.parse(row)])
+  return request ?? null
 }
 
 /** The second half of both list calls: one `in` lookup each for tools and materials. */

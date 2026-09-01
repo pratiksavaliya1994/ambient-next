@@ -5,6 +5,7 @@ import { createToolRequest } from "@/lib/bubble/requests"
 import { listJobs } from "@/lib/bubble/reference"
 import { newYorkInstant } from "@/lib/bubble/dates"
 import { buildSummary } from "@/lib/notify"
+import { requireSession } from "@/lib/auth/session"
 import { requestFormSchema } from "@/lib/schemas/request"
 import type { CreateRequestState } from "./action-state"
 
@@ -15,7 +16,10 @@ import type { CreateRequestState } from "./action-state"
  * browser's validation is not a security boundary.
  */
 export async function createRequestAction(input: unknown): Promise<CreateRequestState> {
-  // const session = await requireSession()
+  // The submitter's identity isn't used — `fieldPM2` is what owns a request and
+  // `Created By` is the API token's owner regardless. This is the auth boundary,
+  // nothing more: `proxy.ts` redirects for UX and is not one (CVE-2025-29927).
+  await requireSession()
 
   const parsed = requestFormSchema.safeParse(input)
   if (!parsed.success) {
