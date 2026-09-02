@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react"
 import { AlertCircleIcon, RotateCcwIcon, SaveIcon, XIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { INITIAL_CREATE_STATE, type CreateRequestState } from "@/app/(app)/requests/action-state"
 import { assignToolsAction } from "@/app/(app)/requests/[requestId]/assign/actions"
@@ -63,6 +64,7 @@ export function AssignToolsPanel({
   )
   const [state, setState] = useState<CreateRequestState>(INITIAL_CREATE_STATE)
   const [pending, startTransition] = useTransition()
+  const router = useRouter()
 
   const candidatesByType = useMemo(() => {
     const byType = new Map<string, CandidateTool[]>()
@@ -174,6 +176,7 @@ export function AssignToolsPanel({
           title: result.warning ? "Assignment saved with a warning" : "Assignment saved",
           description: result.warning ?? `${result.job} has its tools.`,
         })
+        router.push(`/requests/${requestId}`)
       }
     })
   }

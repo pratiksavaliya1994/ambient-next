@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, WrenchIcon } from "lucide-react"
+import { ArrowLeftIcon, CheckIcon, WrenchIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
@@ -6,8 +6,17 @@ import { notFound } from "next/navigation"
 import { RequestStatusBadge, statusIcon, statusIndex } from "@/components/request-status-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import {
+  Stepper,
+  StepperIndicator,
+  StepperItem,
+  StepperNav,
+  StepperSeparator,
+  StepperTitle,
+  StepperTrigger,
+} from "@/components/ui/stepper"
 import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { buildSlots, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
@@ -42,32 +51,28 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-2">
-          <Link
-            href="/requests"
-            className={buttonVariants({
-              variant: "ghost",
-              size: "sm",
-              className: "-ml-2 w-fit text-muted-foreground",
-            })}
-          >
-            <ArrowLeftIcon />
-            Back to requests
-          </Link>
-          <h1 className="text-xl font-medium wrap-anywhere">{request.job}</h1>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <RequestStatusBadge status={request.status} />
-            {request.toDo && <Badge variant="secondary">{request.toDo}</Badge>}
-            {request.weAre && <Badge variant="outline">{request.weAre}</Badge>}
-            {request.delivery && <Badge variant="outline">Delivery</Badge>}
-            {request.pickup && <Badge variant="outline">Pickup</Badge>}
-            {request.tentative && <Badge variant="outline">Tentative</Badge>}
-            {request.completed && <Badge>Completed</Badge>}
-          </div>
+      <div className="flex flex-col gap-2">
+        <Link
+          href="/requests"
+          className={buttonVariants({
+            variant: "ghost",
+            size: "sm",
+            className: "-ml-2 w-fit text-muted-foreground",
+          })}
+        >
+          <ArrowLeftIcon />
+          Back to requests
+        </Link>
+        <h1 className="text-xl font-medium wrap-anywhere">{request.job}</h1>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <RequestStatusBadge status={request.status} />
+          {request.toDo && <Badge variant="secondary">{request.toDo}</Badge>}
+          {request.weAre && <Badge variant="outline">{request.weAre}</Badge>}
+          {request.delivery && <Badge variant="outline">Delivery</Badge>}
+          {request.pickup && <Badge variant="outline">Pickup</Badge>}
+          {request.tentative && <Badge variant="outline">Tentative</Badge>}
+          {request.completed && <Badge>Completed</Badge>}
         </div>
-
-        <NextAction request={request} />
       </div>
 
       <StatusStepper status={request.status} />
@@ -121,6 +126,9 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                 {extraToolIds.length > 0 &&
                   ` · ${extraToolIds.length} extra ${extraToolIds.length === 1 ? "tool" : "tools"}`}
               </span>
+              <CardAction>
+                <NextAction request={request} />
+              </CardAction>
             </CardHeader>
             <CardContent>
               {slots.length === 0 ? (
@@ -285,34 +293,35 @@ function StatusStepper({ status }: { status: RequestStatus }) {
   const current = statusIndex(status)
 
   return (
-    <ol className="flex flex-col divide-y overflow-hidden rounded-lg border sm:flex-row sm:divide-x sm:divide-y-0">
-      {REQUEST_STATUS.map((step, index) => {
-        const Icon = statusIcon(step)
-        const done = index < current
-        const active = index === current
+    <Stepper value={current + 1} indicators={{ completed: <CheckIcon className="size-3.5" /> }}>
+      <StepperNav className="gap-3">
+        {REQUEST_STATUS.map((step, index) => {
+          const Icon = statusIcon(step)
 
-        return (
-          <li
-            key={step}
-            className={cn(
-              "flex flex-1 items-center gap-2 p-3 text-sm",
-              done && "bg-status-ok/20 font-medium text-status-ok-foreground",
-              active && "bg-status-active/20 font-medium text-status-active-foreground",
-              !active && !done && "bg-muted/40 text-muted-foreground"
-            )}
-          >
-            <Icon
-              className={cn(
-                "size-4 shrink-0",
-                done && "text-status-ok-foreground",
-                active && "text-status-active-foreground"
+          return (
+            <StepperItem key={step} step={index + 1} className="relative items-start">
+              <StepperTrigger render={<div />} className="flex grow cursor-default flex-col items-start gap-2.5">
+                <StepperIndicator className="size-8 border-2 data-[state=completed]:border-status-ok data-[state=completed]:bg-status-ok data-[state=completed]:text-white data-[state=inactive]:border-border data-[state=inactive]:bg-transparent data-[state=inactive]:text-muted-foreground">
+                  <Icon className="size-4" />
+                </StepperIndicator>
+                <div className="flex flex-col items-start gap-1">
+                  {/* <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                    Step {index + 1}
+                  </span> */}
+                  <StepperTitle className="text-sm font-semibold data-[state=active]:text-status-active-foreground data-[state=completed]:text-status-ok-foreground data-[state=inactive]:text-muted-foreground">
+                    {step}
+                  </StepperTitle>
+                </div>
+              </StepperTrigger>
+
+              {index < REQUEST_STATUS.length - 1 && (
+                <StepperSeparator className="absolute inset-x-0 start-9 top-4 m-0 group-data-[orientation=horizontal]/stepper-nav:w-[calc(100%-2rem)] group-data-[orientation=horizontal]/stepper-nav:flex-none group-data-[state=completed]/step:bg-status-ok" />
               )}
-            />
-            <span className="truncate">{step}</span>
-          </li>
-        )
-      })}
-    </ol>
+            </StepperItem>
+          )
+        })}
+      </StepperNav>
+    </Stepper>
   )
 }
 
