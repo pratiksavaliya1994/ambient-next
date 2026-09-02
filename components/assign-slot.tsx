@@ -60,10 +60,10 @@ export function AssignSlotCard({
   const full = chosen.length >= slot.requested
 
   return (
-    <div className="flex flex-col gap-2 border-b p-4 last:border-b-0">
+    <div className="flex flex-col gap-2 border-b bg-muted/40 p-4 last:border-b-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-medium" title={slot.toolType}>
+          <span className="truncate text-sm font-semibold" title={slot.toolType}>
             {slot.toolType}
           </span>
           {slot.consumable ? (
@@ -74,7 +74,7 @@ export function AssignSlotCard({
                 "tabular-nums",
                 full
                   ? "border-transparent bg-status-ok/15 text-status-ok-foreground"
-                  : "border-transparent bg-muted text-muted-foreground"
+                  : "border-transparent bg-background text-muted-foreground"
               )}
             >
               {chosen.length} of {slot.requested}
@@ -173,9 +173,9 @@ export function AssignSlotCard({
           </EmptyHeader>
         </Empty>
       ) : (
-        <ul className="divide-y overflow-hidden rounded-lg border">
+        <ul className="flex flex-col gap-1.5 border-l-2 border-muted-foreground/25 pl-3">
           {chosen.map((tool) => (
-            <li key={tool.id} className="flex items-center gap-3 px-3 py-2">
+            <li key={tool.id} className="flex items-center gap-3 rounded-md border bg-background px-2.5 py-1.5">
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-sm" title={tool.name}>
                   {tool.name}

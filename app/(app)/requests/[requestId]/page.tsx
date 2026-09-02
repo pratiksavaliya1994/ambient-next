@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
-import { listAssignedTools } from "@/lib/bubble/assigned-tools"
-import { buildSlots, type AssignSlot } from "@/lib/bubble/assigned-tools-types"
+import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
+import { buildSlots, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
 import { REQUEST_STATUS, type RequestStatus } from "@/lib/bubble/enums"
 import { listToolTypes } from "@/lib/bubble/reference"
@@ -21,11 +21,10 @@ export const metadata: Metadata = { title: "Request" }
 /**
  * One request, and what to do with it next.
  *
- * Deliberately light: the header comes from `getRequest`, and the only extra
- * read is the request's own `assignedtools` rows — a single `in` query on a
- * child table. It does **not** touch the `tools` table, so it stays fast
- * whatever state the request is in; naming the physical tools is the assign
- * screen's job, and that screen pays for it.
+ * The header comes from `getRequest`; `assignedtools` is one `in` query on a
+ * child table, and naming the assigned tools is one more `in` query on `tools`
+ * by the ids that query returned — no table scan, whatever state the request
+ * is in.
  */
 export default async function RequestDetailPage({ params }: { params: Promise<{ requestId: string }> }) {
   const { requestId } = await params
@@ -36,8 +35,13 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   const [assigned, toolTypes] = await Promise.all([listAssignedTools([request.id]), listToolTypes()])
   const { slots, extraToolIds } = buildSlots(request.tools, assigned, toolTypes)
 
+  const toolIds = [...slots.flatMap((slot) => slot.toolIds), ...extraToolIds]
+  const resolvedTools = await listToolsByIds([...new Set(toolIds)])
+  const toolsById = new Map(resolvedTools.map((tool) => [tool.id, tool]))
+  const extraTools = extraToolIds.map((id) => toolsById.get(id)).filter((tool): tool is CandidateTool => Boolean(tool))
+
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-2">
           <Link
@@ -68,89 +72,181 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
 
       <StatusStepper status={request.status} />
 
-      <Card data-size="sm">
-        <CardHeader>
-          <CardTitle className="text-base">Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
-            <Fact label="Date" value={newYorkDayLabel(request.start ?? request.end)} />
-            <Fact label="Until" value={request.end ? newYorkDayLabel(request.end) : null} />
-            <Fact label="Window" value={request.timeRange} />
-            <Fact label="Field PM" value={request.fieldPm} />
-            <Fact label="Floor" value={request.floor} />
-            <Fact label="Driver" value={request.driver} />
-            <Fact label="Contact" value={request.contact} sub={request.contactPhone} />
-          </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+        {/* Left column — the request itself */}
+        <div className="flex flex-col gap-6">
+          <Card data-size="sm">
+            <CardHeader>
+              <CardTitle className="text-base">Details</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-[auto_1fr] divide-x overflow-hidden rounded-lg border bg-background/70">
+                <div className="flex min-w-28 flex-col gap-1 p-3">
+                  <FactLabel>{dateLabelFor(request)}</FactLabel>
+                  <span className="text-base leading-tight font-semibold wrap-anywhere">
+                    {newYorkDayLabel(request.start ?? request.end)}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1 p-3">
+                  <FactLabel>Window</FactLabel>
+                  <span className="text-sm leading-snug wrap-anywhere">{request.timeRange || "Not set"}</span>
+                </div>
+              </div>
 
-          {(request.notes || request.toolsNotes) && (
-            <div className="mt-4 flex flex-col gap-3 border-t pt-4">
-              {request.notes && <Note label="Notes">{request.notes}</Note>}
-              {request.toolsNotes && <Note label="Tool notes">{request.toolsNotes}</Note>}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
+                <Fact label="Until" value={request.end ? newYorkDayLabel(request.end) : null} />
+                <Fact label="Field PM" value={request.fieldPm} />
+                <Fact label="Floor" value={request.floor} />
+                <Fact label="Driver" value={request.driver} />
+                <Fact label="Contact" value={request.contact} sub={request.contactPhone} />
+              </div>
 
-      <Card data-size="sm">
-        <CardHeader>
-          <CardTitle className="text-base">Requested tools</CardTitle>
-          <span className="text-sm text-muted-foreground tabular-nums">
-            {assignedCount(slots)} of {requestedCount(slots)} assigned
-            {extraToolIds.length > 0 &&
-              ` · ${extraToolIds.length} extra ${extraToolIds.length === 1 ? "tool" : "tools"}`}
-          </span>
-        </CardHeader>
-        <CardContent>
-          {slots.length === 0 ? (
-            <Empty className="border border-dashed py-8">
-              <EmptyHeader>
-                <EmptyTitle>No tools requested</EmptyTitle>
-                <EmptyDescription>
-                  This request has no tool line — there is nothing to assign against.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <ul className="divide-y overflow-hidden rounded-lg border">
-              {slots.map((slot) => (
-                <li key={slot.toolType} className="flex items-center justify-between gap-4 px-3 py-2">
-                  <span className="min-w-0 flex-1 text-sm wrap-anywhere">{slot.toolType}</span>
-                  {slot.consumable ? (
-                    <Badge variant="outline">Consumable</Badge>
-                  ) : (
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 items-center rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
-                        slot.toolIds.length >= slot.requested
-                          ? "bg-status-ok/15 text-status-ok-foreground"
-                          : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {slot.toolIds.length} of {slot.requested}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+              {(request.notes || request.toolsNotes) && (
+                <div className="mt-4 flex flex-col gap-3 border-t pt-4">
+                  {request.notes && <Note label="Notes">{request.notes}</Note>}
+                  {request.toolsNotes && <Note label="Tool notes">{request.toolsNotes}</Note>}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right column — tools to assign + materials */}
+        <div className="flex flex-col gap-6">
+          <Card data-size="sm">
+            <CardHeader>
+              <CardTitle className="text-base">Requested tools</CardTitle>
+              <span className="text-sm text-muted-foreground tabular-nums">
+                {assignedCount(slots)} of {requestedCount(slots)} assigned
+                {extraToolIds.length > 0 &&
+                  ` · ${extraToolIds.length} extra ${extraToolIds.length === 1 ? "tool" : "tools"}`}
+              </span>
+            </CardHeader>
+            <CardContent>
+              {slots.length === 0 ? (
+                <Empty className="border border-dashed py-8">
+                  <EmptyHeader>
+                    <EmptyTitle>No tools requested</EmptyTitle>
+                    <EmptyDescription>
+                      This request has no tool line — there is nothing to assign against.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <ul className="divide-y overflow-hidden rounded-lg border">
+                  {slots.map((slot) => {
+                    const tools = slot.toolIds
+                      .map((id) => toolsById.get(id))
+                      .filter((tool): tool is CandidateTool => Boolean(tool))
+
+                    return (
+                      <li key={slot.toolType} className="flex flex-col gap-2 bg-muted/40 px-3 py-2">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="min-w-0 flex-1 text-sm font-semibold wrap-anywhere">{slot.toolType}</span>
+                          {slot.consumable ? (
+                            <Badge variant="outline">Consumable</Badge>
+                          ) : (
+                            <span
+                              className={cn(
+                                "inline-flex shrink-0 items-center rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
+                                slot.toolIds.length >= slot.requested
+                                  ? "bg-status-ok/15 text-status-ok-foreground"
+                                  : "bg-background text-muted-foreground"
+                              )}
+                            >
+                              {slot.toolIds.length} of {slot.requested}
+                            </span>
+                          )}
+                        </div>
+
+                        {tools.length > 0 && (
+                          <ul className="flex flex-col gap-1.5 border-l-2 border-muted-foreground/25 pl-3">
+                            {tools.map((tool) => (
+                              <li
+                                key={tool.id}
+                                className="flex flex-col gap-0.5 rounded-md border bg-background px-2.5 py-1.5"
+                              >
+                                <span className="text-sm wrap-anywhere" title={tool.name}>
+                                  {tool.name}
+                                </span>
+                                <span className="text-xs wrap-anywhere text-muted-foreground">
+                                  {tool.location}
+                                  {tool.floor && ` · Floor ${tool.floor}`}
+                                  {tool.status && ` · ${tool.status}`}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+
+              {extraTools.length > 0 && (
+                <div className="mt-4 flex flex-col gap-2 border-t pt-4">
+                  <FactLabel>Extra tools</FactLabel>
+                  <div className="rounded-lg bg-muted/40 p-3">
+                    <ul className="flex flex-col gap-1.5 border-l-2 border-muted-foreground/25 pl-3">
+                      {extraTools.map((tool) => (
+                        <li
+                          key={tool.id}
+                          className="flex items-center gap-3 rounded-md border bg-background px-2.5 py-1.5"
+                        >
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <span className="truncate text-sm" title={tool.name}>
+                              {tool.name}
+                            </span>
+                            <span className="truncate text-xs text-muted-foreground">
+                              {tool.typeName ?? "No type"} · {tool.location}
+                            </span>
+                          </div>
+                          <Badge variant="outline">Extra</Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {request.materials.length > 0 && (
-            <div className="mt-4 flex flex-col gap-1 border-t pt-4">
-              <FactLabel>Materials</FactLabel>
-              <ul className="text-sm">
-                {request.materials.map((line, index) => (
-                  <li key={index} className="wrap-anywhere">
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <Card data-size="sm">
+              <CardHeader>
+                <CardTitle className="text-base">Materials</CardTitle>
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  {request.materials.length} {request.materials.length === 1 ? "line" : "lines"}
+                </span>
+              </CardHeader>
+              <CardContent>
+                <ul className="divide-y overflow-hidden rounded-lg border">
+                  {request.materials.map((line, index) => (
+                    <li key={index} className="px-3 py-2 text-sm wrap-anywhere">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
+}
+
+/**
+ * A request is a delivery date, a pickup date, or (rarely) both — and either
+ * way only the start date is shown, so the tile's own label follows suit
+ * rather than always reading the generic "Date" a two-sided request needs.
+ * Mirrors the listing page's `dateLabelFor`.
+ */
+function dateLabelFor(request: ToolRequest) {
+  if (request.pickup && !request.delivery) return "Pickup date"
+  if (request.delivery && !request.pickup) return "Drop date"
+  return "Date"
 }
 
 function requestedCount(slots: AssignSlot[]): number {
@@ -189,7 +285,7 @@ function StatusStepper({ status }: { status: RequestStatus }) {
   const current = statusIndex(status)
 
   return (
-    <ol className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
+    <ol className="flex flex-col divide-y overflow-hidden rounded-lg border sm:flex-row sm:divide-x sm:divide-y-0">
       {REQUEST_STATUS.map((step, index) => {
         const Icon = statusIcon(step)
         const done = index < current
@@ -199,12 +295,19 @@ function StatusStepper({ status }: { status: RequestStatus }) {
           <li
             key={step}
             className={cn(
-              "flex items-center gap-2 bg-background p-3 text-sm",
-              active && "bg-muted font-medium",
-              !active && !done && "text-muted-foreground"
+              "flex flex-1 items-center gap-2 p-3 text-sm",
+              done && "bg-status-ok/20 font-medium text-status-ok-foreground",
+              active && "bg-status-active/20 font-medium text-status-active-foreground",
+              !active && !done && "bg-muted/40 text-muted-foreground"
             )}
           >
-            <Icon className={cn("size-4 shrink-0", done && "text-status-ok-foreground")} />
+            <Icon
+              className={cn(
+                "size-4 shrink-0",
+                done && "text-status-ok-foreground",
+                active && "text-status-active-foreground"
+              )}
+            />
             <span className="truncate">{step}</span>
           </li>
         )
