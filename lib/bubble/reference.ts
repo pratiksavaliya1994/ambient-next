@@ -4,9 +4,9 @@ import { z } from "zod"
 
 import { bubbleListAll } from "@/lib/bubble/client"
 import { TO_DO, type ToDo } from "@/lib/bubble/enums"
-import type { FieldPm, Job, MaterialDefault, TimeSlot, ToolType } from "@/lib/bubble/reference-types"
+import type { AppUser, FieldPm, Job, MaterialDefault, TimeSlot, ToolType } from "@/lib/bubble/reference-types"
 
-export type { FieldPm, Job, MaterialDefault, TimeSlot, ToolType }
+export type { AppUser, FieldPm, Job, MaterialDefault, TimeSlot, ToolType }
 export { defaultMaterialsFor, toolTypesFor } from "@/lib/bubble/reference-types"
 
 /**
@@ -162,6 +162,30 @@ export function listFieldPms(): Promise<FieldPm[]> {
         name: row.Name!,
         company: row.Company ?? null,
       }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  })
+}
+
+// ---------------------------------------------------------------- users
+
+/**
+ * The Bubble `user` type — this app's own signed-in accounts, distinct from
+ * `pms`. Neither table is an actual driver roster (see
+ * `docs/phase-2bc-dispatch-offload.md`), so the Dispatch board offers both as
+ * a convenience and `request.driver` stays free text either way.
+ */
+const userRow = z.looseObject({
+  _id: z.string(),
+  displayName: z.string().optional(),
+})
+
+export function listUsers(): Promise<AppUser[]> {
+  return cached("user", async () => {
+    const rows = await bubbleListAll("user")
+    return rows
+      .map((row) => userRow.parse(row))
+      .map((row) => ({ id: row._id, name: row.displayName?.trim() ?? "" }))
+      .filter((row) => row.name)
       .sort((a, b) => a.name.localeCompare(b.name))
   })
 }

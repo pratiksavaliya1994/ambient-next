@@ -3,7 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardListIcon, LogOutIcon, MapPinIcon, ShoppingCartIcon, TruckIcon } from "lucide-react"
+import { ClipboardListIcon, LogOutIcon, MapPinIcon, NavigationIcon, RouteIcon, ShoppingCartIcon, TruckIcon } from "lucide-react"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import {
@@ -27,11 +27,16 @@ import { signOutAction } from "@/lib/auth/actions"
  * in the Bubble schema, so there is nothing to branch this list on — every
  * signed-in user sees every item.
  *
- * Assignment, approval and materials are deliberately not built yet (see
- * CLAUDE.md); they get entries here when they get routes, not before.
+ * Approval and materials are deliberately not built yet (see CLAUDE.md); they
+ * get entries here when they get routes, not before. Assignment reaches its
+ * screen from a request's detail page instead of a top-level item of its own;
+ * Dispatch is a board like Requests, so it gets one. Active trips is the same
+ * call now that it's split off `/dispatch` onto its own route.
  */
 const NAV_ITEMS = [
   { title: "Requests", href: "/requests", icon: ClipboardListIcon },
+  { title: "Dispatch", href: "/dispatch", icon: RouteIcon },
+  { title: "Active trips", href: "/dispatch/active", icon: NavigationIcon },
   { title: "New delivery request", href: "/requests/new", icon: TruckIcon },
   { title: "New pickup request", href: "/requests/new/pickup", icon: ShoppingCartIcon },
   { title: "Tools", href: "/tools", icon: MapPinIcon },

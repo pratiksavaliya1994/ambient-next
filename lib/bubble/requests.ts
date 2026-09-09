@@ -2,13 +2,14 @@ import "server-only"
 
 import { z } from "zod"
 
-import { bubbleGet, bubbleList, bubbleListAll, bubbleRunWorkflow, type BubbleThing } from "@/lib/bubble/client"
+import { bubbleGet, bubbleList, bubbleListAll, bubbleRunWorkflow, type BubbleThing, type Constraint } from "@/lib/bubble/client"
 import { newYorkInstant, newYorkStamp } from "@/lib/bubble/dates"
 import {
   DEFAULT_REQUEST_ORDER,
   DEFAULT_REQUEST_STATUS,
   REQUEST_STATUS,
   requestColor,
+  TOOL_STATUS_IN_TRANSIT,
   type RequestStatus,
 } from "@/lib/bubble/enums"
 import type { Job } from "@/lib/bubble/reference-types"
@@ -231,6 +232,31 @@ export async function getRequest(id: string): Promise<ToolRequest | null> {
   return request ?? null
 }
 
+/**
+ * Every request at a given lifecycle `status`, optionally narrowed to one
+ * driver's manifest — the Dispatch board's "ready to dispatch" list
+ * (`listRequestsByStatus("Assigned")`) and a driver's live trip
+ * (`listRequestsByStatus("In Transit", driverName)`).
+ *
+ * `status` is text, not an option set (see `REQUEST_STATUS`), so this is a
+ * plain `equals` constraint with no unrecognised-value risk. The ~1,550
+ * pre-phase-2 rows carry no `status` at all — `toToolRequest` reads that as
+ * `New`, but nothing here needs to special-case them, since a row with no
+ * `status` simply never matches `"Assigned"` / `"In Transit"` / `"Delivered"`.
+ */
+export async function listRequestsByStatus(status: RequestStatus, driver?: string): Promise<ToolRequest[]> {
+  const constraints: Constraint[] = [{ key: "status", constraint_type: "equals", value: status }]
+  if (driver) constraints.push({ key: "driver", constraint_type: "equals", value: driver })
+
+  const rows = await bubbleListAll(REQUEST, {
+    constraints,
+    sortField: "Created Date",
+    descending: true,
+  })
+
+  return withLines(rows.map((row: BubbleThing) => requestRow.parse(row)))
+}
+
 /** The second half of both list calls: one `in` lookup each for tools and materials. */
 async function withLines(rows: z.infer<typeof requestRow>[]): Promise<ToolRequest[]> {
   const ids = rows.map((row) => row._id)
@@ -387,9 +413,18 @@ export async function createToolRequest(values: RequestFormValues, job: Job, sum
   // `requestDateStart` is the actual delivery instant — `startDate` at the
   // chosen slot's hour — since ClickUp and the Calendar step both read it as
   // one point in time, not a date. `requestDateEnd` is just the day tools are
-  // needed until, with no appointment of its own, so it stays at midnight.
+  // needed until, with no appointment of its own, so it stays at midnight —
+  // except when the range is a single day, where midnight of that same day
+  // lands *before* `requestDateStart` (start-of-day plus the slot hour) and
+  // breaks the Calendar step's "end after start" requirement. Same fix as
+  // `createPickupToolRequest`: fall back to `requestDateStart` plus the slot's
+  // 30-minute duration, which stays well short of midnight the next day and
+  // doesn't change the "Until" day shown anywhere `requestDateEnd` is read.
   const start = newYorkInstant(values.startDate, values.slotHour)
-  const end = newYorkInstant(values.endDate)
+  const end =
+    values.startDate === values.endDate
+      ? new Date(start.getTime() + 30 * 60 * 1000)
+      : newYorkInstant(values.endDate)
   // Kept as plain midnight on the delivery day, matching every prior row —
   // unlike `requestDateStart`, `requestDate` never carried a time of day.
   const startOfDay = newYorkInstant(values.startDate)
@@ -478,4 +513,52 @@ export async function createPickupToolRequest(
 
   const result = createRequestResult.parse(raw)
   return { requestId: result.requestId, job: job.name }
+}
+
+// Phase 2B/2C's shared workflow — see `docs/bubble-request-status-workflow.md`
+// §6. Not yet built in Bubble; `dispatchRequests` below is its first caller.
+const UPDATE_REQUEST_STATUS_WORKFLOW = "update-request-status"
+
+/** `{ ok, requests, tools }` — only the two counts are acted on. */
+const updateStatusResult = z.looseObject({ requests: z.number(), tools: z.number() })
+
+/**
+ * Moves N `Assigned` requests and every tool assigned across them to
+ * `In Transit` under one driver, via one call to `update-request-status` —
+ * not two separate writes — so a partial move (some requests changed, some
+ * not) is detected from the returned count rather than happening silently.
+ *
+ * `toolIds` may be empty (a request can reach `Assigned` with no tools
+ * attached), in which case the workflow's tool-writing step is a no-op and
+ * this honestly returns `toolsUpdated: 0` rather than skipping the check.
+ *
+ * `toolLocation` is set to the driver's name — `location` means "current
+ * physical place or custodian," not just a job/Warehouse string, so a tool in
+ * transit reads as being *with* whoever is carrying it rather than still
+ * showing its pre-dispatch place. Offload overwrites this with the job's
+ * `name` once the tool actually arrives.
+ */
+export async function dispatchRequests(
+  requestIds: string[],
+  driver: string,
+  toolIds: string[]
+): Promise<{ toolsUpdated: number }> {
+  const raw = await bubbleRunWorkflow(UPDATE_REQUEST_STATUS_WORKFLOW, {
+    requestIds,
+    status: "In Transit" satisfies RequestStatus,
+    driver,
+    toolIds,
+    toolStatus: TOOL_STATUS_IN_TRANSIT,
+    toolLocation: driver,
+    toolUser: driver,
+  })
+  const result = updateStatusResult.parse(raw)
+
+  if (result.requests !== requestIds.length) {
+    throw new Error(
+      `Bubble moved ${result.requests} of ${requestIds.length} requests. Reload the board and try again.`
+    )
+  }
+
+  return { toolsUpdated: result.tools }
 }

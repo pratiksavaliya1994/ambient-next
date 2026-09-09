@@ -34,13 +34,15 @@ export default async function AssignPage({ params }: { params: Promise<{ request
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      <Link
-        href={`/requests/${requestId}`}
-        className={buttonVariants({ variant: "ghost", size: "sm", className: "-ml-2 w-fit text-muted-foreground" })}
-      >
-        <ArrowLeftIcon />
-        Back to request
-      </Link>
+      <div className="flex justify-end">
+        <Link
+          href={`/requests/${requestId}`}
+          className={buttonVariants({ variant: "ghost", size: "sm", className: "text-muted-foreground" })}
+        >
+          <ArrowLeftIcon />
+          Back to request
+        </Link>
+      </div>
 
       <Suspense fallback={<AssignSkeleton />}>
         <AssignBody requestId={requestId} />

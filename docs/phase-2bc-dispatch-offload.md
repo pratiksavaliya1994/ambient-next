@@ -1,22 +1,80 @@
 # Phase 2B / 2C — dispatch and offload
 
-**Not started.** Read [`phase-2-lifecycle.md`](./phase-2-lifecycle.md) first,
-then [`phase-2a-assignment.md`](./phase-2a-assignment.md) — 2A must be complete
-before either of these begins, because both consume `assignedtools` rows and
-both reuse the `update-request-status` workflow it builds.
+**2B's board is built, frontend only.** Read
+[`phase-2-lifecycle.md`](./phase-2-lifecycle.md) first, then
+[`phase-2a-assignment.md`](./phase-2a-assignment.md) — 2A had to be complete
+first, because both 2B and 2C consume `assignedtools` rows and both are meant
+to reuse the `update-request-status` workflow it left deferred. That workflow
+**still doesn't exist in Bubble** — see "As built" below.
 
 Neither slice needs a new Bubble field, a new table or a new workflow. The
-schema for all of phase 2 lands in 2A.
+schema for all of phase 2 landed in 2A.
+
+## Checklist
+
+- [x] **Open question — driver source.** Settled with the user: **`pms` +
+      `user`, merged, with a free-text fallback.** Neither is an actual driver
+      roster (see below, kept for context) — this is a quick-pick convenience,
+      not a source of truth, and `request.driver` stays free text either way.
+      `listUsers()` (`lib/bubble/reference.ts`) was added to read the Bubble
+      `user` type — 13 live rows, `displayName` only, confirmed via
+      `npm run check-bubble`.
+- [x] **Data layer** — `listRequestsByStatus(status, driver?)` added to
+      `lib/bubble/requests.ts` (plain `status equals` / `driver equals`
+      constraints, reusing `withLines`). Confirmed live: 2 rows at `Assigned`,
+      0 at `In Transit` — the latter is expected, since nothing writes that
+      status yet.
+- [x] **The board, read-only** — `app/(app)/dispatch/page.tsx` +
+      `components/dispatch-board.tsx` (one file, not split into a separate
+      `dispatch-form.tsx` — the picker was simple enough not to need it, unlike
+      the assign screen's dialogs). Checkbox multi-select over `Assigned`
+      requests, a driver `Select` + free-text `Input` pair. Selected rows get a
+      visible `border-primary` + ring so a multi-select doesn't hide what's
+      picked. `NAV_ITEMS` in `components/app-sidebar.tsx` gained **Dispatch**.
+- [x] **Active trips, its own screen** — moved off the board onto
+      `app/(app)/dispatch/active/page.tsx` + `components/active-trips.tsx`,
+      linked from the board (and from `NAV_ITEMS`, **Active trips**) rather
+      than sharing the page. The tool-summary logic both screens need
+      (`assignedtools` → physical `tools.name`, grouped and counted) now lives
+      in `lib/dispatch/summary.ts` (`toDispatchSummaries`) so it isn't
+      duplicated across the two pages.
+- [x] **The write.** `lib/schemas/assignment.ts` has `dispatchSchema`
+      (`requestIds` min 1, `driver`); `lib/bubble/requests.ts#dispatchRequests`
+      calls `update-request-status` and count-checks the response, the same
+      pattern `assignTools` uses; `app/(app)/dispatch/actions.ts#dispatchAction`
+      re-checks every selected request is still `Assigned` right before
+      writing, derives the tool-id union from fresh `assignedtools` rows, and
+      redirects to `/dispatch/active` on success. **Still blocked on Bubble**:
+      `update-request-status` doesn't exist there yet (see "What it writes"
+      below — unchanged from the original design), so a real dispatch attempt
+      reaches `dispatchRequests` and fails with a visible error until it's
+      built and tested per `docs/bubble-request-status-workflow.md` §6-7.
+- [ ] **2C — Offload.** Not started. `app/(app)/dispatch/[requestId]/page.tsx`
+      doesn't exist; an in-transit request's row on the board links to the
+      existing `/requests/{id}` detail page instead, whose own next-action
+      button already renders "Offload — not built yet" for that status.
+
+**Not touched, and deliberately so:** `app/(app)/requests/page.tsx`'s
+`NEXT_ACTIONS.Assigned` still renders a disabled "Dispatch" button rather than
+linking to `/dispatch` — that card-level action assumes a per-request route
+(`/requests/{id}${href}`), and `/dispatch` is a shared board, not one. Wiring
+that through is a small follow-up, not part of this pass.
 
 ---
 
-## Open question, to settle before 2B
+## Open question that shaped the driver picker (resolved above)
 
 **Where do driver names come from?** `pms` is 12 **Project Managers**, not
 drivers. `request.driver` is free text with the PM list offered as a
 convenience, which means it can't be reliably matched against
 `tools.currentUser` later. If a real driver roster exists somewhere in Bubble,
-find it and use it. Ask before building the picker.
+find it and use it instead.
+
+No such roster turned up — the live Bubble types this repo reads are `request`,
+`requestedtools`, `requestedmaterials`, `toolstype`, `jobs`, `pms`,
+`timelabels`, `materials`, `tools`, `assignedtools` and `user`, and none of
+them is a drivers table. The user's call was to offer `pms` **and** `user`
+together as the quick-pick list, free text otherwise — see the checklist above.
 
 ---
 
@@ -32,9 +90,12 @@ A driver/PM takes **one or more requests at once** from the warehouse.
 | | `driver` | the driver's name |
 | `tools` (every assigned tool across those requests) | `status` | `In Transit` |
 | | `currentUser` | the driver's name |
+| | `location` | **the driver's name** |
 
-`tools.location` is **not** touched — see the lifecycle table in
-`phase-2-lifecycle.md` for why.
+`location` means "current physical place, or whoever has custody" — a tool in
+transit reads as being *with* the driver rather than still showing its
+pre-dispatch place (`Warehouse`). See `phase-2-lifecycle.md` for the reasoning
+and the trade-off this makes for a future return-to-warehouse flow.
 
 One call to `update-request-status` with several `requestIds` and the union of
 their `toolIds`. The workflow already accepts a list on both.
@@ -116,7 +177,8 @@ Fetching is `getRequest` plus one `in` query for its `assignedtools` rows.
 - The other dispatched request must still read `In Transit` and still appear on
   its driver's manifest.
 - The Tools dashboard groups the delivered tools under the job and the
-  in-transit ones still under `Warehouse`, badged `In Transit`.
+  in-transit ones under the **driver's name** (its location grouping has no
+  special-casing beyond `NO_LOCATION`, so this needs no dashboard change).
 
 Writes hit the **live** database.
 
@@ -125,8 +187,10 @@ Writes hit the **live** database.
 ## Known limits, carried from 2A
 
 - **Return-to-warehouse is out of scope.** Once dispatched, a mistake is
-  repaired in Bubble. Adding it later means storing the tool's previous
-  `location` at dispatch, which today nothing does.
+  repaired in Bubble. Dispatch now overwrites `location` with the driver's
+  name rather than leaving it at `Warehouse`, so a manual revert has to reset
+  `location` back to `"Warehouse"` explicitly — it no longer already reads
+  that on its own.
 - **Site-to-site redeployment isn't supported.** A delivery starts at the
   Warehouse by definition here. While a load is in transit, `listToolsForJob`
   returns nothing for it — correct for a warehouse origin, wrong for a move

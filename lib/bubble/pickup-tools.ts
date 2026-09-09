@@ -39,6 +39,11 @@ const toolRow = z.looseObject({
   type: z.string().optional(),
   location: z.string().optional(),
   status: z.string().optional(),
+  /** `ToolStatusNew` — the phase 2 lifecycle field. Backfilled from `status`
+   *  on every live row; only the Tools dashboard reads it (`listAllTools`).
+   *  The Pickup picker (`listToolsForJob`) keeps reading/writing the old
+   *  `status` field, which has the only working write-back workflow. */
+  statusNew: z.string().optional(),
   floor: z.string().optional(),
   currentUser: z.string().optional(),
 })
@@ -81,7 +86,8 @@ export async function listAllTools(): Promise<DashboardTool[]> {
       typeName: row.type ? (typeNameById.get(row.type) ?? null) : null,
       location: row.location?.trim() ? row.location.trim() : NO_LOCATION,
       floor: row.floor ?? null,
-      status: row.status ?? "Ok",
+      // `statusNew`, not `status` — see the comment on `toolRow` above.
+      status: row.statusNew ?? "",
       currentUser: row.currentUser?.trim() || null,
     }))
     .sort((a, b) => a.location.localeCompare(b.location) || a.name.localeCompare(b.name))

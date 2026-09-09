@@ -6,7 +6,7 @@ doc with the file list and checklist:
 | Slice | Doc | State |
 | --- | --- | --- |
 | **2A — Assign** | [`phase-2a-assignment.md`](./phase-2a-assignment.md) | in progress |
-| **2B — Dispatch** | [`phase-2bc-dispatch-offload.md`](./phase-2bc-dispatch-offload.md) | not started |
+| **2B — Dispatch** | [`phase-2bc-dispatch-offload.md`](./phase-2bc-dispatch-offload.md) | in progress — board built, frontend only |
 | **2C — Offload** | [`phase-2bc-dispatch-offload.md`](./phase-2bc-dispatch-offload.md) | not started |
 
 The Bubble Studio build guide for all three is
@@ -96,23 +96,34 @@ rows keep `Discharged` in the old field, which no longer matters here).
 
 ### `tools` — one new field, `statusNew`
 
-Because `statusNew` carries the lifecycle, `location` means **last known
-physical place** and is written at exactly one moment: offload. The original
-`status` column is never written by this phase.
+Because `statusNew` carries the lifecycle, `location` means **current
+physical place, or whoever currently has custody of it** — written at two
+moments: dispatch (the driver's name) and offload (the job's `name`). The
+original `status` column is never written by this phase.
 
 | Step | `statusNew` | `location` | `currentUser` | Slice |
 | --- | --- | --- | --- | --- |
 | Assign | `Assigned` | unchanged | unchanged | 2A |
 | Unassign | `Available` | unchanged | unchanged | 2A |
-| Dispatch | `In Transit` | unchanged | driver | 2B |
+| Dispatch | `In Transit` | **the driver's name** | driver | 2B |
 | Offload | `Delivered` | the job's `name` | driver (kept) | 2C |
 
-There is deliberately **no `"In Transit"` location string**. Writing one would
-add a group interleaved among the dashboard's 1,445 job names, add a second
-magic constant beside `NO_LOCATION`, and put this app in conflict with the
-pre-existing `/wf/Set Location`, which the old Bubble UI still uses. "Where is
-grinder #7" during transit reads as *Warehouse · In Transit · Carlos*, which is
-honest.
+> **Superseded — the original design left `location` unchanged at dispatch.**
+> The reasoning was that a synthetic `"In Transit"` location string would
+> interleave a flow-state value among the dashboard's 1,445 job names, alongside
+> `NO_LOCATION` as a second magic constant. The user's call instead: `location`
+> during transit **is** the driver's (or PM's/user's) name — the same string
+> written to `request.driver` and `tools.currentUser` — so it can hold a place
+> (`Warehouse`, a job's `name`) or a person, and "where is grinder #7" during
+> transit reads as *Carlos · In Transit*, not *Warehouse · In Transit · Carlos*.
+> The Tools dashboard (`components/tools-dashboard.tsx`) groups by whatever
+> string `location` holds with no special-casing beyond `NO_LOCATION`, so a
+> driver's name becomes its own group card there with no code change needed.
+>
+> **The trade:** the pre-dispatch value (always `Warehouse`, since a delivery
+> only ever originates there — see "Known limits") is overwritten, not stored.
+> Reverting a dispatch by hand in Bubble now has to explicitly reset `location`
+> back to `"Warehouse"` — previously it would already still read that.
 
 `currentUser` is **not** cleared on offload — it is a real record of who moved
 the tool, and `lib/bubble/pickup-tools.ts` notes it is already non-empty on

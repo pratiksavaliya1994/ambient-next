@@ -52,18 +52,16 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <Link
-          href="/requests"
-          className={buttonVariants({
-            variant: "ghost",
-            size: "sm",
-            className: "-ml-2 w-fit text-muted-foreground",
-          })}
-        >
-          <ArrowLeftIcon />
-          Back to requests
-        </Link>
-        <h1 className="text-xl font-medium wrap-anywhere">{request.job}</h1>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h1 className="text-xl font-medium wrap-anywhere">{request.job}</h1>
+          <Link
+            href="/requests"
+            className={buttonVariants({ variant: "ghost", size: "sm", className: "text-muted-foreground" })}
+          >
+            <ArrowLeftIcon />
+            Back to requests
+          </Link>
+        </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <RequestStatusBadge status={request.status} />
           {request.toDo && <Badge variant="secondary">{request.toDo}</Badge>}

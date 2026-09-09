@@ -34,18 +34,22 @@ const TOOL_LIST_MAX_HEIGHT = "max-h-[28rem]"
 
 /**
  * Status colour is a severity gradient, not a rainbow: green/blue read as
- * "fine", amber/orange as "needs attention", `Missing` reuses the app's
- * existing destructive red. Anything outside this hardcoded set (there
- * shouldn't be any — see `TOOL_STATUS`) falls back to a plain neutral pill.
+ * "fine" or "in flow", amber as "needs attention", orange/red as "broken" or
+ * `Missing` (the app's existing destructive red). Keyed on `TOOL_STATUS_NEW`
+ * (`tools.statusNew`), not the old `status` field — see `lib/bubble/enums.ts`.
+ * Anything outside this set falls back to a plain neutral pill.
  */
 const STATUS_BADGE_CLASSES: Record<string, string> = {
-  Ok: "border-transparent bg-status-ok/15 text-status-ok-foreground",
-  "Ready for Pickup": "border-transparent bg-status-active/15 text-status-active-foreground",
-  "To do Maintenance": "border-transparent bg-status-attention/15 text-status-attention-foreground",
-  "Repairing / Under Maintenance": "border-transparent bg-status-attention/15 text-status-attention-foreground",
-  "To be Repaired": "border-transparent bg-status-repair/15 text-status-repair-foreground",
+  Available: "border-transparent bg-status-ok/15 text-status-ok-foreground",
+  Delivered: "border-transparent bg-status-ok/15 text-status-ok-foreground",
+  Assigned: "border-transparent bg-status-active/15 text-status-active-foreground",
+  "In Transit": "border-transparent bg-status-active/15 text-status-active-foreground",
+  "Pickup Requested": "border-transparent bg-status-active/15 text-status-active-foreground",
+  "Maintenance Required": "border-transparent bg-status-attention/15 text-status-attention-foreground",
+  "Inspection Required": "border-transparent bg-status-attention/15 text-status-attention-foreground",
+  "Repair Required": "border-transparent bg-status-repair/15 text-status-repair-foreground",
+  "Under Repair": "border-transparent bg-status-repair/15 text-status-repair-foreground",
   Missing: "border-transparent bg-destructive/15 text-destructive",
-  Discharged: "border-transparent bg-muted text-muted-foreground",
 }
 const DEFAULT_STATUS_CLASSES = "border-transparent bg-muted text-muted-foreground"
 
@@ -96,6 +100,7 @@ export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
   // this one-time sync happens after mount rather than being derived inline.
   React.useEffect(() => {
     const locationSet = new Set(locations)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(readStoredLocations().filter((location) => locationSet.has(location)))
     // Only ever needs to run once, against whatever `locations` is on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -239,7 +244,7 @@ function LocationCard({ location, tools, isExtra }: { location: string; tools: D
 
   return (
     <Card className={cn("border", isExtra && "border-dashed border-primary/50")}>
-      <CardHeader>
+      <CardHeader className="px-3">
         <div className="flex flex-col gap-1">
           <CardTitle className={cn("wrap-anywhere", isUnset && "text-muted-foreground italic")}>{location}</CardTitle>
           {isExtra && (
@@ -250,7 +255,7 @@ function LocationCard({ location, tools, isExtra }: { location: string; tools: D
           <Badge variant="secondary">{tools.length}</Badge>
         </CardAction>
       </CardHeader>
-      <CardContent className={cn(TOOL_LIST_MAX_HEIGHT, "overflow-y-auto")}>
+      <CardContent className={cn(TOOL_LIST_MAX_HEIGHT, "gap-1 overflow-y-auto px-2")}>
         {tools.map((tool) => (
           <ToolBox key={tool.id} tool={tool} />
         ))}
@@ -264,7 +269,12 @@ function ToolBox({ tool }: { tool: DashboardTool }) {
     <div className="flex flex-col gap-2 rounded-lg border bg-background/60 p-3">
       <div className="flex items-start justify-between gap-3">
         <span className="text-sm font-medium wrap-anywhere">{tool.name}</span>
-        <Badge className={STATUS_BADGE_CLASSES[tool.status] ?? DEFAULT_STATUS_CLASSES}>{tool.status}</Badge>
+        {/* `tool.status` is `tools.statusNew`, backfilled on every row — a blank
+            one is a row the migration missed, and an empty pill would read as
+            a style bug rather than as missing data. */}
+        {tool.status && (
+          <Badge className={STATUS_BADGE_CLASSES[tool.status] ?? DEFAULT_STATUS_CLASSES}>{tool.status}</Badge>
+        )}
       </div>
 
       {(tool.typeName || tool.floor) && (

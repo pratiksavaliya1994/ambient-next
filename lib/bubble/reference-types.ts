@@ -48,6 +48,14 @@ export type ToolType = {
 export type FieldPm = { id: string; name: string; company: string | null }
 
 /**
+ * A Bubble `user` row — this app's own signed-in accounts, not `pms`. Offered
+ * as a second driver-name convenience on the Dispatch board: per `CLAUDE.md`
+ * the type carries no email or role, only `displayName` plus system fields, so
+ * `displayName` is the only thing surfaced here.
+ */
+export type AppUser = { id: string; name: string }
+
+/**
  * The `materials` table ("All Materials"): one default free-text material
  * list per job type it's offered for, mirroring `toolstype.realtedTo`. Only
  * 6 of the 8 `toDo` values have a row — "Fast Request" and "Simple Grind"

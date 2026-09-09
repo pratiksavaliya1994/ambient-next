@@ -40,3 +40,16 @@ export const assignToolsSchema = z
   })
 
 export type AssignToolsValues = z.infer<typeof assignToolsSchema>
+
+/**
+ * What the Dispatch board submits: the selected `Assigned` requests and the
+ * driver taking them out. No `toolIds` — the action derives the union of
+ * assigned tools itself from fresh `assignedtools` rows rather than trusting
+ * whatever the board's client state remembers.
+ */
+export const dispatchSchema = z.object({
+  requestIds: z.array(z.string().min(1)).min(1),
+  driver: z.string().min(1),
+})
+
+export type DispatchValues = z.infer<typeof dispatchSchema>
