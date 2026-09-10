@@ -129,6 +129,16 @@ export function newYorkDaysAgo(days: number): string {
   return new Date(Date.UTC(year, month - 1, date - days)).toISOString().slice(0, 10)
 }
 
+/**
+ * The day after `day` (`yyyy-mm-dd`), in New York — the exclusive upper bound
+ * a `to` date needs for a `"less than"` date constraint, since Bubble's date
+ * constraints have no inclusive "on or before".
+ */
+export function newYorkDayAfter(day: string): string {
+  const [year, month, date] = day.split("-").map(Number)
+  return new Date(Date.UTC(year, month - 1, date + 1)).toISOString().slice(0, 10)
+}
+
 /** `Tuesday 9-3` — the date line in the WhatsApp summary. */
 export function newYorkWeekday(iso: string | null | undefined): string {
   if (!iso) return "—"

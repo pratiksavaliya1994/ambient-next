@@ -3,7 +3,7 @@ import "server-only"
 import { z } from "zod"
 
 import { bubbleGet, bubbleList, bubbleListAll, bubbleRunWorkflow, type BubbleThing, type Constraint } from "@/lib/bubble/client"
-import { newYorkInstant, newYorkStamp } from "@/lib/bubble/dates"
+import { newYorkDayAfter, newYorkInstant, newYorkStamp } from "@/lib/bubble/dates"
 import {
   DEFAULT_REQUEST_ORDER,
   DEFAULT_REQUEST_STATUS,
@@ -210,6 +210,85 @@ export async function listRequestsSince(since: Date): Promise<ToolRequest[]> {
   })
 
   return withLines(rows.map((row: BubbleThing) => requestRow.parse(row)))
+}
+
+export type RequestSearchParams = {
+  query?: string
+  from?: string
+  to?: string
+}
+
+/** The four fields a search sweeps — one `text contains` query per field,
+ *  since Bubble constraints in one array are AND'd and there is no OR. */
+const SEARCH_FIELDS = ["job", "fieldPM2", "contact", "floor"] as const
+
+/**
+ * Requests matching free text across job, PM, contact and floor, an optional
+ * scheduled-date range, or both — the list page's search, for anything older
+ * than `listRequestsSince`'s window.
+ *
+ * The date range constrains `requestDateStart` — the delivery/pickup instant —
+ * not `Created Date`. That is the date every card on the list page displays,
+ * so a range search answers "what is moving that week", which is what the
+ * picker is for; filtering on when someone happened to type the row in would
+ * miss anything booked ahead. A row carrying only `requestDateEnd` and no
+ * start is therefore unfindable by date even though its card shows the end
+ * date — Bubble AND's constraints in one array with no OR, so covering it
+ * would cost a second fan-out for a case only legacy rows can be in.
+ *
+ * A blank `query` skips the fan-out and behaves like `listRequestsSince`: one
+ * `bubbleListAll` call with just the date bounds. A non-blank `query` instead
+ * runs one `bubbleListAll` per field in `SEARCH_FIELDS`, unions the results by
+ * `_id`, and re-sorts by `Created Date` — every match is paginated in full
+ * rather than capped at one page, the same convention every other list
+ * function here follows, so a common term never silently drops rows. The
+ * live table is ~1,550 rows total, so even a broad single-field sweep is a
+ * bounded, acceptable cost for an explicit, user-initiated search.
+ */
+export async function searchRequests({ query, from, to }: RequestSearchParams): Promise<ToolRequest[]> {
+  // Both bounds are New York wall-clock days, and Bubble's date constraints
+  // have no inclusive form: `to` compares against midnight of the day *after*
+  // it, and `from` against a millisecond before its own midnight. That last
+  // millisecond matters here in a way it did not for `Created Date` — a slot
+  // hour of 0 is legal (`slotHour` is `0..23`), so `requestDateStart` can land
+  // exactly on midnight, and an exclusive `greater than` would drop it.
+  const dateConstraints: Constraint[] = []
+  if (from) {
+    dateConstraints.push({
+      key: "requestDateStart",
+      constraint_type: "greater than",
+      value: new Date(newYorkInstant(from).getTime() - 1).toISOString(),
+    })
+  }
+  if (to) {
+    dateConstraints.push({
+      key: "requestDateStart",
+      constraint_type: "less than",
+      value: newYorkInstant(newYorkDayAfter(to)).toISOString(),
+    })
+  }
+
+  const trimmed = query?.trim()
+
+  let rows: BubbleThing[]
+  if (trimmed) {
+    const pages = await Promise.all(
+      SEARCH_FIELDS.map((field) =>
+        bubbleListAll(REQUEST, {
+          constraints: [...dateConstraints, { key: field, constraint_type: "text contains", value: trimmed }],
+          sortField: "Created Date",
+          descending: true,
+        })
+      )
+    )
+    const byId = new Map<string, BubbleThing>()
+    for (const page of pages) for (const row of page) byId.set(row._id, row)
+    rows = [...byId.values()].sort((a, b) => String(b["Created Date"] ?? "").localeCompare(String(a["Created Date"] ?? "")))
+  } else {
+    rows = await bubbleListAll(REQUEST, { constraints: dateConstraints, sortField: "Created Date", descending: true })
+  }
+
+  return withLines(rows.map((row) => requestRow.parse(row)))
 }
 
 /**

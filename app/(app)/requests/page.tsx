@@ -4,6 +4,7 @@ import Link from "next/link"
 import { Suspense } from "react"
 
 import { NewRequestDialog, NewRequestFab } from "@/components/new-request-dialog"
+import { RequestSearchBar } from "@/components/request-search"
 import { RequestStatusBadge } from "@/components/request-status-badge"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -12,7 +13,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkDayLabel, newYorkDaysAgo, newYorkInstant } from "@/lib/bubble/dates"
 import type { RequestStatus } from "@/lib/bubble/enums"
-import { hasContent, listRequestsSince, type ToolRequest } from "@/lib/bubble/requests"
+import { hasContent, listRequestsSince, searchRequests, type ToolRequest } from "@/lib/bubble/requests"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Tool requests" }
@@ -33,23 +34,35 @@ const DAYS_SHOWN = 5
  */
 const GRID = "grid grid-cols-[repeat(auto-fill,minmax(min(18rem,100%),1fr))] gap-6"
 
-export default function RequestsPage() {
+export default async function RequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; from?: string; to?: string }>
+}) {
+  const { q = "", from = "", to = "" } = await searchParams
+  const isSearching = Boolean(q.trim() || from || to)
+  const searchKey = `${q}|${from}|${to}`
+
   return (
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-medium">Recent requests</h1>
-          {/* <p className="text-sm text-muted-foreground">
-            Everything created today and yesterday. Tool lines come from each
-            request&rsquo;s requestedtools row.
-          </p> */}
+          <h1 className="text-xl font-medium">{isSearching ? "Search results" : "Recent requests"}</h1>
         </div>
         <NewRequestDialog />
       </div>
 
-      {/* Bubble needs two round trips for this and is not fast; stream it. */}
-      <Suspense fallback={<RequestListSkeleton />}>
-        <RequestList />
+      <RequestSearchBar key={`search-${searchKey}`} query={q} from={from} to={to} />
+
+      {/* Bubble needs two round trips for this and is not fast; stream it.
+          Keyed by the search itself so navigating between searches (or back
+          to the default view) resets this boundary to its fallback rather
+          than leaving the previous results on screen. Prefixed so this key
+          doesn't collide with RequestSearchBar's above — both are keyed off
+          the same searchKey, and React requires keys to be unique among
+          siblings regardless of element type. */}
+      <Suspense key={`results-${searchKey}`} fallback={<RequestListSkeleton />}>
+        <RequestList q={q} from={from} to={to} isSearching={isSearching} />
       </Suspense>
 
       <NewRequestFab />
@@ -57,23 +70,58 @@ export default function RequestsPage() {
   )
 }
 
-async function RequestList() {
-  // Midnight New York on the oldest day in the window — `DAYS_SHOWN - 1` days
-  // back, since the window counts today as one of its days.
-  const since = newYorkInstant(newYorkDaysAgo(DAYS_SHOWN - 1))
-  const recent = await listRequestsSince(since)
+async function RequestList({
+  q,
+  from,
+  to,
+  isSearching,
+}: {
+  q: string
+  from: string
+  to: string
+  isSearching: boolean
+}) {
+  // Midnight New York on the oldest day in the default window —
+  // `DAYS_SHOWN - 1` days back, since the window counts today as one of its
+  // days. Note the two disagree on which date they mean: the default window is
+  // `Created Date`, while a search sweeps job/PM/contact/floor and filters on
+  // the drop/pickup date (`requestDateStart`) — the one the cards display —
+  // across the whole table, unbounded by this window.
+  const found = isSearching
+    ? await searchRequests({ query: q, from: from || undefined, to: to || undefined })
+    : await listRequestsSince(newYorkInstant(newYorkDaysAgo(DAYS_SHOWN - 1)))
 
   // Roughly half the rows Bubble holds are abandoned blanks, so the window is
   // filtered rather than shown as-is; `skipped` is how many of these two days'
   // rows were blank.
   const requests: ToolRequest[] = []
   let skipped = 0
-  for (const request of recent) {
+  for (const request of found) {
     if (hasContent(request)) requests.push(request)
     else skipped++
   }
 
   if (requests.length === 0) {
+    if (isSearching) {
+      return (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyTitle>No matching requests</EmptyTitle>
+            <EmptyDescription>
+              {q.trim()
+                ? `Nothing matches "${q.trim()}"${from || to ? " scheduled in that date range" : ""}.`
+                : "Nothing is scheduled in that date range."}
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Link href="/requests" className={buttonVariants({ variant: "outline" })}>
+              Clear search
+            </Link>
+          </EmptyContent>
+        </Empty>
+      )
+    }
+
     return (
       <Empty className="border">
         <EmptyHeader>
@@ -93,12 +141,6 @@ async function RequestList() {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* {skipped > 0 && (
-        <p className="text-sm text-muted-foreground">
-          {skipped} blank {skipped === 1 ? "row" : "rows"} hidden: no job,
-          movement, slot or tools on {skipped === 1 ? "it" : "them"}.
-        </p>
-      )} */}
       <div className={GRID}>
         {requests.map((request) => (
           <RequestCard key={request.id} request={request} />

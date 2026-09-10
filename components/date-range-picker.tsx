@@ -4,16 +4,11 @@ import { useState } from "react"
 import { CalendarIcon } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
-import { formatDay, parseDay } from "@/components/date-picker"
+import { formatDay, formatDayLabel, parseDay } from "@/components/date-picker"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-
-const LABEL = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-})
+import { cn } from "@/lib/utils"
 
 /**
  * `startDate`/`endDate` as one range selection instead of two independent
@@ -30,12 +25,28 @@ export function DateRangePicker({
   endDate,
   onRangeChange,
   invalid,
+  className,
+  placeholder = "Pick a date range",
 }: {
   id?: string
   startDate: string
   endDate: string
   onRangeChange: (next: { startDate: string; endDate: string }) => void
   invalid?: boolean
+  /**
+   * Merged onto the trigger button. The default is the full-width trigger a
+   * stacked form field wants; `request-search.tsx`'s toolbar overrides it
+   * with `w-auto` so the trigger sizes to its own label instead of claiming
+   * the whole row and pushing the buttons beside it off the edge.
+   */
+  className?: string
+  /**
+   * What the trigger reads when no range is picked. The default suits a form
+   * field that has its own `FieldLabel`; a labelled control — the toolbar in
+   * `request-search.tsx` — wants the empty state to name the *unfiltered*
+   * case instead, not repeat its label.
+   */
+  placeholder?: string
 }) {
   const [open, setOpen] = useState(false)
   const [range, setRange] = useState<DateRange | undefined>(() => ({
@@ -44,10 +55,10 @@ export function DateRangePicker({
   }))
 
   const label = !range?.from
-    ? "Pick a date range"
+    ? placeholder
     : !range.to || range.to.getTime() === range.from.getTime()
-      ? LABEL.format(range.from)
-      : `${LABEL.format(range.from)} – ${LABEL.format(range.to)}`
+      ? formatDayLabel(range.from)
+      : `${formatDayLabel(range.from)} – ${formatDayLabel(range.to)}`
 
   return (
     <Popover
@@ -65,7 +76,7 @@ export function DateRangePicker({
       <PopoverTrigger
         id={id}
         aria-invalid={invalid ? true : undefined}
-        render={<Button variant="outline" className="w-full justify-between px-3" />}
+        render={<Button variant="outline" className={cn("w-full justify-between px-3", className)} />}
       >
         <span className={range?.from ? undefined : "text-muted-foreground"}>{label}</span>
         <CalendarIcon data-icon="inline-end" />
