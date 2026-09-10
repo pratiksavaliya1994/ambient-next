@@ -4,7 +4,7 @@ import * as React from "react"
 import { useMemo, useState } from "react"
 import { SearchIcon } from "lucide-react"
 
-import { TOOL_STATUS, type ToolStatus } from "@/lib/bubble/enums"
+import { TOOL_STATUS_NEW, type ToolStatusNew } from "@/lib/bubble/enums"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
 import type { ToolStatusUpdate } from "@/lib/bubble/tool-status-updates"
 import type { ToolLine } from "@/lib/bubble/tools-summary"
@@ -39,11 +39,12 @@ export type PickupSelection = {
   name: string
   /**
    * Seeded from the tool's live Bubble status, which is free text and so not
-   * necessarily one of `TOOL_STATUS`. Only a value picked in the picker (always
-   * a `ToolStatus`) ever differs from `originalStatus`, so only those are written.
+   * necessarily one of `TOOL_STATUS_NEW`. Only a value picked in the picker
+   * (always a `ToolStatusNew`) ever differs from `originalStatus`, so only
+   * those are written.
    */
   status: string
-  /** The status Bubble had on fetch — not necessarily one of `TOOL_STATUS`, only ever compared against, never written. */
+  /** The status Bubble had on fetch — not necessarily one of `TOOL_STATUS_NEW`, only ever compared against, never written. */
   originalStatus: string
 }
 
@@ -162,13 +163,13 @@ export function PickupToolPicker({
           {visible.map((tool, index) => {
             const selection = selected.get(tool.id)
             const checked = selection !== undefined
-            /* `tools.status` is free text, so a seeded status can sit outside
-               `TOOL_STATUS` (blank rows included) — carry it as an extra option
-               so the trigger shows the tool's real status instead of nothing. */
+            /* `tools.statusNew` is free text, so a seeded status can sit outside
+               `TOOL_STATUS_NEW` (blank rows included) — carry it as an extra
+               option so the trigger shows the tool's real status instead of nothing. */
             const statusOptions =
-              selection && selection.status && !(TOOL_STATUS as readonly string[]).includes(selection.status)
-                ? [selection.status, ...TOOL_STATUS]
-                : TOOL_STATUS
+              selection && selection.status && !(TOOL_STATUS_NEW as readonly string[]).includes(selection.status)
+                ? [selection.status, ...TOOL_STATUS_NEW]
+                : TOOL_STATUS_NEW
             const previous = visible[index - 1]
             const showGroupLabel = tool.typeName && tool.typeName !== previous?.typeName
             return (
@@ -244,6 +245,6 @@ export function changedStatusLines(selected: Map<string, PickupSelection>): Tool
   return [...selected.values()]
     .filter((entry) => entry.status !== entry.originalStatus)
     // Safe cast: a status differing from `originalStatus` can only have come
-    // from the picker's Select, which offers nothing but `TOOL_STATUS`.
-    .map((entry) => ({ toolId: entry.id, status: entry.status as ToolStatus }))
+    // from the picker's Select, which offers nothing but `TOOL_STATUS_NEW`.
+    .map((entry) => ({ toolId: entry.id, status: entry.status as ToolStatusNew }))
 }

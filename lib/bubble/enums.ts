@@ -46,29 +46,6 @@ export type ToDo = (typeof TO_DO)[number]
 export const UNFILTERED_TO_DO: ToDo = "Fast Request"
 
 /**
- * `tools.status` — the **original** option set, hardcoded per the user rather
- * than read off live data (the live app only ever had `"Ok"` / `"Missing"` /
- * `"To be Repaired"` rows).
- *
- * Phase 2 does **not** replace this. The lifecycle went to a second field,
- * `tools.statusNew`, backed by a separate `ToolStatusNew` option set, so the
- * old field and its writers — the Pickup picker here, and the pre-existing
- * `/wf/Set Status` in the old Bubble UI — keep working untouched. See
- * `TOOL_STATUS_NEW` below.
- */
-export const TOOL_STATUS = [
-  "Ok",
-  "Ready for Pickup",
-  "To do Maintenance",
-  "To be Repaired",
-  "Repairing / Under Maintenance",
-  "Discharged",
-  "Missing",
-] as const
-export type ToolStatus = (typeof TOOL_STATUS)[number]
-
-
-/**
  * `request.color` drives the event colour in the Bubble calendar. Live rows
  * follow delivery → blue, pickup-only → orange. A third value (#00bc9d) shows
  * up on a handful of hand-edited rows with no discernible rule; it is not
@@ -95,19 +72,18 @@ export const DEFAULT_REQUEST_STATUS: RequestStatus = "New"
 
 /**
  * `tools.statusNew` — the `ToolStatusNew` option set, added for phase 2 rather
- * than renaming the original. `status` above was left alone because it is
- * live and has a second writer this app doesn't control (`/wf/Set Status` in
- * the old Bubble UI); a rename would have moved that writer's rows too.
+ * than renaming the original `status` field, which is still live and has a
+ * second writer this app doesn't control (`/wf/Set Status` in the old Bubble
+ * UI); a rename would have moved that writer's rows too.
  *
  * Every live row's `statusNew` was backfilled from `status` in a one-time
  * Bubble migration, so the field is populated everywhere and can be read on
  * its own. `Discharged` has no counterpart here — no live row held it.
  *
- * The cost is that "where is grinder #7" has two answers until the old field
- * is retired, and the two will drift now that only the old one is written.
- * That retirement is deliberately deferred — the existing Tools dashboard and
- * Pickup picker still read and write `status` unchanged, and nothing in this
- * app writes `statusNew` until the `update-request-status` workflow exists.
+ * This app now reads and writes `statusNew` exclusively — the Tools
+ * dashboard reads it, and the Pickup picker both reads it and writes changes
+ * back through `update-tool-status`. The old `status` field is only ever
+ * touched by the old Bubble UI now, so the two will drift over time.
  *
  * The list mixes *where a tool is in the flow* (Available, Assigned, In
  * Transit, Delivered, Pickup Requested) with *what condition it is in* (the

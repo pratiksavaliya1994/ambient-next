@@ -38,11 +38,10 @@ const toolRow = z.looseObject({
   name: z.string().optional(),
   type: z.string().optional(),
   location: z.string().optional(),
-  status: z.string().optional(),
-  /** `ToolStatusNew` — the phase 2 lifecycle field. Backfilled from `status`
-   *  on every live row; only the Tools dashboard reads it (`listAllTools`).
-   *  The Pickup picker (`listToolsForJob`) keeps reading/writing the old
-   *  `status` field, which has the only working write-back workflow. */
+  /** `ToolStatusNew` — the phase 2 lifecycle field, backfilled from the old
+   *  `status` field on every live row. Both readers of this table
+   *  (`listToolsForJob` and `listAllTools`) use this field now; the Pickup
+   *  picker also writes it back through `update-tool-status`. */
   statusNew: z.string().optional(),
   floor: z.string().optional(),
   currentUser: z.string().optional(),
@@ -66,7 +65,7 @@ export async function listToolsForJob(jobName: string): Promise<PickupTool[]> {
       name: row.name!,
       typeName: row.type ? typeNameById.get(row.type) ?? null : null,
       floor: row.floor ?? null,
-      status: row.status ?? "Ok",
+      status: row.statusNew ?? "",
     }))
     .sort((a, b) => (a.typeName ?? "").localeCompare(b.typeName ?? "") || a.name.localeCompare(b.name))
 }

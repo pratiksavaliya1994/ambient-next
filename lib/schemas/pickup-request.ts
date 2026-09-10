@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { TO_DO, TOOL_STATUS, WE_ARE } from "@/lib/bubble/enums"
+import { TO_DO, TOOL_STATUS_NEW, WE_ARE } from "@/lib/bubble/enums"
 import { toolLineSchema } from "@/lib/schemas/request"
 
 /**
@@ -35,7 +35,7 @@ export const pickupRequestFormSchema = z
     cleanup: z.boolean(),
     tools: z.array(toolLineSchema),
     /** Only tools whose status the PM actually changed in the picker — see `lib/bubble/tool-status-updates.ts`. */
-    toolStatusUpdates: z.array(z.object({ toolId: z.string(), status: z.enum(TOOL_STATUS) })),
+    toolStatusUpdates: z.array(z.object({ toolId: z.string(), status: z.enum(TOOL_STATUS_NEW) })),
   })
   .refine((value) => value.tools.length > 0 || value.materials.trim().length > 3, {
     message: "Add at least one tool or enter materials.",

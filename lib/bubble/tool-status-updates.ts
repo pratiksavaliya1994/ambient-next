@@ -1,5 +1,5 @@
 /**
- * Encodes which `tools` rows had their `status` changed in the Pickup
+ * Encodes which `tools` rows had their `statusNew` changed in the Pickup
  * picker, for the `new-pickup-request` workflow's `toolStatusUpdates`
  * parameter (a list of texts). Each entry is `"{tools._id}::{status}"` — the
  * workflow splits on `::` to find the row and its new status, same
@@ -11,9 +11,9 @@
  * sends nothing, so this table isn't rewritten on every pickup.
  */
 
-import type { ToolStatus } from "@/lib/bubble/enums"
+import type { ToolStatusNew } from "@/lib/bubble/enums"
 
-export type ToolStatusUpdate = { toolId: string; status: ToolStatus }
+export type ToolStatusUpdate = { toolId: string; status: ToolStatusNew }
 
 export function formatToolStatusUpdates(updates: readonly ToolStatusUpdate[]): string[] {
   return updates.map((update) => `${update.toolId}::${update.status}`)
