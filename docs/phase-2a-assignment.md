@@ -50,8 +50,18 @@ Update this as steps land, so a fresh chat can resume mid-slice.
       `getRequest`/`listTakenToolIds` tolerate a missing `status`. The one it
       answered for *safety* — how many rows hold each `tools.status` — is now a
       manual check in the Bubble Data tab before the rename (step 3)
-- [ ] **2. Read the Bubble side** — `/wf/Set Status`, `/wf/Set Location`,
-      `toolshistory`
+- [x] **2. Read the Bubble side** — `toolshistory`'s schema is now confirmed
+      live (see `docs/phase-2-lifecycle.md` and
+      `docs/bubble-update-request-status-spec.md`): `tool`, `prevLocation`/
+      `newLocation`, `prevLocationFloor`/`newLocationFloor`,
+      `prevStatus`/`newStatus` (option set, the old `Tool Status` set), `notes`,
+      `picture`. It already holds ~1,542 rows from `/wf/Set Status`/
+      `/wf/Set Location`. Rather than calling those legacy workflows, phase 2
+      writes its own `toolshistory` rows (from `update-request-status`) using
+      two new fields, `prevStatusNew`/`newStatusNew`, so it doesn't collide
+      with the old ones' option set. `/wf/Set Status`/`/wf/Set Location`
+      themselves were not otherwise inspected — nothing here depends on their
+      internals beyond the `toolshistory` schema they write to.
 - [x] **3. Bubble Studio** — done, with deviations. `ToolStatusNew` +
       `tools.statusNew` (a new option set and column rather than a rename), and
       `statusNew` since **backfilled** from `status` on every row.
@@ -119,10 +129,12 @@ them. Report, against live data:
 
 ## 2. Read the Bubble side you'll collide with
 
-The old Bubble UI is live and is a **second writer** of `tools.status`.
-Before step 3, read the pre-existing `/wf/Set Status` and `/wf/Set Location`
-workflows and the unread `toolshistory` schema. If `Set Status` also writes
-history, this phase should call it rather than writing `status` directly.
+The old Bubble UI is live and is a **second writer** of `tools.status`, and of
+`toolshistory` (via its pre-existing `/wf/Set Status`/`/wf/Set Location`
+workflows — confirmed live, ~1,542 rows). Rather than calling those legacy
+workflows, phase 2's `update-request-status` writes its own `toolshistory`
+rows directly, using new fields (`prevStatusNew`/`newStatusNew`) so it doesn't
+collide with the old ones' option set. See `docs/bubble-update-request-status-spec.md`.
 
 ## 3. Bubble Studio
 

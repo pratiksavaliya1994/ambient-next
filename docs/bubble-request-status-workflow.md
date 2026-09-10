@@ -154,6 +154,18 @@ safe.
 
 ## 6. Public workflow: `update-request-status`
 
+**Status: built and live.** Both dispatch and offload call it today — real
+`request` rows already carry `status: "Delivered"` with a `driver` set.
+
+**2026-09-10 — the explicit `toolshistory`-writing step described below has
+been removed.** It duplicated a pre-existing, previously-undocumented backend
+workflow, `DB - Tools Change Log` (Data event, `A tools is modified`, no
+condition), which already writes a `toolshistory` row on every `tools` save —
+including the one this workflow's tools-update step makes. Running both
+produced two `toolshistory` rows per dispatch/offload; caught via a live read
+showing the duplicates. See `docs/bubble-update-request-status-spec.md` for
+the fuller, corrected build sheet; this section is kept in sync with it.
+
 **Backend Workflows → New API Workflow**, named exactly
 `update-request-status`. Same auth setting as `new-request`.
 
@@ -170,7 +182,7 @@ Parameters:
 | `driver` | text | Optional |
 | `toolIds` | text **list** | Optional |
 | `toolStatus` | **the `ToolStatusNew` option set** | Not text — see below |
-| `toolLocation` | text | Optional. Only sent on offload |
+| `toolLocation` | text | Optional. Sent on **both** dispatch (the driver's name) and offload (the job's `name`) |
 | `toolUser` | text | Optional |
 
 Declare `toolStatus` as the **`ToolStatusNew` option set type itself** in the
@@ -180,13 +192,23 @@ Declaring it as text and converting later reproduces the Data API's behaviour,
 where an unrecognised option-set value **fails silently** — which is exactly the
 failure this design can't afford.
 
+**As built, the request update is two separate steps**, not one step setting
+two fields — Bubble's "make changes to a list" here doesn't give `driver` its
+own per-field "only when" alongside `status` in a single step, so they were
+split. **As of 2026-09-10, four steps total** — the former Step 3 below
+(`create-tool-history-entry` fan-out) has been removed; see the note above:
+
 **Step 1 — Make changes to a list of things:**
 
 - List: `Search for request (unique id is in requestIds)`
 - `status` = `status`
-- `driver` = `driver`, **only when** `driver is not empty`
 
 **Step 2 — Make changes to a list of things:**
+
+- List: `Search for request (unique id is in requestIds)`
+- `driver` = `driver`, **only when** `driver is not empty`
+
+**Step 3 — Make changes to a list of things:** *(unchanged; was Step 4)*
 
 - List: `Search for tools (unique id is in toolIds)`
 - **`statusNew`** = `toolStatus`, **only when** `toolStatus is not empty`.
@@ -196,11 +218,23 @@ failure this design can't afford.
 - `currentUser` = `toolUser`, **only when** `toolUser is not empty`
 - Gate the whole step on `toolIds is not empty`
 
-**Step 3 — Return data from API:**
-`{ ok: true, requests: requestIds:count, tools: toolIds:count }`.
+This step's edit to `tools` is exactly what makes `DB - Tools Change Log`
+(outside this project — Data event, `A tools is modified`) fire and write the
+`toolshistory` row for this transition; no extra step is needed to produce
+it, which is the whole reason the old Step 3 was redundant.
 
-> **Why this is not a `Schedule API Workflow on a list` like
-> `update-tool-status` is.** That one fans out because every tool gets a
+`toolshistory` (~1,542 real rows pre-dating this app, plus whatever
+`DB - Tools Change Log` has written since) carries two fields specific to
+this app's lifecycle — `prevStatusNew`/`newStatusNew`, option set
+`ToolStatusNew` — added because the table's original `prevStatus`/`newStatus`
+are typed to the **old** `Tool Status` set and can't hold the values
+`tools.statusNew` uses. `DB - Tools Change Log` populates both pairs
+(`prevStatus`/`newStatus` and `prevStatusNew`/`newStatusNew`) directly off
+`tools before change`/`tools now`, so no helper workflow on this app's side
+is needed to fill them.
+
+> **Why Step 3 (the tools update) is not a `Schedule API Workflow on a list`
+> like `update-tool-status` is.** That one fans out because every tool gets a
 > *different* status. Here every tool in one transition shares one destination,
 > so a single synchronous list-change does it — and the caller learns whether it
 > worked. `bubble-pickup-tool-status-workflow.md` §3 notes its fan-out is
@@ -209,6 +243,11 @@ failure this design can't afford.
 > *status*. Not tolerable for the *location* lifecycle, where a half-applied
 > dispatch leaves some tools moved and some not, the request claiming otherwise,
 > and nothing anywhere reporting it.
+
+**Step 4 — Return data from API:** *(unchanged; was Step 5)*
+`{ ok: true, requests: requestIds:count, tools: toolIds:count }`. History rows
+aren't counted — they're `DB - Tools Change Log`'s concern, not this
+workflow's.
 
 ## 7. Test before relying on it
 
@@ -225,14 +264,19 @@ deliberately, before the Next.js side calls anything.
 4. **Run it with `assignments` empty** — the request's rows should be deleted,
    `status` still set, and no `create-assigned-tool` runs scheduled.
 5. **`update-request-status` with only `requestIds` + `status`** — confirm the
-   request rows changed and **no** `tools` row did.
+   request rows changed and **no** `tools` row did. `update-request-status` is
+   live already, so this is a regression check on an edit, not a first test.
 6. **Again with `toolIds` + `toolStatus`, and no `toolLocation`** — confirm the
    tools' **`statusNew`** changed, their original `status` is **untouched**, and
-   their `location` is **untouched**, not blanked. That is what the "only when
-   not empty" guards are for.
+   their `location` is **untouched**, not blanked.
 7. **Again with `toolLocation` set** — confirm `location` now holds the exact
-   job name string.
-8. Only then wire up the Next.js side.
+   job name string, and — the actual point of the 2026-09-10 change — exactly
+   **one** new `toolshistory` row per tool exists (not two), with
+   `prevLocation` equal to what `location` was before this run, `newLocation`
+   matching `toolLocation`, and `prevStatusNew`/`newStatusNew` populated,
+   courtesy of `DB - Tools Change Log`.
+   Full detail is in `docs/bubble-update-request-status-spec.md` — use that as
+   the working build sheet.
 
 Every one of these is a real write to the live `version-test` database. Pick
 one request and a handful of tools, and note which ones so they can be checked

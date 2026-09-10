@@ -1,16 +1,32 @@
 # Bubble Studio spec: `update-request-status`
 
-A focused build sheet for the one workflow Dispatch (2B) needs. The
-authoritative source is `docs/bubble-request-status-workflow.md` §6-7 (which
-also covers two unrelated workflows, `create-assigned-tool` and
+A focused build sheet for the one workflow Dispatch (2B) and Offload (2C)
+share. The authoritative source is `docs/bubble-request-status-workflow.md`
+§6-7 (which also covers two unrelated workflows, `create-assigned-tool` and
 `assign-request-tools`) — this file pulls out just the `update-request-status`
 piece so it can be handed to whoever builds it in Bubble Studio without the
 surrounding context.
 
-**Status: not built yet.** The Next.js side already calls it —
-`lib/bubble/requests.ts#dispatchRequests`, called from
-`app/(app)/dispatch/actions.ts#dispatchAction` — and will fail with a visible
-"Bubble rejected the dispatch" error until this exists.
+**Status: built and live.** Both `lib/bubble/requests.ts#dispatchRequests`
+(dispatch, 2B) and `lib/bubble/requests.ts#offloadRequest` (offload/complete
+delivery, 2C) call it today, and real `request` rows already carry
+`status: "Delivered"` with a `driver` set, confirming it's in active use.
+
+**2026-09-10 — the `toolshistory` step (formerly Step 3 below) has been
+disabled and removed.** It turned out to be redundant: there is a
+pre-existing, previously-undocumented backend workflow, `DB - Tools Change
+Log` (Data event, `A tools is modified`, no condition), that already fires on
+*every* `tools` save and writes its own `toolshistory` row — snapshotting
+`tool`, `prevLocation`/`newLocation`, `prevStatus`/`newStatus`, and
+`prevStatusNew`/`newStatusNew` off `tools before change`/`tools now`. Since
+this workflow's own Step 4 (tools update, renumbered to Step 3 below) edits
+`tools.location`/`tools.statusNew`, `DB - Tools Change Log` fires from that
+edit alone. Running the explicit `create-tool-history-entry` fan-out *as
+well* produced two `toolshistory` rows per dispatch/offload instead of one —
+caught by a live read of `toolshistory` showing duplicates. The fix is to
+remove the explicit step and let `DB - Tools Change Log` be the only writer;
+§3-5 below are kept as a historical record of what was removed and why, not
+as current build instructions — see the note at the top of each.
 
 > The `version-test` branch is the only version in use. Treat it as
 > production: ~1,450 jobs, ~1,550 requests of real data. Test with rows you
@@ -19,17 +35,16 @@ surrounding context.
 
 ---
 
-## 1. Create the workflow
+## 1. The workflow
 
-**Backend Workflows → New API Workflow**, named exactly
-`update-request-status`. Expose it as an API endpoint with the same auth
-setting as `new-request` ("User & admin").
+**Backend Workflows → API Workflow**, named `update-request-status`, exposed
+as an API endpoint with the same auth setting as `new-request` ("User &
+admin").
 
-This one workflow is designed to serve three transitions — dispatch (built,
-consuming it now), offload (2C, not started), and assign's tool-status half
-(2A, prospective — the current `create-assigned-tool` workflow doesn't call
-this yet). Every optional parameter is guarded, so a caller sends only the
-fields it means to change.
+This one workflow serves three transitions — dispatch, offload, and assign's
+tool-status half (2A, prospective — the current `create-assigned-tool`
+workflow doesn't call this yet). Every optional parameter is guarded, so a
+caller sends only the fields it means to change.
 
 ## 2. Parameters
 
@@ -40,26 +55,110 @@ fields it means to change.
 | `driver` | text | Optional |
 | `toolIds` | text **list** | Optional |
 | `toolStatus` | **the `ToolStatusNew` option set** | Not text — see below |
-| `toolLocation` | text | Optional. Sent on **both** dispatch (the driver's name) and offload (the job's `name`) — see §4 |
+| `toolLocation` | text | Optional. Sent on **both** dispatch (the driver's name) and offload (the job's `name`) — see §5 |
 | `toolUser` | text | Optional |
 
-Declare `toolStatus` as the **`ToolStatusNew` option set type itself** in the
-parameter definition — not text, and not the original `Tool Status` set.
-Bubble then matches the incoming display text and raises an error on a bad
-value. Declaring it as text and converting later reproduces the Data API's
-"an unrecognised option-set value fails silently" behaviour, which this design
-can't afford — a silently-dropped tool status on dispatch is exactly the
-failure mode it exists to prevent.
+`toolStatus` is declared as the **`ToolStatusNew` option set type itself** —
+not text, and not the original `Tool Status` set. Bubble then matches the
+incoming display text and raises an error on a bad value. Declaring it as text
+and converting later reproduces the Data API's "an unrecognised option-set
+value fails silently" behaviour, which this design can't afford.
 
-## 3. Steps
+## 3. Two fields on `toolshistory` (still in place — now written by `DB - Tools Change Log`, not this workflow)
+
+*(Historical: these fields were added for the `create-tool-history-entry`
+step below, which has since been removed — see the 2026-09-10 note above.
+The fields stay, since `DB - Tools Change Log` populates them on every
+`tools` edit regardless of which workflow made it.)*
+
+`toolshistory` already exists and is **not empty** — ~1,542 real rows, written
+by the pre-existing `/wf/Set Status` / `/wf/Set Location` workflows (the old
+Bubble UI). Its confirmed live schema:
+
+| Field | Type |
+| --- | --- |
+| `tool` | link to `tools` |
+| `prevLocation`, `newLocation` | text |
+| `prevLocationFloor`, `newLocationFloor` | text |
+| `prevStatus`, `newStatus` | option set — the original `Tool Status` set (`Ok`, `Ready for Pickup`, `To be Repaired`, …) |
+| `notes` | text |
+| `picture` | text |
+
+`prevStatus`/`newStatus` hold the **old** `Tool Status` vocabulary, which
+doesn't include the phase-2 lifecycle values this workflow writes (`In
+Transit`, `Delivered`, from `tools.statusNew`/`ToolStatusNew`). Writing those
+into the existing fields would fail silently (wrong option set), and retyping
+the fields risks blanking the 1,542 existing rows' values. So: **add two new
+fields instead, don't touch the existing ones** — the same "parallel field,
+not a retype" move already made for `tools.statusNew` itself:
+
+- `prevStatusNew` — option set `ToolStatusNew`
+- `newStatusNew` — option set `ToolStatusNew`
+
+`prevLocationFloor`/`newLocationFloor`/`notes`/`picture` stay blank on rows
+this workflow creates — floor isn't touched by dispatch/offload, and `notes`
+is for exceptional annotations (e.g. the existing "Ignition key not working"
+row), not routine transitions.
+
+## 4. Removed: private helper workflow `create-tool-history-entry`
+
+*(Historical — this helper and the step that called it, below, were removed
+on 2026-09-10. Kept here only as a record of what used to exist; delete the
+workflow in Bubble Studio if it's still there, it's dead.)*
+
+Same shape as the existing per-item helpers (`assign-request-tool`,
+`update-tool-status`) — internal-only, same "This workflow can be run" setting
+as those, **not** exposed as a public API endpoint.
+
+**As built, `tool` is a direct `Tools` parameter, not a text id** — an
+optimization over the original design (which passed a text `toolId` and
+required a `Search for Tools (unique id = toolId)` inside this helper just to
+get a usable thing back). Passing the thing itself means this helper does no
+searching at all:
+
+Parameters:
+
+| Parameter | Type |
+| --- | --- |
+| `tool` | **Tools** (a direct thing reference, not text) |
+| `prevLocation` | text |
+| `newLocation` | text |
+| `prevStatusNew` | the `ToolStatusNew` option set |
+| `newStatusNew` | the `ToolStatusNew` option set |
+
+**Step 1 — Create a new `toolshistory`:**
+
+| Field | Value |
+| --- | --- |
+| `tool` | `tool` |
+| `prevLocation` | `prevLocation` |
+| `newLocation` | `newLocation` |
+| `prevStatusNew` | `prevStatusNew` |
+| `newStatusNew` | `newStatusNew` |
+
+No **Return data from API** step — nothing reads this workflow's response,
+matching its siblings.
+
+## 5. Steps in `update-request-status`
+
+**As built, the request update is two separate steps** (not one step setting
+two fields) — Bubble's "make changes to a list" doesn't support a per-field
+"only when" the way a single combined step would need for `driver`, so
+`status` and `driver` were split out. **As of 2026-09-10, four steps total**
+— the former Step 3 (`create-tool-history-entry` fan-out) has been removed;
+see the note at the top of this doc:
 
 **Step 1 — Make changes to a list of things:**
 
 - List: `Search for request (unique id is in requestIds)`
 - `status` = `status`
-- `driver` = `driver`, **only when** `driver is not empty`
 
 **Step 2 — Make changes to a list of things:**
+
+- List: `Search for request (unique id is in requestIds)`
+- `driver` = `driver`, **only when** `driver is not empty`
+
+**Step 3 — Make changes to a list of things:** *(unchanged; was Step 4)*
 
 - List: `Search for tools (unique id is in toolIds)`
 - **`statusNew`** = `toolStatus`, **only when** `toolStatus is not empty` — the
@@ -69,32 +168,38 @@ failure mode it exists to prevent.
 - `currentUser` = `toolUser`, **only when** `toolUser is not empty`
 - Gate the whole step on `toolIds is not empty`
 
-**Step 3 — Return data from API:**
+This step's edit to `tools` is what triggers `DB - Tools Change Log` (the
+data-event workflow, outside this project, that fires on `A tools is
+modified`) — that workflow is now the sole writer of the `toolshistory` row
+for this transition, with no extra step needed here to make it happen.
+
+**Step 4 — Return data from API:** *(unchanged; was Step 5)*
 
 ```json
 { "ok": true, "requests": "requestIds:count", "tools": "toolIds:count" }
 ```
 
-The Next.js side (`dispatchRequests`) Zod-parses `{ requests, tools }` and
-compares `requests` against what it sent — a mismatch throws, since a partial
-move across requests is not safe to ignore. A `tools` mismatch is surfaced as
-a non-fatal warning instead, since the requests still moved correctly.
+The Next.js side (`dispatchRequests`/`offloadRequest`) Zod-parses
+`{ requests, tools }` and compares the counts against what it sent — a
+`requests` mismatch throws, a `tools` mismatch surfaces as a non-fatal
+warning. The response shape is unchanged — history rows aren't counted here,
+same fire-and-forget tolerance as `update-tool-status`'s fan-out below.
 
-### Why a synchronous list-change, not `Schedule API Workflow on a list`
+### Why Step 3 (tools update) stays a synchronous list-change, not a fan-out
 
 `update-tool-status` (the Pickup flow's workflow) fans out because every tool
 gets a *different* status. Here every tool in one transition shares one
 destination, so a single synchronous list-change does it — and the caller
-gets a real count back. `docs/bubble-pickup-tool-status-workflow.md` §3 notes
-its own fan-out is deliberately fire-and-forget ("a slow or failed individual
-`tools` update never blocks or fails the request creation itself") —
-tolerable for a pickup *status* ping, not tolerable for the *location*
-lifecycle, where a half-applied dispatch would leave some tools moved and some
-not, the request claiming otherwise, with nothing anywhere reporting it.
+gets a real count back. Its own fan-out is deliberately fire-and-forget ("a
+slow or failed individual `tools` update never blocks or fails the request
+creation itself") — tolerable for a pickup *status* ping, not tolerable for
+the *location* lifecycle, where a half-applied dispatch would leave some tools
+moved and some not, the request claiming otherwise, with nothing anywhere
+reporting it.
 
-## 4. Call shapes by transition
+## 6. Call shapes by transition
 
-**Dispatch (2B — built, calling this today):**
+**Dispatch (2B — built, live):**
 
 | Parameter | Value |
 | --- | --- |
@@ -106,7 +211,7 @@ not, the request claiming otherwise, with nothing anywhere reporting it.
 | `toolLocation` | **the driver's name** — same string as `driver`/`toolUser`. `location` means "current place or custodian," so a tool in transit reads as being with whoever has it, not still at its pre-dispatch place. See `docs/phase-2-lifecycle.md`. |
 | `toolUser` | the driver's name |
 
-**Offload (2C — not started):**
+**Offload (2C — built, live):**
 
 | Parameter | Value |
 | --- | --- |
@@ -123,22 +228,35 @@ not, the request claiming otherwise, with nothing anywhere reporting it.
 separately the tools a save *dropped* with `toolStatus: "Available"`. Not part
 of this build — `request.status` is already set to `Assigned` by
 `create-assigned-tool` itself; only the `tools.statusNew` write is missing.
+It would still produce a `toolshistory` row via `DB - Tools Change Log`
+though, since that workflow fires on any `tools` edit, `toolLocation` or not
+— unlike the old Step 3 guard, it doesn't care whether location changed.
 
-## 5. Test before relying on it
+## 7. Test before relying on it
 
-Do these in Bubble Studio's **Run** / test feature, against a request and a
-handful of tools picked deliberately — note which ones so they can be checked
-and put back. Every run below is a real write to the live database.
+`update-request-status` already carries real traffic, so test any edit here
+as an edit to a **working workflow**, not a first build. Do these in Bubble
+Studio's **Run** / test feature (or Postman against the real endpoint),
+against a request and a handful of tools picked deliberately — note which
+ones so they can be checked and put back. Every run below is a real write to
+the live database. After each write, confirm the result by reading
+`toolshistory` back (e.g. `GET /obj/toolshistory?sort_field=Created Date&descending=true&limit=5`) rather than assuming it worked.
 
-1. **`requestIds` + `status` only** — confirm the request rows changed and
-   **no** `tools` row did.
-2. **Add `toolIds` + `toolStatus`, no `toolLocation`** — confirm the tools'
-   **`statusNew`** changed, their original `status` field is **untouched**,
-   and their `location` is **untouched**, not blanked. That's what the "only
-   when not empty" guards are for.
-3. **Add `toolLocation`** — confirm `location` now holds the exact job name
-   string.
-4. **Run the same call twice** — since this is a plain field-set rather than a
-   create, running it again should leave the same end state, not double
-   anything.
-5. Only then let the Next.js Dispatch board call it for real.
+1. **Regression check — `requestIds` + `status` only, no `toolIds`.** Confirm
+   the request rows change and no `tools` row does — and, since nothing
+   touched `tools`, `DB - Tools Change Log` doesn't fire either, so no
+   `toolshistory` row appears.
+2. **Add `toolIds` + `toolStatus` (+ optionally `toolLocation`).** Confirm the
+   tools' `statusNew`/`location` change as expected, and — the point of this
+   whole change — exactly **one** new `toolshistory` row per tool appears,
+   not two, with `prevLocation`/`newLocation` and `prevStatusNew`/
+   `newStatusNew` populated correctly off `DB - Tools Change Log`'s
+   before/after read.
+3. **Run the same call again with a different `toolLocation`.** Confirm the
+   tools update to the new value as before (no doubling), and the *newest*
+   `toolshistory` row's `prevLocation` equals the *previous* run's
+   `newLocation`.
+4. Only then let the Next.js Dispatch board and Complete Delivery action call
+   it for real — though for dispatch/offload themselves that's already
+   happening; this step is really about confirming the duplicate is actually
+   gone on a real row, not just in theory.

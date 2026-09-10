@@ -44,15 +44,16 @@ schema for all of phase 2 landed in 2A.
       pattern `assignTools` uses; `app/(app)/dispatch/actions.ts#dispatchAction`
       re-checks every selected request is still `Assigned` right before
       writing, derives the tool-id union from fresh `assignedtools` rows, and
-      redirects to `/dispatch/active` on success. **Still blocked on Bubble**:
-      `update-request-status` doesn't exist there yet (see "What it writes"
-      below — unchanged from the original design), so a real dispatch attempt
-      reaches `dispatchRequests` and fails with a visible error until it's
-      built and tested per `docs/bubble-request-status-workflow.md` §6-7.
-- [ ] **2C — Offload.** Not started. `app/(app)/dispatch/[requestId]/page.tsx`
-      doesn't exist; an in-transit request's row on the board links to the
-      existing `/requests/{id}` detail page instead, whose own next-action
-      button already renders "Offload — not built yet" for that status.
+      redirects to `/dispatch/active` on success. **`update-request-status` is
+      built and live** in Bubble (see "What it writes" below) — confirmed via
+      real `request` rows carrying `status: "Delivered"` with a `driver` set.
+- [x] **2C — Offload.** Built and live, on the request detail page rather than
+      a dedicated route — see "Route" under 2C below. A `toolshistory` row per
+      tool appears on both dispatch and offload too, but as a side effect of
+      the pre-existing `DB - Tools Change Log` workflow reacting to
+      `update-request-status`'s tools-update step, not from an explicit step
+      in this app's workflow — see "What it writes" below and
+      `docs/bubble-update-request-status-spec.md` for why.
 
 **Now wired.** `app/(app)/requests/page.tsx`'s `NEXT_ACTIONS.Assigned` and the
 request detail page's `NextAction` both link to `/dispatch?requestId={id}` —
@@ -97,6 +98,7 @@ A driver/PM takes **one or more requests at once** from the warehouse.
 | `tools` (every assigned tool across those requests) | `status` | `In Transit` |
 | | `currentUser` | the driver's name |
 | | `location` | **the driver's name** |
+| `toolshistory` (one new row per tool) | `prevLocation` → `newLocation` | the tool's prior `location` → the driver's name |
 
 `location` means "current physical place, or whoever has custody" — a tool in
 transit reads as being *with* the driver rather than still showing its
@@ -104,7 +106,10 @@ pre-dispatch place (`Warehouse`). See `phase-2-lifecycle.md` for the reasoning
 and the trade-off this makes for a future return-to-warehouse flow.
 
 One call to `update-request-status` with several `requestIds` and the union of
-their `toolIds`. The workflow already accepts a list on both.
+their `toolIds`. The workflow already accepts a list on both. That call's
+edit to `tools.location`/`tools.statusNew` also triggers `DB - Tools Change
+Log` (outside this project), which creates one `toolshistory` row per tool
+for traceability — see `docs/bubble-update-request-status-spec.md`.
 
 ### Trips are derived, not stored
 
@@ -149,13 +154,17 @@ The driver arrives on site and drops the load.
 | `tools` (this request's assigned tools) | `status` | `Delivered` |
 | | `location` | **the job's `name`** |
 | | `currentUser` | unchanged — kept as the driver, a real record of who moved it |
+| `toolshistory` (one new row per tool) | `prevLocation` → `newLocation` | the driver's name → the job's `name` |
 
-This is the **only** moment in phase 2 that writes `tools.location`. The value
-must be the job's `name` exactly, since `listToolsForJob` filters
+This is the **only** moment in phase 2 that writes `tools.location` to a job.
+The value must be the job's `name` exactly, since `listToolsForJob` filters
 `location equals jobName` and nothing enforces referential integrity.
 
 One call to `update-request-status` with one `requestId`, the request's
-`toolIds`, `toolStatus: "Delivered"` and `toolLocation: job.name`.
+`toolIds`, `toolStatus: "Delivered"` and `toolLocation: job.name` — whose
+`tools` edit likewise triggers `DB - Tools Change Log`, producing one
+`toolshistory` row per tool, the second entry in each tool's location trail
+after dispatch's. See `docs/bubble-update-request-status-spec.md`.
 
 ### Route
 

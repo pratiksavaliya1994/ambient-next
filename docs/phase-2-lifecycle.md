@@ -6,8 +6,8 @@ doc with the file list and checklist:
 | Slice | Doc | State |
 | --- | --- | --- |
 | **2A — Assign** | [`phase-2a-assignment.md`](./phase-2a-assignment.md) | in progress |
-| **2B — Dispatch** | [`phase-2bc-dispatch-offload.md`](./phase-2bc-dispatch-offload.md) | in progress — board built, frontend only |
-| **2C — Offload** | [`phase-2bc-dispatch-offload.md`](./phase-2bc-dispatch-offload.md) | not started |
+| **2B — Dispatch** | [`phase-2bc-dispatch-offload.md`](./phase-2bc-dispatch-offload.md) | built, live |
+| **2C — Offload** | [`phase-2bc-dispatch-offload.md`](./phase-2bc-dispatch-offload.md) | built, live |
 
 The Bubble Studio build guide for all three is
 [`bubble-request-status-workflow.md`](./bubble-request-status-workflow.md).
@@ -129,6 +129,30 @@ original `status` column is never written by this phase.
 the tool, and `lib/bubble/pickup-tools.ts` notes it is already non-empty on
 some live rows.
 
+### `toolshistory` — two new fields, one per dispatch/offload tool
+
+Confirmed live schema (via a read-only API check — this table was previously
+unread by this app): `tool` (link to `tools`), `prevLocation`/`newLocation`
+(text), `prevLocationFloor`/`newLocationFloor` (text), `prevStatus`/`newStatus`
+(option set — the **old** `Tool Status` set), `notes` (text), `picture`
+(text). It already holds ~1,542 real rows, written by the pre-existing
+`/wf/Set Status`/`/wf/Set Location` workflows (the old Bubble UI) — this app
+never wrote it before.
+
+`prevStatus`/`newStatus` can't hold this phase's `ToolStatusNew` values (wrong
+option set — same "would fail silently" problem `tools.statusNew` was invented
+to avoid), and retyping them risks blanking the 1,542 existing rows. So two
+new fields carry it instead: `prevStatusNew` / `newStatusNew`, both option set
+`ToolStatusNew` — the same parallel-field pattern as `tools.statusNew` itself.
+
+Dispatch and offload each produce one `toolshistory` row per tool — **not**
+via an explicit step in `update-request-status` (an earlier design did that
+and was reverted 2026-09-10; see `docs/bubble-update-request-status-spec.md`)
+but as a side effect of `DB - Tools Change Log`, a pre-existing backend
+workflow outside this project that fires on `A tools is modified` and logs
+every `tools` save automatically. `update-request-status`'s own tools-update
+step is enough to trigger it — nothing else is needed.
+
 ### New type: `assignedtools`
 
 Mirrors the existing `requestedtools` child-row shape, id-as-text convention
@@ -178,9 +202,12 @@ several requests together is one call carrying several `requestIds`.
 
 Full Bubble Studio build steps are in
 [`bubble-request-status-workflow.md`](./bubble-request-status-workflow.md).
-**As built, only the assignment workflow exists** — see
-[`phase-2a-assignment-handoff.md`](./phase-2a-assignment-handoff.md).
-`update-request-status` is deferred, and 2B/2C are its first real consumers.
+**`update-request-status` is built and live**, alongside the assignment
+workflow — see [`phase-2a-assignment-handoff.md`](./phase-2a-assignment-handoff.md)
+for assignment, and `docs/bubble-update-request-status-spec.md` for the
+current, up-to-date build sheet for `update-request-status` (dispatch and
+offload are its confirmed-live consumers; assign's tool-status half is still
+prospective).
 
 ### `create-assigned-tool`
 
