@@ -200,6 +200,17 @@ All 1,445 jobs go to the combobox; `toJobOption` strips `description` (~100KB, s
 
 **Not the Next.js/React you know.** `next@16.2.6`, `react@19.2.4` — breaking changes relative to training data (see `AGENTS.md`). Read the relevant guide under `node_modules/next/dist/docs/` before writing Next-specific code.
 
+## Component size & structure rules
+
+Strict, non-negotiable — apply while writing code, not as a later cleanup pass:
+
+1. **No component over 100 lines.** Past that, extract a subcomponent — reuse an existing shared component if one already fits, otherwise create a new one.
+2. **No file over 300 lines**, full stop.
+3. **No file holds more than 3 components.**
+4. **Anything reusable across more than one feature goes in a shared folder** (`components/ui/` for primitives, `components/` for cross-feature building blocks) — not left local to the page/feature that happened to need it first.
+
+When a file is about to cross one of these limits, split it before finishing the change rather than after.
+
 ## Environment
 
 ```

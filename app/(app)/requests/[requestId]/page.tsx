@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, CheckIcon, TruckIcon, WrenchIcon } from "lucide-react"
+import { ArrowLeftIcon, CheckIcon, TriangleAlertIcon, TruckIcon, WrenchIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
@@ -45,6 +45,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
 
   const [assigned, toolTypes] = await Promise.all([listAssignedTools([request.id]), listToolTypes()])
   const { slots, extraToolIds } = buildSlots(request.tools, assigned, toolTypes)
+  const incompleteSlots = slots.filter((slot) => !slot.consumable && slot.toolIds.length < slot.requested)
 
   const toolIds = [...slots.flatMap((slot) => slot.toolIds), ...extraToolIds]
   const resolvedTools = await listToolsByIds([...new Set(toolIds)])
@@ -99,7 +100,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
               </div>
 
               {request.driver && (
-                <div className="mt-4 flex items-center gap-3 rounded-lg border bg-status-active/10 p-3">
+                <div className="mt-4 flex items-center gap-3 rounded-lg border bg-status-attention/10 p-3">
                   <Avatar>
                     <AvatarFallback>{driverInitials(request.driver)}</AvatarFallback>
                   </Avatar>
@@ -142,6 +143,20 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
               </CardAction>
             </CardHeader>
             <CardContent>
+              {incompleteSlots.length > 0 && (
+                <div className="mb-4 flex items-start gap-1.5 rounded-md bg-status-attention/15 px-3 py-2 text-sm text-status-attention-foreground">
+                  <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
+                  <span className="min-w-0 wrap-anywhere">
+                    <span className="font-medium">Not fully assigned</span> — missing{" "}
+                    {incompleteSlots
+                      .map((slot) => `${slot.toolType} ×${slot.requested - slot.toolIds.length}`)
+                      .join(", ")}
+                    {request.status === "Assigned" && " Dispatching now would send this request out incomplete."}
+                    {(request.status === "In Transit" || request.status === "Delivered") &&
+                      " This request went out incomplete."}
+                  </span>
+                </div>
+              )}
               {slots.length === 0 ? (
                 <Empty className="border border-dashed py-8">
                   <EmptyHeader>
@@ -170,7 +185,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                                 "inline-flex shrink-0 items-center rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
                                 slot.toolIds.length >= slot.requested
                                   ? "bg-status-ok/15 text-status-ok-foreground"
-                                  : "bg-background text-muted-foreground"
+                                  : "bg-status-attention/15 text-status-attention-foreground"
                               )}
                             >
                               {slot.toolIds.length} of {slot.requested}
@@ -198,7 +213,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                           </ul>
                         ) : (
                           !slot.consumable && (
-                            <p className="border-l-2 border-muted-foreground/25 pl-3 text-xs text-muted-foreground italic">
+                            <p className="border-l-2 border-status-attention/50 pl-3 text-xs font-medium text-status-attention-foreground">
                               No tool assigned yet for this type
                             </p>
                           )

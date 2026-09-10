@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ChevronRightIcon } from "lucide-react"
+import { ChevronRightIcon, TriangleAlertIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -79,7 +79,16 @@ export function ActiveTrips({ tripsByDriver }: { tripsByDriver: [string, Dispatc
                               ))}
                             </div>
                           )}
-                          <div className="flex items-center justify-end gap-0.5 text-xs font-medium text-primary">
+                          {request.missing.length > 0 && (
+                            <div className="flex items-start gap-1.5 rounded-md bg-status-attention/15 px-2 py-1.5 text-xs text-status-attention-foreground">
+                              <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />
+                              <span className="min-w-0 wrap-anywhere">
+                                <span className="font-medium">Not fully assigned</span> — missing{" "}
+                                {request.missing.map((line) => `${line.toolType} ×${line.short}`).join(", ")}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-end gap-0.5 py-1 text-xs font-medium text-primary">
                             Complete delivery
                             <ChevronRightIcon className="size-3.5" />
                           </div>

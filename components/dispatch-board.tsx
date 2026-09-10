@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { AlertCircleIcon, ArrowRightIcon, TruckIcon } from "lucide-react"
+import { AlertCircleIcon, ArrowRightIcon, TriangleAlertIcon, TruckIcon, WrenchIcon } from "lucide-react"
 
 import { dispatchAction } from "@/app/(app)/dispatch/actions"
 import { INITIAL_DISPATCH_STATE, type DispatchState } from "@/app/(app)/dispatch/action-state"
@@ -108,21 +108,24 @@ export function DispatchBoard({
                     size="sm"
                     variant="outline"
                     className={cn(
-                      "cursor-pointer flex-nowrap bg-background shadow-sm transition-colors hover:bg-muted/40",
+                      "cursor-pointer items-start bg-background shadow-sm transition-colors hover:bg-muted/40 sm:flex-nowrap sm:items-center",
                       checked && "border-primary bg-primary/5 ring-1 ring-primary hover:bg-primary/5"
                     )}
                   >
                     <Checkbox
-                      className="shrink-0"
+                      className="mt-0.5 shrink-0 sm:mt-0"
                       checked={checked}
                       onCheckedChange={(next) => toggle(request.id, next === true)}
                       aria-label={`Select ${request.job}`}
                     />
                     <ItemContent className="min-w-0" onClick={() => toggle(request.id, !checked)}>
-                      <ItemTitle className="w-full truncate" title={request.job}>
+                      <ItemTitle
+                        className="line-clamp-2 w-full wrap-anywhere sm:line-clamp-1 sm:truncate"
+                        title={request.job}
+                      >
                         {request.job}
                       </ItemTitle>
-                      <ItemDescription className="truncate">
+                      <ItemDescription className="sm:truncate">
                         {newYorkDayLabel(request.start ?? request.end)}
                         {request.timeRange && ` · ${request.timeRange}`}
                         {request.fieldPm && ` · ${request.fieldPm}`}
@@ -137,14 +140,41 @@ export function DispatchBoard({
                           ))}
                         </div>
                       )}
+                      {request.missing.length > 0 && (
+                        <div className="flex items-start gap-1.5 rounded-md bg-status-attention/15 px-2 py-1.5 text-xs text-status-attention-foreground">
+                          <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />
+                          <span className="min-w-0 wrap-anywhere">
+                            <span className="font-medium">Not fully assigned</span> — missing{" "}
+                            {request.missing.map((line) => `${line.toolType} ×${line.short}`).join(", ")}
+                          </span>
+                        </div>
+                      )}
                     </ItemContent>
-                    <ItemActions className="shrink-0" onClick={(event) => event.stopPropagation()}>
+                    {/* Below `sm` this wraps onto its own full-width line — `basis-full`, the
+                        same trick `ItemFooter` uses — so the job name keeps the first line to
+                        itself instead of being squeezed by three controls. */}
+                    <ItemActions
+                      className="basis-full justify-between border-t pt-2 sm:shrink-0 sm:basis-auto sm:justify-end sm:border-t-0 sm:pt-0"
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <Badge variant="outline" className="tabular-nums">
                         {request.toolCount} {request.toolCount === 1 ? "tool" : "tools"}
                       </Badge>
-                      <Link href={`/requests/${request.id}`} className="text-xs text-muted-foreground hover:underline">
-                        View
-                      </Link>
+                      <div className="flex items-center gap-3">
+                        <Link
+                          href={`/requests/${request.id}/assign`}
+                          className="flex items-center gap-1 py-1.5 text-xs text-muted-foreground hover:underline sm:py-0"
+                        >
+                          <WrenchIcon className="size-3" />
+                          Edit assignment
+                        </Link>
+                        <Link
+                          href={`/requests/${request.id}`}
+                          className="py-1.5 text-xs text-muted-foreground hover:underline sm:py-0"
+                        >
+                          View
+                        </Link>
+                      </div>
                     </ItemActions>
                   </Item>
                 )
