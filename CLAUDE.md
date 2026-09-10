@@ -12,6 +12,8 @@ Next.js frontend for the Tipp Floor Covering / Ambient Flooring tool workflow. *
 
 **In progress — phase 2:** the request lifecycle (assign → dispatch → offload) and the tool location lifecycle. Design and build sheets live in [`docs/phase-2-lifecycle.md`](docs/phase-2-lifecycle.md); **read that before touching `tools`, `assignedtools`, or `request.status`.** The Bubble Studio steps are in [`docs/bubble-request-status-workflow.md`](docs/bubble-request-status-workflow.md).
 
+**Designed, not started — phase 3:** the **pickup** lifecycle, mirroring phase 2 on the same fields (`New → Assigned → In Transit → Returned`). Master design in [`docs/phase-3-pickup-lifecycle.md`](docs/phase-3-pickup-lifecycle.md), one build sheet per slice ([3A](docs/phase-3a-condition-split.md) condition split · [3B](docs/phase-3b-pickup-assignments.md) pickup assignments · [3C](docs/phase-3c-actual-pickup.md) actual pickup · [3D](docs/phase-3d-warehouse-offload.md) warehouse offload). **3A goes first** — it splits condition off `tools.statusNew` into a new `tools.condition` field, and 3C would otherwise overwrite the PM's condition pick. No new Bubble workflow is needed in phase 3.
+
 **Not built:** approve/reject, QR scanning, GPS.
 
 ## Before changing anything
