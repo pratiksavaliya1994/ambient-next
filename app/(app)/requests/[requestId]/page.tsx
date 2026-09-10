@@ -1,11 +1,13 @@
-import { ArrowLeftIcon, CheckIcon, WrenchIcon } from "lucide-react"
+import { ArrowLeftIcon, CheckIcon, TruckIcon, WrenchIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
+import { CompleteDeliveryAction } from "@/components/complete-delivery-action"
 import { RequestStatusBadge, statusIcon, statusIndex } from "@/components/request-status-badge"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import {
@@ -96,11 +98,22 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                 </div>
               </div>
 
+              {request.driver && (
+                <div className="mt-4 flex items-center gap-3 rounded-lg border bg-status-active/10 p-3">
+                  <Avatar>
+                    <AvatarFallback>{driverInitials(request.driver)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col gap-0.5">
+                    <FactLabel>Driver</FactLabel>
+                    <span className="text-sm font-semibold wrap-anywhere">{request.driver}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
                 <Fact label="Until" value={request.end ? newYorkDayLabel(request.end) : null} />
                 <Fact label="Field PM" value={request.fieldPm} />
                 <Fact label="Floor" value={request.floor} />
-                <Fact label="Driver" value={request.driver} />
                 <Fact label="Contact" value={request.contact} sub={request.contactPhone} />
               </div>
 
@@ -125,7 +138,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                   ` · ${extraToolIds.length} extra ${extraToolIds.length === 1 ? "tool" : "tools"}`}
               </span>
               <CardAction>
-                <NextAction request={request} />
+                <NextAction request={request} toolCount={assigned.length} />
               </CardAction>
             </CardHeader>
             <CardContent>
@@ -165,7 +178,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                           )}
                         </div>
 
-                        {tools.length > 0 && (
+                        {tools.length > 0 ? (
                           <ul className="flex flex-col gap-1.5 border-l-2 border-muted-foreground/25 pl-3">
                             {tools.map((tool) => (
                               <li
@@ -183,6 +196,12 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                               </li>
                             ))}
                           </ul>
+                        ) : (
+                          !slot.consumable && (
+                            <p className="border-l-2 border-muted-foreground/25 pl-3 text-xs text-muted-foreground italic">
+                              No tool assigned yet for this type
+                            </p>
+                          )
                         )}
                       </li>
                     )
@@ -266,24 +285,47 @@ function assignedCount(slots: AssignSlot[]): number {
 /**
  * The one thing to do next, from the request's status.
  *
- * Dispatch (2B) and offload (2C) aren't built, so their buttons are shown
- * disabled rather than hidden — the lifecycle is easier to read when the whole
- * of it is on screen and only the unbuilt part is greyed out.
+ * `Assigned` gets two actions: `Edit assignment` (the assign screen, in case
+ * the load needs to change) and `Dispatch`, which sends the driver to
+ * `/dispatch` — a shared board across many requests, not a per-request route
+ * — with this request preselected via `?requestId=`, since `DispatchBoard`
+ * reads that to seed its checkbox state. `Delivered` is terminal: the
+ * lifecycle is over, so this renders a status pill rather than a dead button.
  */
-function NextAction({ request }: { request: ToolRequest }) {
-  if (request.status === "New" || request.status === "Assigned") {
+function NextAction({ request, toolCount }: { request: ToolRequest; toolCount: number }) {
+  if (request.status === "New") {
     return (
       <Link href={`/requests/${request.id}/assign`} className={buttonVariants({ size: "sm" })}>
         <WrenchIcon />
-        {request.status === "New" ? "Assign tools" : "Edit assignment"}
+        Assign tools
       </Link>
     )
   }
 
+  if (request.status === "Assigned") {
+    return (
+      <div className="flex items-center gap-1.5">
+        <Link href={`/requests/${request.id}/assign`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <WrenchIcon />
+          Edit assignment
+        </Link>
+        <Link href={`/dispatch?requestId=${request.id}`} className={buttonVariants({ size: "sm" })}>
+          <TruckIcon />
+          Dispatch
+        </Link>
+      </div>
+    )
+  }
+
+  if (request.status === "In Transit") {
+    return <CompleteDeliveryAction request={request} toolCount={toolCount} />
+  }
+
   return (
-    <Button size="sm" disabled>
-      {request.status === "In Transit" ? "Offload — not built yet" : "Delivered"}
-    </Button>
+    <Badge className="border-transparent bg-status-ok/15 text-sm text-status-ok-foreground">
+      <CheckIcon className="size-3.5" />
+      Delivered
+    </Badge>
   )
 }
 
@@ -331,6 +373,11 @@ function Fact({ label, value, sub }: { label: string; value: string | null; sub?
       {sub && <span className="text-xs wrap-anywhere text-muted-foreground">{sub}</span>}
     </div>
   )
+}
+
+function driverInitials(driverName: string) {
+  const words = driverName.trim().split(/\s+/)
+  return ((words[0]?.[0] ?? "") + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase()
 }
 
 function FactLabel({ children }: { children: React.ReactNode }) {

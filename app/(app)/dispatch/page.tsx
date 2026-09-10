@@ -27,8 +27,18 @@ export const metadata: Metadata = { title: "Dispatch" }
  * `<Suspense>` split is needed, unlike the assign screen's much heavier read
  * set — one is kept anyway, matching `/requests` and `/tools`, so navigating
  * here shows a fallback rather than a blank beat.
+ *
+ * `?requestId=` lets the request detail page's own `Dispatch` button land
+ * here with that request already checked, since a per-request dispatch route
+ * doesn't exist — `DispatchBoard` seeds its selection from it.
  */
-export default function DispatchPage() {
+export default async function DispatchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ requestId?: string }>
+}) {
+  const { requestId } = await searchParams
+
   return (
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -48,13 +58,13 @@ export default function DispatchPage() {
       </div>
 
       <Suspense fallback={<DispatchSkeleton />}>
-        <DispatchBody />
+        <DispatchBody preselectedId={requestId} />
       </Suspense>
     </div>
   )
 }
 
-async function DispatchBody() {
+async function DispatchBody({ preselectedId }: { preselectedId?: string }) {
   const [assigned, inTransitCount, pms, users] = await Promise.all([
     listRequestsByStatus("Assigned"),
     listRequestsByStatus("In Transit").then((requests) => requests.length),
@@ -74,7 +84,12 @@ async function DispatchBody() {
   )
 
   return (
-    <DispatchBoard assignedRequests={assignedRequests} activeTripCount={inTransitCount} driverOptions={driverOptions} />
+    <DispatchBoard
+      assignedRequests={assignedRequests}
+      activeTripCount={inTransitCount}
+      driverOptions={driverOptions}
+      preselectedId={preselectedId}
+    />
   )
 }
 

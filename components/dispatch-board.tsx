@@ -39,14 +39,19 @@ export function DispatchBoard({
   assignedRequests,
   activeTripCount,
   driverOptions,
+  preselectedId,
 }: {
   assignedRequests: DispatchRequestSummary[]
   /** Requests currently `In Transit`, across every driver — just the count, for the link to `/dispatch/active`. */
   activeTripCount: number
   /** `pms` and `user` display names, merged and sorted — a quick pick, not a roster. */
   driverOptions: string[]
+  /** From the page's `?requestId=` — a request arriving here already checked, from its own `Dispatch` button. */
+  preselectedId?: string
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(preselectedId && assignedRequests.some((request) => request.id === preselectedId) ? [preselectedId] : [])
+  )
   const [driver, setDriver] = useState("")
   const [state, setState] = useState<DispatchState>(INITIAL_DISPATCH_STATE)
   const [pending, startTransition] = useTransition()

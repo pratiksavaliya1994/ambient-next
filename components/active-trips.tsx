@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { ChevronRightIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -60,10 +61,6 @@ export function ActiveTrips({ tripsByDriver }: { tripsByDriver: [string, Dispatc
                       {!isLast && <span className="w-px flex-1 bg-muted-foreground/25" />}
                     </div>
                     <div className={cn("min-w-0 flex-1", !isLast && "pb-2")}>
-                      {/* No offload screen yet (2C) — links to the existing
-                          detail page, whose own next-action button already
-                          reads "Offload — not built yet" for an In Transit
-                          request. */}
                       <Item variant="outline" size="sm" render={<Link href={`/requests/${request.id}`} />}>
                         <ItemContent>
                           <ItemTitle className="flex items-center justify-between gap-3">
@@ -82,6 +79,10 @@ export function ActiveTrips({ tripsByDriver }: { tripsByDriver: [string, Dispatc
                               ))}
                             </div>
                           )}
+                          <div className="flex items-center justify-end gap-0.5 text-xs font-medium text-primary">
+                            Complete delivery
+                            <ChevronRightIcon className="size-3.5" />
+                          </div>
                         </ItemContent>
                       </Item>
                     </div>

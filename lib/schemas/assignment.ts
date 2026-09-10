@@ -53,3 +53,14 @@ export const dispatchSchema = z.object({
 })
 
 export type DispatchValues = z.infer<typeof dispatchSchema>
+
+/**
+ * What the offload screen submits: just the request. `toolIds` and the job's
+ * name are derived server-side from fresh data, the same "don't trust the
+ * client's copy" call `dispatchSchema` makes.
+ */
+export const offloadSchema = z.object({
+  requestId: z.string().min(1),
+})
+
+export type OffloadValues = z.infer<typeof offloadSchema>

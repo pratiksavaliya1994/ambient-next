@@ -54,11 +54,17 @@ schema for all of phase 2 landed in 2A.
       existing `/requests/{id}` detail page instead, whose own next-action
       button already renders "Offload — not built yet" for that status.
 
-**Not touched, and deliberately so:** `app/(app)/requests/page.tsx`'s
-`NEXT_ACTIONS.Assigned` still renders a disabled "Dispatch" button rather than
-linking to `/dispatch` — that card-level action assumes a per-request route
-(`/requests/{id}${href}`), and `/dispatch` is a shared board, not one. Wiring
-that through is a small follow-up, not part of this pass.
+**Now wired.** `app/(app)/requests/page.tsx`'s `NEXT_ACTIONS.Assigned` and the
+request detail page's `NextAction` both link to `/dispatch?requestId={id}` —
+`/dispatch` is still a shared board, not a per-request route, but the query
+param preselects that one request there (`DispatchBoard` seeds its checkbox
+state from it), so the card-level action reaches a working screen instead of
+a disabled button. The detail page also gained a standalone `Dispatch` button
+next to `Edit assignment` once a request is `Assigned` — previously that
+screen only offered the assign flow. `Delivered` is unchanged: still terminal,
+now rendered as a status pill instead of a disabled button on both screens,
+and the requests list drops the second footer button entirely once a card
+reaches `Delivered` since there is nothing left to do.
 
 ---
 
@@ -153,13 +159,17 @@ One call to `update-request-status` with one `requestId`, the request's
 
 ### Route
 
-`app/(app)/dispatch/[requestId]/page.tsx` — its **own** route, not a dialog on
-the board. This is a different person (the driver), in a different place (the
-job site), on a phone. The app is already a PWA (`components/pwa/`,
-`app/manifest.ts`). Keep it phone-shaped and cheap: it must not load the 1,445
-`jobs` rows to render one button.
+No dedicated route — the action lives on the request detail page itself,
+`app/(app)/requests/[requestId]/page.tsx`, as `CompleteDeliveryAction`
+(`components/complete-delivery-action.tsx`): a button that opens a
+confirmation dialog rather than navigating anywhere. It used to be its own
+screen (`app/(app)/requests/[requestId]/offload/page.tsx`), but that page
+only ever repeated the detail page's own layout around one action card, so
+the duplicate route was folded into the one page instead.
 
-Fetching is `getRequest` plus one `in` query for its `assignedtools` rows.
+The server action (`offloadAction`, `app/(app)/requests/[requestId]/actions.ts`)
+is unchanged: `getRequest` plus one `in` query for `assignedtools` rows, then
+`offloadRequest`.
 
 `lib/schemas/assignment.ts` gains `offloadSchema` (`requestId`).
 

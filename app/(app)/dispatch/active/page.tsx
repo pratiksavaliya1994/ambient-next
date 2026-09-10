@@ -17,8 +17,9 @@ export const metadata: Metadata = { title: "Active trips" }
  * picker and the road view don't have to share one page. The board links
  * here; this links back.
  *
- * No offload screen exists yet (2C) — each request here still links to its
- * `/requests/{id}` detail page. See `docs/phase-2bc-dispatch-offload.md`.
+ * Each request links to its own detail page, `/requests/{id}`, where the
+ * "Complete delivery" action lives behind a confirmation dialog (2C). See
+ * `docs/phase-2bc-dispatch-offload.md`.
  */
 export default function ActiveTripsPage() {
   return (

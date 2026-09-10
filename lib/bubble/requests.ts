@@ -9,6 +9,7 @@ import {
   DEFAULT_REQUEST_STATUS,
   REQUEST_STATUS,
   requestColor,
+  TOOL_STATUS_DELIVERED,
   TOOL_STATUS_IN_TRANSIT,
   type RequestStatus,
 } from "@/lib/bubble/enums"
@@ -558,6 +559,37 @@ export async function dispatchRequests(
     throw new Error(
       `Bubble moved ${result.requests} of ${requestIds.length} requests. Reload the board and try again.`
     )
+  }
+
+  return { toolsUpdated: result.tools }
+}
+
+/**
+ * Drops one request's load: moves the request and every assigned tool to
+ * `Delivered`, and writes `location` to the job's name.
+ *
+ * `jobName` is `request.job` itself — already the exact string
+ * `listToolsForJob` matches against, so this never reads the `jobs` table.
+ * `driver`/`toolUser` are not sent: the request's `driver` stays whoever
+ * dispatched it, and so does `currentUser` on every tool — a record of who
+ * moved it, per `docs/phase-2bc-dispatch-offload.md`.
+ */
+export async function offloadRequest(
+  requestId: string,
+  toolIds: string[],
+  jobName: string
+): Promise<{ toolsUpdated: number }> {
+  const raw = await bubbleRunWorkflow(UPDATE_REQUEST_STATUS_WORKFLOW, {
+    requestIds: [requestId],
+    status: "Delivered" satisfies RequestStatus,
+    toolIds,
+    toolStatus: TOOL_STATUS_DELIVERED,
+    toolLocation: jobName,
+  })
+  const result = updateStatusResult.parse(raw)
+
+  if (result.requests !== 1) {
+    throw new Error("Bubble did not move this request to Delivered. Reload and try again.")
   }
 
   return { toolsUpdated: result.tools }
