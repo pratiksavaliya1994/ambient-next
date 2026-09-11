@@ -51,9 +51,10 @@ Don't re-litigate these; they were settled with the user.
 
 > **Superseded, and this is the as-built record.** The plan below was to
 > *replace* the values on `tools.status`. What was actually built is a new
-> `ToolStatusNew` option set holding the ten values in the right-hand column,
-> and a new `tools.statusNew` field typed as it. The original `status` and its
-> option set are untouched.
+> `ToolStatusNew` option set holding the values in the right-hand column
+> (nine, now that `Assigned` has been removed — see below), and a new
+> `tools.statusNew` field typed as it. The original `status` and its option
+> set are untouched.
 >
 > The reason is the second writer: the old Bubble UI's `/wf/Set Status` writes
 > `tools.status` from outside this app, and a rename would have silently
@@ -79,7 +80,11 @@ unrecognised value **fails silently** (see `CLAUDE.md`). The lifecycle rides on
 | Repairing / Under Maintenance | **Under Repair** |
 | Missing | **Missing** |
 | Discharged | — *not in the new list; keep it, or migrate those rows first* |
-| — | **Assigned** · **In Transit** · **Delivered** · **Inspection Required** |
+| — | **In Transit** · **Delivered** · **Inspection Required** |
+
+> **`Assigned` was considered and dropped** — see the Assign/Unassign row
+> below. Removed from the `ToolStatusNew` option set in Bubble Studio too,
+> since nothing ever wrote it to a live row.
 
 **Nothing was renamed and nothing was deleted** — see the note above. The
 left-hand column is what `tools.status` still holds; the right-hand column is
@@ -87,7 +92,7 @@ the full `ToolStatusNew` set, including `Discharged`'s absence from it (old
 rows keep `Discharged` in the old field, which no longer matters here).
 
 > **One field, two concerns.** The list mixes *where a tool is in the flow*
-> (Available, Assigned, In Transit, Delivered, Pickup Requested) with *what
+> (Available, In Transit, Delivered, Pickup Requested) with *what
 > condition it's in* (Maintenance Required, Repair Required, Under Repair,
 > Inspection Required, Missing). A Delivered tool that needs repair can only
 > say one. Resolution for now: **condition wins** — a tool in any of the five
@@ -103,10 +108,23 @@ original `status` column is never written by this phase.
 
 | Step | `statusNew` | `location` | `currentUser` | Slice |
 | --- | --- | --- | --- | --- |
-| Assign | `Assigned` | unchanged | unchanged | 2A |
-| Unassign | `Available` | unchanged | unchanged | 2A |
+| Assign | unchanged | unchanged | unchanged | 2A |
+| Unassign | unchanged | unchanged | unchanged | 2A |
 | Dispatch | `In Transit` | **the driver's name** | driver | 2B |
 | Offload | `Delivered` | the job's `name` | driver (kept) | 2C |
+
+> **Decided against: `Assign` → `Assigned`, `Unassign` → `Available`.** The
+> original plan had assign/unassign flip `statusNew` alongside the
+> `assignedtools` row. Dropped because a tool can legitimately be assigned to
+> a *future* request while it's currently mid-flow on a different one (`In
+> Transit`, `Delivered` elsewhere, `Pickup Requested`) — writing `Assigned`
+> at assign time would clobber that real current state with a value that's
+> only true for the one case it's harmless (a tool sitting `Available` in the
+> warehouse), which is exactly the case that needed no flag in the first
+> place. The `assignedtools` row is the sole record of the commitment — it's
+> already what the date-overlap availability check reads, so no
+> double-booking guarantee depends on `statusNew` either. See
+> `docs/bubble-update-request-status-spec.md` §6.
 
 > **Superseded — the original design left `location` unchanged at dispatch.**
 > The reasoning was that a synthetic `"In Transit"` location string would

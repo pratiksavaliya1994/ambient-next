@@ -223,14 +223,19 @@ reporting it.
 | `toolLocation` | the job's `name`, exactly |
 | `toolUser` | not sent — kept as whatever dispatch set, a record of who moved it |
 
-**Assign's tool-status half (2A — prospective, not wired):** would send
-`toolIds` = the newly-assigned tools with `toolStatus: "Assigned"`, and
-separately the tools a save *dropped* with `toolStatus: "Available"`. Not part
-of this build — `request.status` is already set to `Assigned` by
-`create-assigned-tool` itself; only the `tools.statusNew` write is missing.
-It would still produce a `toolshistory` row via `DB - Tools Change Log`
-though, since that workflow fires on any `tools` edit, `toolLocation` or not
-— unlike the old Step 3 guard, it doesn't care whether location changed.
+**Assign's tool-status half — decided against, not just deferred.** The
+original plan had assign/unassign call this workflow too: `toolIds` = the
+newly-assigned tools with `toolStatus: "Assigned"`, and separately the tools a
+save *dropped* with `toolStatus: "Available"`. `request.status` is still set
+to `Assigned` by `create-assigned-tool` itself, unaffected — only this
+tool-status call was ever missing, and it isn't being built. Reason: a tool
+can be legitimately assigned to a *future* request while it's currently
+mid-flow on a different one (`In Transit`, `Delivered` elsewhere, `Pickup
+Requested`), and writing `Assigned`/`Available` at assign/unassign time would
+clobber that real current state. The `assignedtools` row already fully
+records the commitment and is what the date-overlap availability check reads
+— `tools.statusNew` doesn't need to reflect it too. See
+`docs/phase-2-lifecycle.md`'s Assign/Unassign note.
 
 ## 7. Test before relying on it
 

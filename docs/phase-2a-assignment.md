@@ -17,8 +17,12 @@ checklist.
 
 **In:** assigning real `tools` rows to a delivery request against its requested
 types, leaving slots empty, adding extra tools, and unassigning. Plus the
-`tools.status` option-set migration and both Bubble workflows, because assign
-writes `Assigned` and unassign writes `Available`.
+`tools.status` option-set migration and both Bubble workflows.
+
+> **Superseded:** assign writing `Assigned` and unassign writing `Available`
+> was the original plan here. Decided against — see the Assign/Unassign note
+> in `phase-2-lifecycle.md` and `phase-2a-assignment-handoff.md`'s final
+> section. Assign/unassign never touch `tools.statusNew`.
 
 **Out:** dispatch, drivers, offload, `tools.location`, pickup requests. See
 [`phase-2bc-dispatch-offload.md`](./phase-2bc-dispatch-offload.md).

@@ -85,13 +85,24 @@ export const DEFAULT_REQUEST_STATUS: RequestStatus = "New"
  * back through `update-tool-status`. The old `status` field is only ever
  * touched by the old Bubble UI now, so the two will drift over time.
  *
- * The list mixes *where a tool is in the flow* (Available, Assigned, In
- * Transit, Delivered, Pickup Requested) with *what condition it is in* (the
- * rest). Condition wins for assignment — see `UNASSIGNABLE_TOOL_STATUS`.
+ * The list mixes *where a tool is in the flow* (Available, In Transit,
+ * Delivered, Pickup Requested) with *what condition it is in* (the rest).
+ * Condition wins for assignment — see `UNASSIGNABLE_TOOL_STATUS`.
+ *
+ * **No `Assigned` value.** Delivery-assign (`assignToolsAction` /
+ * `create-assigned-tool`) only ever writes `assignedtools` rows and
+ * `request.status` — see `lib/bubble/assigned-tools.ts#assignTools`. A tool
+ * assigned to a future request keeps whatever `statusNew` already describes
+ * its real current state; the assignment itself is fully and only recorded
+ * in `assignedtools`, which is what the date-overlap availability check
+ * reads. A dedicated `Assigned` flow value was considered and dropped —
+ * writing it at assign time would either clobber a tool's true current state
+ * (if it's busy elsewhere) or need to be built, tested and maintained just to
+ * cover the one case it's safe (a tool sitting `Available` in the warehouse),
+ * for no operational payoff anyone needed.
  */
 export const TOOL_STATUS_NEW = [
   "Available",
-  "Assigned",
   "In Transit",
   "Delivered",
   "Pickup Requested",
@@ -107,18 +118,17 @@ export type ToolStatusNew = (typeof TOOL_STATUS_NEW)[number]
  * The `tools.statusNew` values the lifecycle *writes*, named rather than typed
  * as literals at each call site so no transition can drift.
  *
- * Unused at the moment and kept on purpose: the workflow that writes
- * `statusNew` (`update-request-status`) isn't built yet, and these are what
- * 2B/2C will pass to it instead of bare strings.
+ * `TOOL_STATUS_AVAILABLE` is unused at the moment and kept on purpose for
+ * phase 3D (pickup return-to-warehouse). `TOOL_STATUS_IN_TRANSIT` /
+ * `TOOL_STATUS_DELIVERED` back dispatch (2B) and offload (2C).
  */
 export const TOOL_STATUS_AVAILABLE: ToolStatusNew = "Available"
-export const TOOL_STATUS_ASSIGNED: ToolStatusNew = "Assigned"
 export const TOOL_STATUS_IN_TRANSIT: ToolStatusNew = "In Transit"
 export const TOOL_STATUS_DELIVERED: ToolStatusNew = "Delivered"
 
 /**
  * A tool whose `statusNew` reads one of these is never offered for assignment.
- * The five lifecycle values stay offerable: a tool `Delivered` to another job
+ * The remaining flow values stay offerable: a tool `Delivered` to another job
  * last month is a legitimate pick for next week, and the date-overlap check is
  * what decides that.
  *

@@ -42,7 +42,6 @@ const TOOL_LIST_MAX_HEIGHT = "max-h-[28rem]"
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   Available: "border-transparent bg-status-ok/15 text-status-ok-foreground",
   Delivered: "border-transparent bg-status-ok/15 text-status-ok-foreground",
-  Assigned: "border-transparent bg-status-active/15 text-status-active-foreground",
   "In Transit": "border-transparent bg-status-active/15 text-status-active-foreground",
   "Pickup Requested": "border-transparent bg-status-active/15 text-status-active-foreground",
   "Maintenance Required": "border-transparent bg-status-attention/15 text-status-attention-foreground",

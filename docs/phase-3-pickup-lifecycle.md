@@ -106,7 +106,7 @@ retyping a live field risks redefining rows an outside writer owns.
 | Field | Option set | Holds | Written by |
 | --- | --- | --- | --- |
 | `status` | `Tool Status` (7 values) | legacy | only the old Bubble UI (`/wf/Set Status`) |
-| `statusNew` | `ToolStatusNew` (10 values) | **flow state** after 3A | `update-request-status` |
+| `statusNew` | `ToolStatusNew` (9 values — no `Assigned`; decided against, see `phase-2-lifecycle.md`) | **flow state** after 3A | `update-request-status` |
 | `condition` | `ToolCondition` (6 values) — **new** | **physical condition** | `update-tool-status` |
 
 `ToolCondition`: `Ok`, `Maintenance Required`, `Repair Required`,

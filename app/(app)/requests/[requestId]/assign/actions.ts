@@ -86,14 +86,14 @@ export async function assignToolsAction(input: unknown): Promise<CreateRequestSt
     }
   }
 
-  // Deferred, not forgotten: once the `update-request-status` workflow exists
-  // in Bubble, the tool-status half goes here — the assigned tools to
-  // `Assigned`, and the ones this save *dropped* (a `listAssignedTools`
-  // diff taken before the write, since the workflow deletes their rows) back
-  // to `Available`. Until then no tool's `statusNew` changes on assignment,
-  // which is why `/tools` isn't revalidated below. The date-overlap check in
-  // `listTakenToolIds` — not `statusNew` — is what prevents a double booking,
-  // so nothing here is unsafe in the meantime.
+  // Decided against, not deferred: assign/unassign never flip a tool's
+  // `statusNew`. A tool can be legitimately assigned to a future request
+  // while genuinely mid-flow on a different one (In Transit, Delivered
+  // elsewhere, Pickup Requested), and writing `Assigned`/`Available` here
+  // would clobber that real current state. `assignedtools` is the sole
+  // record of the commitment, and it's already what `listTakenToolIds`
+  // reads to prevent a double booking — `statusNew` doesn't need to carry
+  // it too. This is also why `/tools` isn't revalidated below.
 
   revalidatePath("/requests")
   revalidatePath(`/requests/${requestId}`)

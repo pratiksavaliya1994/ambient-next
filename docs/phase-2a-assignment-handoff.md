@@ -114,7 +114,15 @@ Follow `phase-2a-assignment.md` Steps 4, 6, and 7 — with these adjustments:
 
 ## When `update-request-status` is eventually built
 
-The design (not yet implemented in Bubble) is: `requestIds` (text list), `status` (text), `driver` (text, optional), `toolIds` (text list, optional), `toolStatus` (typed as the `ToolStatusNew` option set itself — not text, so Bubble validates it), `toolLocation` (text, optional), `toolUser` (text, optional). Revisit `assignToolsAction`'s deferred steps once that workflow lands.
+`update-request-status` **was** built (it now serves dispatch/2B and
+offload/2C — see `docs/bubble-update-request-status-spec.md`), but the
+assign/unassign tool-status calls described above were **decided against**,
+not merely deferred: a tool can be legitimately assigned to a future request
+while genuinely mid-flow on a different one, and flipping `statusNew` at
+assign/unassign time would clobber that real current state for no
+operational benefit. `assignToolsAction` stays as it is — `assignedtools` +
+`request.status` only, `statusNew` never touched by assign/unassign. See the
+Assign/Unassign note in `docs/phase-2-lifecycle.md`.
 
 ---
 

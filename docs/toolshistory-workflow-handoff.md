@@ -60,7 +60,7 @@ exactly what's described — don't redesign it."
 | --- | --- |
 | `location` | text — a job's exact name, `"Warehouse"`, a person's name, or blank |
 | `status` | option set **`Tool Status`** (old/legacy): `Ok`, `Ready for Pickup`, `To do Maintenance`, `To be Repaired`, `Repairing / Under Maintenance`, `Discharged`, `Missing` |
-| `statusNew` | option set **`ToolStatusNew`** (current lifecycle): `Available`, `Assigned`, `In Transit`, `Delivered`, `Pickup Requested`, `Maintenance Required`, `Repair Required`, `Under Repair`, `Inspection Required`, `Missing` |
+| `statusNew` | option set **`ToolStatusNew`** (current lifecycle): `Available`, `In Transit`, `Delivered`, `Pickup Requested`, `Maintenance Required`, `Repair Required`, `Under Repair`, `Inspection Required`, `Missing` |
 | `currentUser` | text (display name, not a real user link) |
 | `floor` | text |
 
