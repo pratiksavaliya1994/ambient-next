@@ -10,6 +10,7 @@
  * `server-only`, which throws under plain Node.
  */
 import { listRecentRequests, listRequestsByStatus } from "@/lib/bubble/requests"
+import { listAllTools, listToolsForJob } from "@/lib/bubble/pickup-tools"
 import { listFieldPms, listJobs, listTimeSlots, listToolTypes, listUsers } from "@/lib/bubble/reference"
 
 async function main() {
@@ -26,6 +27,23 @@ async function main() {
   console.log(`pms         ${pms.length}\t e.g. ${pms[0]?.name}`)
   console.log(`timelabels  ${slots.length}\t e.g. ${slots[0]?.label}`)
   console.log(`user        ${users.length}\t e.g. ${users[0]?.name}`)
+
+  // Phase 3A: both `tools` read paths parse `condition` alongside `statusNew`
+  // — a schema mismatch here would otherwise only surface once the Pickup
+  // picker or Tools dashboard tried to render it.
+  const allTools = await listAllTools()
+  const firstTool = allTools[0]
+  console.log(
+    `tools       ${allTools.length}\t e.g. ${firstTool?.name} (status: ${firstTool?.status || "—"}, condition: ${firstTool?.condition || "—"})`
+  )
+
+  if (jobs[0]) {
+    const jobTools = await listToolsForJob(jobs[0].name)
+    const firstJobTool = jobTools[0]
+    console.log(
+      `tools @ job ${jobTools.length}\t e.g. ${firstJobTool?.name ?? "(none at " + jobs[0].name + ")"} (condition: ${firstJobTool?.condition || "—"})`
+    )
+  }
 
   const requests = await listRecentRequests(5)
   console.log(`\nlast ${requests.length} requests:`)

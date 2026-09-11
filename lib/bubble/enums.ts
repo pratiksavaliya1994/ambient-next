@@ -100,6 +100,13 @@ export const DEFAULT_REQUEST_STATUS: RequestStatus = "New"
  * (if it's busy elsewhere) or need to be built, tested and maintained just to
  * cover the one case it's safe (a tool sitting `Available` in the warehouse),
  * for no operational payoff anyone needed.
+ *
+ * **Phase 3A split condition off this field** into `tools.condition` /
+ * `ToolCondition` below. The five condition values (`Maintenance Required`
+ * through `Missing`) stay in this option set — an old-Bubble-UI edit could
+ * still write one — but this app no longer writes them here; it writes
+ * `condition` instead. `isAssignable` checks both fields for exactly that
+ * reason.
  */
 export const TOOL_STATUS_NEW = [
   "Available",
@@ -149,12 +156,42 @@ export const UNASSIGNABLE_TOOL_STATUS: readonly string[] = [
 ]
 
 /**
+ * `tools.condition` — split off `statusNew` in phase 3A so a PM's condition
+ * pick in the Pickup picker survives the pickup lifecycle overwriting
+ * `statusNew` with flow values (`In Transit`, `Delivered`, …). Five of the six
+ * display texts are shared with `TOOL_STATUS_NEW` on purpose — same words, so
+ * the Bubble backfill is a copy rather than a translation, and nothing in the
+ * UI changes vocabulary on the user. `Ok` is new: its `statusNew` counterpart
+ * was `Available`, which is a *flow* state, not a condition.
+ */
+export const TOOL_CONDITION = [
+  "Ok",
+  "Maintenance Required",
+  "Repair Required",
+  "Under Repair",
+  "Inspection Required",
+  "Missing",
+] as const
+export type ToolCondition = (typeof TOOL_CONDITION)[number]
+
+export const DEFAULT_TOOL_CONDITION: ToolCondition = "Ok"
+
+/** Every `ToolCondition` except `Ok`. A tool in any of these is never offered. */
+export const UNASSIGNABLE_CONDITION: readonly string[] = TOOL_CONDITION.filter((value) => value !== "Ok")
+
+/**
  * `statusNew`, not `status`. An empty value stays assignable — but after the
  * backfill it means the row was missed by the migration, so it is worth
  * flagging rather than assuming.
+ *
+ * Checks **both** `condition` and `statusNew` so the filter stays correct at
+ * every point in 3A's backfill: before it, `condition` is empty and
+ * `statusNew` still carries the five condition values; after it, the reverse.
+ * This is the permanent defence, not a transition measure — see
+ * `TOOL_STATUS_NEW`'s doc comment.
  */
-export function isAssignable(statusNew: string): boolean {
-  return !UNASSIGNABLE_TOOL_STATUS.includes(statusNew)
+export function isAssignable(condition: string, statusNew: string): boolean {
+  return !UNASSIGNABLE_CONDITION.includes(condition) && !UNASSIGNABLE_TOOL_STATUS.includes(statusNew)
 }
 
 /**

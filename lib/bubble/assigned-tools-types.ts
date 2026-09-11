@@ -57,6 +57,8 @@ export type CandidateTool = {
    * `statusNew`, which after the backfill means a data gap.
    */
   status: string
+  /** `tools.condition` — split off `statusNew` in phase 3A. See `lib/bubble/enums.ts`. */
+  condition: string
   location: string
   floor: string | null
   currentUser: string | null

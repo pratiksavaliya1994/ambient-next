@@ -4,9 +4,9 @@ import * as React from "react"
 import { useMemo, useState } from "react"
 import { SearchIcon } from "lucide-react"
 
-import { TOOL_STATUS_NEW, type ToolStatusNew } from "@/lib/bubble/enums"
+import { TOOL_CONDITION, type ToolCondition } from "@/lib/bubble/enums"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
-import type { ToolStatusUpdate } from "@/lib/bubble/tool-status-updates"
+import type { ToolConditionUpdate } from "@/lib/bubble/tool-status-updates"
 import type { ToolLine } from "@/lib/bubble/tools-summary"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -27,28 +27,37 @@ import { Spinner } from "@/components/ui/spinner"
  * only ever one job's tools, so it sits inline in the card rather than behind
  * a dialog.
  *
- * Selection is keyed by tool id, not name — writing a status change back to
- * Bubble needs the `tools` row's `_id`. Checking a tool keeps whatever status
- * Bubble already has — picking a tool for pickup is not itself a status
- * change; the picker then lets the status be changed deliberately.
- * `originalStatus` (the status Bubble had on fetch) rides along so
- * `changedStatusLines` can tell which tools actually need a write.
+ * Selection is keyed by tool id, not name — writing a condition change back
+ * to Bubble needs the `tools` row's `_id`. Checking a tool keeps whatever
+ * condition Bubble already has — picking a tool for pickup is not itself a
+ * condition change; the picker then lets the condition be changed
+ * deliberately. `originalCondition` (the condition Bubble had on fetch) rides
+ * along so `changedConditionLines` can tell which tools actually need a
+ * write.
+ *
+ * Phase 3A: this used to edit `tools.statusNew` directly. It now edits the
+ * separate `tools.condition` field instead, and shows `statusNew` (the flow
+ * state — `In Transit`, `Pickup Requested`, …) as read-only context so a PM
+ * can see a tool is already mid-flow without the picker letting them touch
+ * that field. See `docs/phase-3a-condition-split.md`.
  */
 export type PickupSelection = {
   id: string
   name: string
   /**
-   * Seeded from the tool's live Bubble status, which is free text and so not
-   * necessarily one of `TOOL_STATUS_NEW`. Only a value picked in the picker
-   * (always a `ToolStatusNew`) ever differs from `originalStatus`, so only
-   * those are written.
+   * Seeded from the tool's live Bubble condition, which is free text and so
+   * not necessarily one of `TOOL_CONDITION`. Only a value picked in the
+   * picker (always a `ToolCondition`) ever differs from `originalCondition`,
+   * so only those are written.
    */
+  condition: string
+  /** The condition Bubble had on fetch — not necessarily one of `TOOL_CONDITION`, only ever compared against, never written. */
+  originalCondition: string
+  /** `tools.statusNew` at fetch time, shown read-only — the picker never writes this field. */
   status: string
-  /** The status Bubble had on fetch — not necessarily one of `TOOL_STATUS_NEW`, only ever compared against, never written. */
-  originalStatus: string
 }
 
-/** Every tool checked, each keeping its current Bubble status — "Select all" and the Cleanup toggle share this. */
+/** Every tool checked, each keeping its current Bubble condition — "Select all" and the Cleanup toggle share this. */
 export function selectionOfTools(tools: PickupTool[]): Map<string, PickupSelection> {
   return new Map(
     tools.map((tool) => [
@@ -56,8 +65,9 @@ export function selectionOfTools(tools: PickupTool[]): Map<string, PickupSelecti
       {
         id: tool.id,
         name: tool.name,
+        condition: tool.condition,
+        originalCondition: tool.condition,
         status: tool.status,
-        originalStatus: tool.status,
       },
     ])
   )
@@ -90,8 +100,9 @@ export function PickupToolPicker({
       next.set(tool.id, {
         id: tool.id,
         name: tool.name,
+        condition: tool.condition,
+        originalCondition: tool.condition,
         status: tool.status,
-        originalStatus: tool.status,
       })
     } else {
       next.delete(tool.id)
@@ -99,11 +110,11 @@ export function PickupToolPicker({
     onChange(next)
   }
 
-  function setStatus(toolId: string, status: string) {
+  function setCondition(toolId: string, condition: string) {
     const current = selected.get(toolId)
     if (!current) return
     const next = new Map(selected)
-    next.set(toolId, { ...current, status })
+    next.set(toolId, { ...current, condition })
     onChange(next)
   }
 
@@ -163,13 +174,14 @@ export function PickupToolPicker({
           {visible.map((tool, index) => {
             const selection = selected.get(tool.id)
             const checked = selection !== undefined
-            /* `tools.statusNew` is free text, so a seeded status can sit outside
-               `TOOL_STATUS_NEW` (blank rows included) — carry it as an extra
-               option so the trigger shows the tool's real status instead of nothing. */
-            const statusOptions =
-              selection && selection.status && !(TOOL_STATUS_NEW as readonly string[]).includes(selection.status)
-                ? [selection.status, ...TOOL_STATUS_NEW]
-                : TOOL_STATUS_NEW
+            /* `tools.condition` is free text, so a seeded condition can sit
+               outside `TOOL_CONDITION` (blank rows included) — carry it as an
+               extra option so the trigger shows the tool's real condition
+               instead of nothing. */
+            const conditionOptions =
+              selection && selection.condition && !(TOOL_CONDITION as readonly string[]).includes(selection.condition)
+                ? [selection.condition, ...TOOL_CONDITION]
+                : TOOL_CONDITION
             const previous = visible[index - 1]
             const showGroupLabel = tool.typeName && tool.typeName !== previous?.typeName
             return (
@@ -189,29 +201,35 @@ export function PickupToolPicker({
                     aria-label={tool.name}
                   />
                   {/* `min-w-0` + `truncate`: `ItemTitle` is `w-fit` by default, so a long
-                      tool name would otherwise push the status control off the row. */}
+                      tool name would otherwise push the condition control off the row. */}
                   <ItemContent className="min-w-0" onClick={() => setChecked(tool, !checked)}>
                     <ItemTitle className="w-full truncate" title={tool.name}>
                       {tool.name}
                     </ItemTitle>
+                    {/* Read-only — the picker edits `condition`, never `statusNew`.
+                        Lets a PM see a tool is already `In Transit` or `Pickup
+                        Requested` and not request it twice. */}
+                    {tool.status && (
+                      <span className="truncate text-xs text-muted-foreground">{tool.status}</span>
+                    )}
                   </ItemContent>
                   <ItemActions className="shrink-0" onClick={(event) => event.stopPropagation()}>
                     {checked ? (
                       <Select
-                        items={statusOptions.map((value) => ({ label: value, value }))}
-                        value={selection.status}
-                        onValueChange={(next) => next !== null && setStatus(tool.id, next)}
+                        items={conditionOptions.map((value) => ({ label: value, value }))}
+                        value={selection.condition}
+                        onValueChange={(next) => next !== null && setCondition(tool.id, next)}
                       >
-                        <SelectTrigger size="sm" className="w-40 overflow-hidden">
+                        <SelectTrigger size="sm" className="w-40 overflow-hidden" aria-label={`Condition of ${tool.name}`}>
                           <SelectValue className="truncate" />
                         </SelectTrigger>
                         {/* The popup defaults to the trigger's width; the trigger is
                             narrow (`w-40`) to keep the row tight, which clips the
-                            longer statuses ("Repairing / Under Maintenance"), so let
-                            the popup size to its widest option instead. */}
+                            longer conditions ("Inspection Required"), so let the
+                            popup size to its widest option instead. */}
                         <SelectContent className="w-fit min-w-(--anchor-width) max-w-(--available-width)">
                           <SelectGroup>
-                            {statusOptions.map((value) => (
+                            {conditionOptions.map((value) => (
                               <SelectItem key={value} value={value}>
                                 {value}
                               </SelectItem>
@@ -220,7 +238,7 @@ export function PickupToolPicker({
                         </SelectContent>
                       </Select>
                     ) : (
-                      <span className="w-40 truncate text-right text-xs text-muted-foreground">{tool.status}</span>
+                      <span className="w-40 truncate text-right text-xs text-muted-foreground">{tool.condition}</span>
                     )}
                   </ItemActions>
                 </Item>
@@ -240,11 +258,11 @@ export function toolLinesOfPickup(selected: Map<string, PickupSelection>): ToolL
     .map((entry) => ({ name: entry.name, quantity: 1 }))
 }
 
-/** Only the tools whose status was actually changed from what Bubble had on fetch. */
-export function changedStatusLines(selected: Map<string, PickupSelection>): ToolStatusUpdate[] {
+/** Only the tools whose condition was actually changed from what Bubble had on fetch. */
+export function changedConditionLines(selected: Map<string, PickupSelection>): ToolConditionUpdate[] {
   return [...selected.values()]
-    .filter((entry) => entry.status !== entry.originalStatus)
-    // Safe cast: a status differing from `originalStatus` can only have come
-    // from the picker's Select, which offers nothing but `TOOL_STATUS_NEW`.
-    .map((entry) => ({ toolId: entry.id, status: entry.status as ToolStatusNew }))
+    .filter((entry) => entry.condition !== entry.originalCondition)
+    // Safe cast: a condition differing from `originalCondition` can only have
+    // come from the picker's Select, which offers nothing but `TOOL_CONDITION`.
+    .map((entry) => ({ toolId: entry.id, condition: entry.condition as ToolCondition }))
 }

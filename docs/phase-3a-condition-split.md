@@ -33,18 +33,37 @@ Update this as steps land, so a fresh chat can resume mid-slice.
 > before any live data moves. This mirrors how 2A shipped steps 5-6 against a
 > schema that did not exist yet.
 
-- [ ] **1. `enums.ts`** — `TOOL_CONDITION`, `ToolCondition`,
+- [x] **1. `enums.ts`** — `TOOL_CONDITION`, `ToolCondition`,
       `DEFAULT_TOOL_CONDITION`, `UNASSIGNABLE_CONDITION`, and the two-argument
       `isAssignable`
-- [ ] **2. Read paths** — `condition` through `pickup-tools.ts`,
+- [x] **2. Read paths** — `condition` through `pickup-tools.ts`,
       `assigned-tools.ts` and both `-types.ts` modules
-- [ ] **3. The codec** — `tool-status-updates.ts` becomes condition-shaped
-- [ ] **4. The picker** — `pickup-tool-picker.tsx` + `pickup-request.ts` schema
-- [ ] **5. The dashboard** — second badge, extracted into its own component
-- [ ] **6. `check-bubble.ts`** — read `condition` on both `tools` paths
-- [ ] **7. Bubble Studio** — option set, field, repoint `update-tool-status`
-- [ ] **8. The backfill** — the one irreversible step; check counts first
+- [x] **3. The codec** — `tool-status-updates.ts` becomes condition-shaped
+- [x] **4. The picker** — `pickup-tool-picker.tsx` + `pickup-request.ts` schema
+- [x] **5. The dashboard** — second badge, extracted into its own component
+- [x] **6. `check-bubble.ts`** — read `condition` on both `tools` paths
+- [x] **7. Bubble Studio** — option set, field, repoint `update-tool-status`
+- [x] **8. The backfill** — the one irreversible step; check counts first
 - [ ] **9. Optional** — `toolshistory.prevCondition`/`newCondition`
+
+Steps 1-6 landed 2026-09-11 and were verified against live data: `npm run
+typecheck` is clean, and `npm run check-bubble` shows every `tools` row
+parsing `condition` as `—` (the field doesn't exist in Bubble yet, so Zod's
+`.optional()` degrades it to `undefined` → `""`), exactly as predicted above.
+
+Steps 7-8 were done in Bubble Studio and confirmed 2026-09-11 by a read-only
+distribution check across all 532 `tools` rows: `statusNew` no longer holds
+any of the five condition values (0 leftovers), and `condition` carries them
+instead (`Ok` 505, `Missing` 17, `Repair Required` 8, `Under Repair` 1,
+`Maintenance Required` 1) — exactly the backfill outcome this doc called for.
+The one part of step 7 that can't be confirmed by reading — that
+`update-tool-status`'s repointed field actually fires correctly — still wants
+one real end-to-end check: submit a pickup, change a tool's condition in the
+picker, and confirm in the Data tab that `condition` moved and `statusNew`
+did not.
+
+Step 9 (condition history on `toolshistory`) is intentionally not done —
+optional, can follow later.
 
 ---
 

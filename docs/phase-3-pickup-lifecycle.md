@@ -5,7 +5,7 @@ doc with the file list and checklist:
 
 | Slice | Doc | State |
 | --- | --- | --- |
-| **3A — Condition split** | [`phase-3a-condition-split.md`](./phase-3a-condition-split.md) | not started |
+| **3A — Condition split** | [`phase-3a-condition-split.md`](./phase-3a-condition-split.md) | done (optional history step left out) |
 | **3B — Pickup assignments** | [`phase-3b-pickup-assignments.md`](./phase-3b-pickup-assignments.md) | not started |
 | **3C — Actual pickup** | [`phase-3c-actual-pickup.md`](./phase-3c-actual-pickup.md) | not started |
 | **3D — Warehouse offload** | [`phase-3d-warehouse-offload.md`](./phase-3d-warehouse-offload.md) | not started |

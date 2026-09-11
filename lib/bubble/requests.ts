@@ -14,7 +14,7 @@ import {
   type RequestStatus,
 } from "@/lib/bubble/enums"
 import type { Job } from "@/lib/bubble/reference-types"
-import { formatToolStatusUpdates } from "@/lib/bubble/tool-status-updates"
+import { formatToolConditionUpdates } from "@/lib/bubble/tool-status-updates"
 import { formatToolsSummary, parseToolsSummary, type ToolLine } from "@/lib/bubble/tools-summary"
 import type { RequestFormValues } from "@/lib/schemas/request"
 import type { PickupRequestFormValues } from "@/lib/schemas/pickup-request"
@@ -585,10 +585,11 @@ export async function createPickupToolRequest(
       summary,
       now,
     }),
-    // Only the `tools` rows a PM actually changed the status of — see
+    // Only the `tools` rows a PM actually changed the condition of — see
     // `lib/bubble/tool-status-updates.ts`. Delivery's `createToolRequest`
-    // has no equivalent, since it never touches the `tools` table.
-    toolStatusUpdates: formatToolStatusUpdates(values.toolStatusUpdates),
+    // has no equivalent, since it never touches the `tools` table. The wire
+    // param is still `toolStatusUpdates` — see that file's doc comment.
+    toolStatusUpdates: formatToolConditionUpdates(values.toolConditionUpdates),
   })
 
   const result = createRequestResult.parse(raw)

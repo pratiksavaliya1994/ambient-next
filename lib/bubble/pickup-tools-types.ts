@@ -12,6 +12,8 @@ export type PickupTool = {
   typeName: string | null
   floor: string | null
   status: string
+  /** `tools.condition` — see `lib/bubble/enums.ts`. Empty when unset. */
+  condition: string
 }
 
 export type DashboardTool = {
@@ -21,6 +23,8 @@ export type DashboardTool = {
   location: string
   floor: string | null
   status: string
+  /** `tools.condition` — see `lib/bubble/enums.ts`. Empty when unset. */
+  condition: string
   currentUser: string | null
 }
 

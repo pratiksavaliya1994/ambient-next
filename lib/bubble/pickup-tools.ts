@@ -43,6 +43,8 @@ const toolRow = z.looseObject({
    *  (`listToolsForJob` and `listAllTools`) use this field now; the Pickup
    *  picker also writes it back through `update-tool-status`. */
   statusNew: z.string().optional(),
+  /** `ToolCondition` — split off `statusNew` in phase 3A. See `lib/bubble/enums.ts`. */
+  condition: z.string().optional(),
   floor: z.string().optional(),
   currentUser: z.string().optional(),
 })
@@ -66,6 +68,7 @@ export async function listToolsForJob(jobName: string): Promise<PickupTool[]> {
       typeName: row.type ? typeNameById.get(row.type) ?? null : null,
       floor: row.floor ?? null,
       status: row.statusNew ?? "",
+      condition: row.condition ?? "",
     }))
     .sort((a, b) => (a.typeName ?? "").localeCompare(b.typeName ?? "") || a.name.localeCompare(b.name))
 }
@@ -87,6 +90,7 @@ export async function listAllTools(): Promise<DashboardTool[]> {
       floor: row.floor ?? null,
       // `statusNew`, not `status` — see the comment on `toolRow` above.
       status: row.statusNew ?? "",
+      condition: row.condition ?? "",
       currentUser: row.currentUser?.trim() || null,
     }))
     .sort((a, b) => a.location.localeCompare(b.location) || a.name.localeCompare(b.name))

@@ -11,7 +11,7 @@ import { INITIAL_CREATE_STATE, type CreateRequestState } from "@/app/(app)/reque
 import { DatePicker } from "@/components/date-picker"
 import { MaterialDialog } from "@/components/material-dialog"
 import {
-  changedStatusLines,
+  changedConditionLines,
   PickupToolPicker,
   selectionOfTools,
   toolLinesOfPickup,
@@ -98,7 +98,7 @@ export function PickupRequestForm({
       tentative: false,
       cleanup: false,
       tools: [],
-      toolStatusUpdates: [],
+      toolConditionUpdates: [],
     },
   })
 
@@ -119,7 +119,7 @@ export function PickupRequestForm({
     // job's picks and fetched list can't carry over.
     setSelectedTools(new Map())
     setValue("tools", [])
-    setValue("toolStatusUpdates", [])
+    setValue("toolConditionUpdates", [])
     setValue("cleanup", false)
     setToolsForJob([])
     // Only `jobId` is validated here. The schema's "a tool or materials" rule
@@ -135,7 +135,7 @@ export function PickupRequestForm({
   function updateSelected(next: Map<string, PickupSelection>) {
     setSelectedTools(next)
     setValue("tools", toolLinesOfPickup(next), { shouldValidate: true })
-    setValue("toolStatusUpdates", changedStatusLines(next))
+    setValue("toolConditionUpdates", changedConditionLines(next))
   }
 
   /**

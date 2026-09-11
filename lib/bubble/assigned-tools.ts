@@ -61,6 +61,8 @@ const toolRow = z.looseObject({
    * data gap rather than the norm.
    */
   statusNew: z.string().optional(),
+  /** `ToolCondition` — split off `statusNew` in phase 3A. See `lib/bubble/enums.ts`. */
+  condition: z.string().optional(),
   floor: z.string().optional(),
   currentUser: z.string().optional(),
 })
@@ -121,6 +123,7 @@ function toCandidate(row: z.infer<typeof toolRow>, typeNameById: Map<string, str
     // Empty rather than a stand-in value: after the backfill a blank one means
     // the row was missed, and inventing "Available" for it would hide that.
     status: row.statusNew ?? "",
+    condition: row.condition ?? "",
     location: row.location?.trim() ? row.location.trim() : NO_LOCATION,
     floor: row.floor ?? null,
     currentUser: row.currentUser?.trim() || null,
@@ -141,9 +144,10 @@ function sortCandidates(tools: CandidateTool[]): CandidateTool[] {
  * Bubble understands as "match nothing" — at the cost of one full read, which
  * only happens when the narrow query returned nothing at all.
  *
- * Condition filtering (`isAssignable`) is applied here, against `statusNew`: a
- * tool that needs repair is not offered, whatever the dates say. That field is
- * empty on every pre-phase-2 row, so today this filter removes nothing.
+ * Condition filtering (`isAssignable`) is applied here, against both
+ * `condition` and `statusNew`: a tool that needs repair is not offered,
+ * whatever the dates say. Checking both fields is what keeps this correct
+ * across phase 3A's backfill — see `isAssignable`'s doc comment.
  */
 export async function listCandidateTools(typeIds: string[]): Promise<CandidateTool[]> {
   if (typeIds.length === 0) return []
@@ -168,7 +172,7 @@ export async function listCandidateTools(typeIds: string[]): Promise<CandidateTo
     rows
       .map((raw) => toolRow.parse(raw))
       .filter((row) => row.name && row.type && wanted.has(row.type))
-      .filter((row) => isAssignable(row.statusNew ?? ""))
+      .filter((row) => isAssignable(row.condition ?? "", row.statusNew ?? ""))
       .map((row) => toCandidate(row, typeNameById))
   )
 }
@@ -235,7 +239,7 @@ export async function searchTools(query: string, limit = 50): Promise<CandidateT
     rows
       .map((raw) => toolRow.parse(raw))
       .filter((row) => row.name)
-      .filter((row) => isAssignable(row.statusNew ?? ""))
+      .filter((row) => isAssignable(row.condition ?? "", row.statusNew ?? ""))
       .map((row) => toCandidate(row, typeNameById))
   ).slice(0, limit)
 }

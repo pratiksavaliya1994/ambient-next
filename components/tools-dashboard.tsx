@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/combobox"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { ToolStatusBadges } from "@/components/tool-status-badges"
 import { NO_LOCATION, type DashboardTool } from "@/lib/bubble/pickup-tools-types"
 import { cn } from "@/lib/utils"
 
@@ -31,26 +32,6 @@ const STORAGE_KEY = "tools-dashboard:locations"
  *  can hold hundreds of tools, and an uncapped card would tower over the
  *  rest of the grid. */
 const TOOL_LIST_MAX_HEIGHT = "max-h-[28rem]"
-
-/**
- * Status colour is a severity gradient, not a rainbow: green/blue read as
- * "fine" or "in flow", amber as "needs attention", orange/red as "broken" or
- * `Missing` (the app's existing destructive red). Keyed on `TOOL_STATUS_NEW`
- * (`tools.statusNew`), not the old `status` field — see `lib/bubble/enums.ts`.
- * Anything outside this set falls back to a plain neutral pill.
- */
-const STATUS_BADGE_CLASSES: Record<string, string> = {
-  Available: "border-transparent bg-status-ok/15 text-status-ok-foreground",
-  Delivered: "border-transparent bg-status-ok/15 text-status-ok-foreground",
-  "In Transit": "border-transparent bg-status-active/15 text-status-active-foreground",
-  "Pickup Requested": "border-transparent bg-status-active/15 text-status-active-foreground",
-  "Maintenance Required": "border-transparent bg-status-attention/15 text-status-attention-foreground",
-  "Inspection Required": "border-transparent bg-status-attention/15 text-status-attention-foreground",
-  "Repair Required": "border-transparent bg-status-repair/15 text-status-repair-foreground",
-  "Under Repair": "border-transparent bg-status-repair/15 text-status-repair-foreground",
-  Missing: "border-transparent bg-destructive/15 text-destructive",
-}
-const DEFAULT_STATUS_CLASSES = "border-transparent bg-muted text-muted-foreground"
 
 /** "Carlos Faner" → "CF"; a lone name falls back to its first two letters. */
 function initials(name: string): string {
@@ -270,10 +251,11 @@ function ToolBox({ tool }: { tool: DashboardTool }) {
         <span className="text-sm font-medium wrap-anywhere">{tool.name}</span>
         {/* `tool.status` is `tools.statusNew`, backfilled on every row — a blank
             one is a row the migration missed, and an empty pill would read as
-            a style bug rather than as missing data. */}
-        {tool.status && (
-          <Badge className={STATUS_BADGE_CLASSES[tool.status] ?? DEFAULT_STATUS_CLASSES}>{tool.status}</Badge>
-        )}
+            a style bug rather than as missing data. `tool.condition` (phase 3A)
+            only ever adds a second badge, never replaces the first. */}
+        <div className="flex flex-wrap justify-end gap-1">
+          <ToolStatusBadges status={tool.status} condition={tool.condition} />
+        </div>
       </div>
 
       {(tool.typeName || tool.floor) && (
