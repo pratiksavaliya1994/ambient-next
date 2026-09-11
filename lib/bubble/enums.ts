@@ -118,8 +118,8 @@ export type ToolStatusNew = (typeof TOOL_STATUS_NEW)[number]
  * The `tools.statusNew` values the lifecycle *writes*, named rather than typed
  * as literals at each call site so no transition can drift.
  *
- * `TOOL_STATUS_AVAILABLE` is unused at the moment and kept on purpose for
- * phase 3D (pickup return-to-warehouse). `TOOL_STATUS_IN_TRANSIT` /
+ * `TOOL_STATUS_AVAILABLE` backs `isReadyForDispatch`'s dispatch-time gate, and
+ * is also kept for phase 3D (pickup return-to-warehouse). `TOOL_STATUS_IN_TRANSIT` /
  * `TOOL_STATUS_DELIVERED` back dispatch (2B) and offload (2C).
  */
 export const TOOL_STATUS_AVAILABLE: ToolStatusNew = "Available"
@@ -155,4 +155,19 @@ export const UNASSIGNABLE_TOOL_STATUS: readonly string[] = [
  */
 export function isAssignable(statusNew: string): boolean {
   return !UNASSIGNABLE_TOOL_STATUS.includes(statusNew)
+}
+
+/**
+ * Whether an already-*assigned* tool is actually sitting at the warehouse
+ * right now, as opposed to still mid-flow on a different, not-yet-offloaded
+ * request (`In Transit`, `Delivered`, `Pickup Requested`) or flagged for
+ * condition. Assign-time deliberately allows any of those — see
+ * `TOOL_STATUS_NEW`'s doc — but Dispatch is the moment a tool actually leaves
+ * the building, so it needs the stricter, real-time answer this checks instead.
+ *
+ * Blank stays ready, same leniency as `isAssignable`: after the backfill an
+ * empty `statusNew` is a migration gap, not a signal the tool is unavailable.
+ */
+export function isReadyForDispatch(statusNew: string): boolean {
+  return statusNew === "" || statusNew === TOOL_STATUS_AVAILABLE
 }

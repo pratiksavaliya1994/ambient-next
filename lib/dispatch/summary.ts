@@ -2,6 +2,7 @@ import "server-only"
 
 import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { buildSlots, type AssignedTool } from "@/lib/bubble/assigned-tools-types"
+import { isReadyForDispatch } from "@/lib/bubble/enums"
 import { listToolTypes } from "@/lib/bubble/reference"
 import type { ToolRequest } from "@/lib/bubble/requests"
 
@@ -24,6 +25,16 @@ export type DispatchRequestSummary = {
    * never get a physical unit assigned. Empty means fully assigned.
    */
   missing: { toolType: string; short: number }[]
+  /**
+   * Assigned tools whose live `statusNew` isn't `Available` right now — still
+   * mid-flow on a different, not-yet-offloaded request. `location` is
+   * whatever dispatch/offload last wrote there — the driver's name while
+   * `In Transit`, the other job's name once `Delivered` — so the message can
+   * say where the tool actually is, not just what state it's in. Non-empty
+   * means this request can't dispatch yet, whatever the dates said when it
+   * was assigned.
+   */
+  notReady: { name: string; status: string; location: string }[]
 }
 
 /**
@@ -36,7 +47,10 @@ export type DispatchRequestSummary = {
  * `toolType` on an `assignedtools` row is just the requested *type* name
  * (e.g. "Pump Jack Electric") — every unit of a type shows up identical. A
  * driver sizing up a trip needs the actual physical `tools` rows, so those are
- * read back by id and grouped by their own `name` instead.
+ * read back by id and grouped by their own `name` instead. The same read-back
+ * also carries each tool's live `statusNew`, which is what `notReady` is built
+ * from — a tool can be validly `assignedtools`-linked here while still
+ * mid-flow on a different, not-yet-offloaded request (see `isReadyForDispatch`).
  */
 export async function toDispatchSummaries(requests: ToolRequest[]): Promise<DispatchRequestSummary[]> {
   const [assignedToolRows, toolTypes] = await Promise.all([
@@ -44,20 +58,29 @@ export async function toDispatchSummaries(requests: ToolRequest[]): Promise<Disp
     listToolTypes(),
   ])
 
-  const toolNameById = new Map(
-    (await listToolsByIds(assignedToolRows.map((row) => row.toolId))).map((tool) => [tool.id, tool.name])
+  const toolsById = new Map(
+    (await listToolsByIds(assignedToolRows.map((row) => row.toolId))).map((tool) => [tool.id, tool])
   )
   const toolsByRequest = new Map<string, Map<string, number>>()
   const assignedByRequest = new Map<string, AssignedTool[]>()
+  const notReadyByRequest = new Map<string, { name: string; status: string; location: string }[]>()
   for (const row of assignedToolRows) {
+    const tool = toolsById.get(row.toolId)
+    const label = tool?.name ?? (row.toolType || "Unlabeled tool")
+
     const byName = toolsByRequest.get(row.requestId) ?? new Map<string, number>()
-    const label = toolNameById.get(row.toolId) ?? (row.toolType || "Unlabeled tool")
     byName.set(label, (byName.get(label) ?? 0) + 1)
     toolsByRequest.set(row.requestId, byName)
 
     const rows = assignedByRequest.get(row.requestId) ?? []
     rows.push(row)
     assignedByRequest.set(row.requestId, rows)
+
+    if (tool && !isReadyForDispatch(tool.status)) {
+      const notReady = notReadyByRequest.get(row.requestId) ?? []
+      notReady.push({ name: tool.name, status: tool.status, location: tool.location })
+      notReadyByRequest.set(row.requestId, notReady)
+    }
   }
 
   return requests.map((request) => {
@@ -81,6 +104,7 @@ export async function toDispatchSummaries(requests: ToolRequest[]): Promise<Disp
       toolCount: tools.reduce((sum, tool) => sum + tool.count, 0),
       tools,
       missing,
+      notReady: notReadyByRequest.get(request.id) ?? [],
     }
   })
 }

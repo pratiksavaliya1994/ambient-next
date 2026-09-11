@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache"
 
-import { listAssignedTools } from "@/lib/bubble/assigned-tools"
+import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
+import { isReadyForDispatch } from "@/lib/bubble/enums"
 import { dispatchRequests, getRequest } from "@/lib/bubble/requests"
 import { requireSession } from "@/lib/auth/session"
 import { dispatchSchema } from "@/lib/schemas/assignment"
@@ -51,6 +52,22 @@ export async function dispatchAction(input: unknown): Promise<DispatchState> {
 
   const assigned = await listAssignedTools(requestIds)
   const toolIds = [...new Set(assigned.map((entry) => entry.toolId))]
+
+  // The board's disabled checkboxes are the primary defence, but that render
+  // can be a little stale by the time this fires — re-check each tool's live
+  // `statusNew` immediately before the write, the same "narrow, not close"
+  // defence `listTakenToolIds` gives the assign screen.
+  const notReady = (await listToolsByIds(toolIds)).filter((tool) => !isReadyForDispatch(tool.status))
+  if (notReady.length > 0) {
+    const [first] = notReady
+    return {
+      status: "error",
+      message:
+        notReady.length === 1
+          ? `One of the selected requests has a tool that isn't available right now (${first.name} is ${first.status} at ${first.location}). Reload the board.`
+          : `${notReady.length} of the selected requests have tools that aren't available right now. Reload the board.`,
+    }
+  }
 
   let toolsUpdated: number
   try {

@@ -50,7 +50,13 @@ export function DispatchBoard({
   preselectedId?: string
 }) {
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(preselectedId && assignedRequests.some((request) => request.id === preselectedId) ? [preselectedId] : [])
+    () =>
+      new Set(
+        preselectedId &&
+        assignedRequests.some((request) => request.id === preselectedId && request.notReady.length === 0)
+          ? [preselectedId]
+          : []
+      )
   )
   const [driver, setDriver] = useState("")
   const [state, setState] = useState<DispatchState>(INITIAL_DISPATCH_STATE)
@@ -102,23 +108,26 @@ export function DispatchBoard({
             <ItemGroup className="gap-2">
               {assignedRequests.map((request) => {
                 const checked = selected.has(request.id)
+                const blocked = request.notReady.length > 0
                 return (
                   <Item
                     key={request.id}
                     size="sm"
                     variant="outline"
                     className={cn(
-                      "cursor-pointer items-start bg-background shadow-sm transition-colors hover:bg-muted/40 sm:flex-nowrap sm:items-center",
+                      "items-start bg-background shadow-sm transition-colors sm:flex-nowrap sm:items-center",
+                      blocked ? "opacity-70" : "cursor-pointer hover:bg-muted/40",
                       checked && "border-primary bg-primary/5 ring-1 ring-primary hover:bg-primary/5"
                     )}
                   >
                     <Checkbox
                       className="mt-0.5 shrink-0 sm:mt-0"
                       checked={checked}
+                      disabled={blocked}
                       onCheckedChange={(next) => toggle(request.id, next === true)}
                       aria-label={`Select ${request.job}`}
                     />
-                    <ItemContent className="min-w-0" onClick={() => toggle(request.id, !checked)}>
+                    <ItemContent className="min-w-0" onClick={() => !blocked && toggle(request.id, !checked)}>
                       <ItemTitle
                         className="line-clamp-2 w-full wrap-anywhere sm:line-clamp-1 sm:truncate"
                         title={request.job}
@@ -146,6 +155,17 @@ export function DispatchBoard({
                           <span className="min-w-0 wrap-anywhere">
                             <span className="font-medium">Not fully assigned</span> — missing{" "}
                             {request.missing.map((line) => `${line.toolType} ×${line.short}`).join(", ")}
+                          </span>
+                        </div>
+                      )}
+                      {blocked && (
+                        <div className="flex items-start gap-1.5 rounded-md bg-destructive/15 px-2 py-1.5 text-xs text-destructive">
+                          <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />
+                          <span className="min-w-0 wrap-anywhere">
+                            <span className="font-medium">Not available to dispatch</span> —{" "}
+                            {request.notReady
+                              .map((tool) => `${tool.name} is ${tool.status} at ${tool.location}`)
+                              .join(", ")}
                           </span>
                         </div>
                       )}
