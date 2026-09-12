@@ -1,3 +1,5 @@
+import { NO_LOCATION } from "@/lib/bubble/pickup-tools-types"
+
 /**
  * Bubble option sets are matched by display text on write, so mirroring them
  * as string-literal unions turns a typo into a compile error rather than a
@@ -207,4 +209,24 @@ export function isAssignable(condition: string, statusNew: string): boolean {
  */
 export function isReadyForDispatch(statusNew: string): boolean {
   return statusNew === "" || statusNew === TOOL_STATUS_AVAILABLE
+}
+
+/**
+ * `jobs` rows that function as warehouse stand-ins rather than real job
+ * sites — a tool sitting at any of these needs no site-to-site pickup stop
+ * before a delivery. This is the same constant `docs/phase-3d-warehouse-offload.md`
+ * anticipated as `WAREHOUSE_JOB_NAMES` for the (still unbuilt) return-to-warehouse
+ * slice; reuse this one there instead of inventing a second list.
+ */
+export const WAREHOUSE_LOCATIONS = ["Warehouse", "1407 Locker", "Other - Not a Job Site"] as const
+
+/**
+ * Whether a tool's current `location` counts as "at the warehouse" rather
+ * than "out on a job site." Blank/`NO_LOCATION` stays lenient — same "not
+ * enough signal to say otherwise" treatment `isAssignable`/`isReadyForDispatch`
+ * already give an unset value — so it never spuriously produces a pickup stop.
+ */
+export function isWarehouseLocation(location: string): boolean {
+  const trimmed = location.trim()
+  return trimmed === "" || trimmed === NO_LOCATION || (WAREHOUSE_LOCATIONS as readonly string[]).includes(trimmed)
 }

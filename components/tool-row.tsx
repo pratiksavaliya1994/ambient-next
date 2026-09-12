@@ -22,7 +22,6 @@ export function ToolRow({
   conflict,
   picked,
   usedElsewhere,
-  atCapacity = false,
   onAdd,
   onRemove,
 }: {
@@ -31,12 +30,10 @@ export function ToolRow({
   picked: boolean
   /** Already on this request, but filling a different slot. */
   usedElsewhere: boolean
-  /** The slot already holds every tool that was requested — swap, don't add. */
-  atCapacity?: boolean
   onAdd: () => void
   onRemove: () => void
 }) {
-  const blocked = Boolean(conflict) || (usedElsewhere && !picked) || (atCapacity && !picked)
+  const blocked = Boolean(conflict) || (usedElsewhere && !picked)
 
   return (
     <Item
@@ -55,8 +52,6 @@ export function ToolRow({
             </>
           ) : usedElsewhere && !picked ? (
             "Already filling another slot on this request"
-          ) : atCapacity && !picked ? (
-            "Slot is full — remove one to swap it out"
           ) : (
             <>
               {tool.location}

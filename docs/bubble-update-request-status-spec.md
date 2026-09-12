@@ -206,10 +206,20 @@ reporting it.
 | `requestIds` | the selected requests |
 | `status` | `"In Transit"` |
 | `driver` | the picked driver's name |
-| `toolIds` | union of `assignedtools.toolID` across those requests |
+| `toolIds` | the **warehouse-origin** subset of `assignedtools.toolID` across those requests — see below |
 | `toolStatus` | `"In Transit"` |
 | `toolLocation` | **the driver's name** — same string as `driver`/`toolUser`. `location` means "current place or custodian," so a tool in transit reads as being with whoever has it, not still at its pre-dispatch place. See `docs/phase-2-lifecycle.md`. |
 | `toolUser` | the driver's name |
+
+**Confirm pickup (2D — built, live):** the same call again, once per stop, and
+the reason dispatch sends a subset. A tool sitting `Available` on a *different*
+job site hasn't reached the driver at dispatch time, so its id is withheld;
+step 3's list is exactly `toolIds`, so withholding one leaves that `tools` row
+completely untouched. When the driver confirms collecting it, the identical
+dispatch call runs again with `requestIds: [thatRequest]` and `toolIds` scoped
+to just those tools. Re-setting an already-`In Transit` request to `In Transit`
+is a harmless no-op, which is why no second workflow was needed. See
+`docs/phase-2d-site-to-site-transfers.md`.
 
 **Offload (2C — built, live):**
 

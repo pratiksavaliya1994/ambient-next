@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Item, ItemContent, ItemTitle } from "@/components/ui/item"
+import { TripToolList } from "@/components/trip-tool-list"
 import type { DispatchRequestSummary } from "@/lib/dispatch/summary"
 import { cn } from "@/lib/utils"
 
@@ -62,23 +63,14 @@ export function ActiveTrips({ tripsByDriver }: { tripsByDriver: [string, Dispatc
                     </div>
                     <div className={cn("min-w-0 flex-1", !isLast && "pb-2")}>
                       <Item variant="outline" size="sm" render={<Link href={`/requests/${request.id}`} />}>
-                        <ItemContent>
-                          <ItemTitle className="flex items-center justify-between gap-3">
+                        <ItemContent className="min-w-0">
+                          <ItemTitle className="w-full items-center justify-between gap-3">
                             <span className="min-w-0 flex-1 truncate">{request.job}</span>
                             <span className="shrink-0 text-xs font-normal text-muted-foreground tabular-nums">
                               {request.toolCount} {request.toolCount === 1 ? "tool" : "tools"}
                             </span>
                           </ItemTitle>
-                          {request.tools.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {request.tools.map((tool) => (
-                                <Badge key={tool.name} variant="secondary" className="font-normal">
-                                  {tool.name}
-                                  {tool.count > 1 && ` ×${tool.count}`}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
+                          <TripToolList requestId={request.id} tools={request.tools} canPickUp />
                           {request.missing.length > 0 && (
                             <div className="flex items-start gap-1.5 rounded-md bg-status-attention/15 px-2 py-1.5 text-xs text-status-attention-foreground">
                               <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />

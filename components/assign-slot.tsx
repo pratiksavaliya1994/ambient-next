@@ -19,18 +19,19 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { ItemGroup } from "@/components/ui/item"
-import type { AssignSlot, CandidateTool, Conflict } from "@/lib/bubble/assigned-tools-types"
+import { assignedLabel, type AssignSlot, type CandidateTool, type Conflict } from "@/lib/bubble/assigned-tools-types"
 import { cn } from "@/lib/utils"
 
 /**
  * One requested tool type: how many were asked for, which physical tools fill
  * it so far, and a dialog to add more from that type's candidates.
  *
- * A slot can be left short — that is a supported outcome, not an error — so an
- * unfilled slot renders as the app's existing dashed `Empty` idiom rather than
- * as a validation failure. It can't be left *long*: once `requested` tools are
- * picked the remaining candidates go disabled, so the only way to change the
- * pick is to remove one first.
+ * The requested quantity bounds the slot in neither direction. Short is a
+ * supported outcome, not an error, so an unfilled slot renders as the app's
+ * existing dashed `Empty` idiom rather than as a validation failure — and long
+ * is equally fine, since what a job needs is the loader's call, not a number
+ * typed on the request. The count reads `N assigned · M requested` for exactly
+ * that reason.
  */
 export function AssignSlotCard({
   slot,
@@ -57,7 +58,8 @@ export function AssignSlotCard({
     return candidates.filter((tool) => tool.name.toLowerCase().includes(needle))
   }, [candidates, query])
 
-  const full = chosen.length >= slot.requested
+  /** Enough on the truck to cover what was asked for. Not a cap — more is allowed. */
+  const met = chosen.length >= slot.requested
 
   return (
     <div className="flex flex-col gap-2 border-b bg-muted/40 p-4 last:border-b-0">
@@ -72,12 +74,12 @@ export function AssignSlotCard({
             <Badge
               className={cn(
                 "tabular-nums",
-                full
+                met
                   ? "border-transparent bg-status-ok/15 text-status-ok-foreground"
                   : "border-transparent bg-background text-muted-foreground"
               )}
             >
-              {chosen.length} of {slot.requested}
+              {assignedLabel(chosen.length, slot.requested)}
             </Badge>
           )}
         </div>
@@ -96,17 +98,8 @@ export function AssignSlotCard({
               <DialogHeader>
                 <DialogTitle className="wrap-anywhere">{slot.toolType}</DialogTitle>
                 <DialogDescription>
-                  {full ? (
-                    <>
-                      All {slot.requested} requested {slot.requested === 1 ? "tool is" : "tools are"} assigned. Remove
-                      one below to pick a different tool.
-                    </>
-                  ) : (
-                    <>
-                      {candidates.length} {candidates.length === 1 ? "tool" : "tools"} of this type. Tools already on
-                      another request over these dates are shown but can&rsquo;t be picked.
-                    </>
-                  )}
+                  {candidates.length} {candidates.length === 1 ? "tool" : "tools"} of this type. Tools already on
+                  another request over these dates are shown but can&rsquo;t be picked.
                 </DialogDescription>
               </DialogHeader>
 
@@ -146,7 +139,6 @@ export function AssignSlotCard({
                         conflict={conflicts[tool.id]}
                         picked={picked}
                         usedElsewhere={usedElsewhere.has(tool.id)}
-                        atCapacity={full}
                         onAdd={() => onAdd(tool)}
                         onRemove={() => onRemove(tool.id)}
                       />

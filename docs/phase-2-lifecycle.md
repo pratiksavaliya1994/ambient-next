@@ -329,10 +329,13 @@ const taken = await bubbleListAll("assignedtools", {
   before 2B ships widely.
 - **Return-to-warehouse is out of scope.** After dispatch, a mistake is
   repaired in Bubble.
-- **Site-to-site redeployment isn't supported** — a delivery starts at the
-  Warehouse by definition here. While a load is in transit,
-  `listToolsForJob` returns nothing for it, which is correct for a warehouse
-  origin and wrong for a site-to-site move.
+- ~~**Site-to-site redeployment isn't supported**~~ — **built as 2D**, see
+  [`phase-2d-site-to-site-transfers.md`](./phase-2d-site-to-site-transfers.md).
+  A delivery no longer starts at the Warehouse by definition: a tool already
+  `Available` on another job site stays put through dispatch and moves only on
+  an explicit driver confirmation. No schema or workflow change was needed —
+  `update-request-status` ignores any tool whose id isn't passed to it, which
+  is what makes deferring one possible.
 - `ALLOW_DEV_LOGIN=true` "checks nothing" per `CLAUDE.md`. Phase 1 wrote
   request rows; phase 2 moves physical inventory. Dispatch and offload
   shouldn't reach real users while dev-login is on.

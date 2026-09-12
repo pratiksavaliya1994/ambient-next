@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { AlertCircleIcon, ArrowRightIcon, TriangleAlertIcon, TruckIcon, WrenchIcon } from "lucide-react"
+import { AlertCircleIcon, ArrowRightIcon, MapPinIcon, TriangleAlertIcon, TruckIcon, WrenchIcon } from "lucide-react"
 
 import { dispatchAction } from "@/app/(app)/dispatch/actions"
 import { INITIAL_DISPATCH_STATE, type DispatchState } from "@/app/(app)/dispatch/action-state"
@@ -19,6 +19,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle }
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import { TripToolList } from "@/components/trip-tool-list"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
 import type { DispatchRequestSummary } from "@/lib/dispatch/summary"
 import { cn } from "@/lib/utils"
@@ -35,6 +36,17 @@ import { cn } from "@/lib/utils"
  * fails with a visible error until it exists — the wiring is complete either
  * way.
  */
+/**
+ * The blue rows above already say which tools; this says what the driver is
+ * signing up for by taking this request — extra stops, before the delivery.
+ */
+function pickupSummary(stops: DispatchRequestSummary["pickupStops"]): string {
+  const tools = stops.reduce((sum, stop) => sum + stop.toolIds.length, 0)
+  return `Pick up ${tools} ${tools === 1 ? "tool" : "tools"} from ${stops.length} other job ${
+    stops.length === 1 ? "site" : "sites"
+  } before delivering`
+}
+
 export function DispatchBoard({
   assignedRequests,
   activeTripCount,
@@ -139,16 +151,7 @@ export function DispatchBoard({
                         {request.timeRange && ` · ${request.timeRange}`}
                         {request.fieldPm && ` · ${request.fieldPm}`}
                       </ItemDescription>
-                      {request.tools.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {request.tools.map((tool) => (
-                            <Badge key={tool.name} variant="secondary" className="font-normal">
-                              {tool.name}
-                              {tool.count > 1 && ` ×${tool.count}`}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                      <TripToolList requestId={request.id} tools={request.tools} />
                       {request.missing.length > 0 && (
                         <div className="flex items-start gap-1.5 rounded-md bg-status-attention/15 px-2 py-1.5 text-xs text-status-attention-foreground">
                           <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />
@@ -158,14 +161,20 @@ export function DispatchBoard({
                           </span>
                         </div>
                       )}
+                      {request.pickupStops.length > 0 && (
+                        <span className="flex items-start gap-1.5 text-xs font-medium text-status-active-foreground">
+                          <MapPinIcon className="mt-px size-3.5 shrink-0" />
+                          <span className="min-w-0 wrap-anywhere">{pickupSummary(request.pickupStops)}</span>
+                        </span>
+                      )}
+                      {/* The rows above already name the offending tools in red —
+                          this says what that costs: the checkbox is disabled. */}
                       {blocked && (
                         <div className="flex items-start gap-1.5 rounded-md bg-destructive/15 px-2 py-1.5 text-xs text-destructive">
                           <TriangleAlertIcon className="mt-px size-3.5 shrink-0" />
                           <span className="min-w-0 wrap-anywhere">
-                            <span className="font-medium">Not available to dispatch</span> —{" "}
-                            {request.notReady
-                              .map((tool) => `${tool.name} is ${tool.status} at ${tool.location}`)
-                              .join(", ")}
+                            <span className="font-medium">Not available to dispatch</span> — {request.notReady.length}{" "}
+                            {request.notReady.length === 1 ? "tool is" : "tools are"} on another request
                           </span>
                         </div>
                       )}

@@ -15,11 +15,12 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
-import type {
-  AssignmentEntry,
-  AssignSlot,
-  CandidateTool,
-  Conflict,
+import {
+  assignedLabel,
+  type AssignmentEntry,
+  type AssignSlot,
+  type CandidateTool,
+  type Conflict,
 } from "@/lib/bubble/assigned-tools-types"
 
 /**
@@ -77,12 +78,6 @@ export function AssignToolsPanel({
     return byType
   }, [known])
 
-  /** Requested quantity per slot, the cap `addToSlot` enforces. */
-  const requestedByType = useMemo(
-    () => new Map(slots.map((slot) => [slot.toolType, slot.requested])),
-    [slots]
-  )
-
   const usedIds = useMemo(() => {
     const used = new Set<string>(extras)
     for (const ids of picks.values()) for (const id of ids) used.add(id)
@@ -102,15 +97,18 @@ export function AssignToolsPanel({
   }
 
   /**
-   * A slot never takes more tools than were requested — two of a type asked
-   * for is two picked, not three. The dialog also disables the Add buttons at
-   * capacity; this guard is the one that actually holds, since a stale render
-   * or a double click would otherwise slip an extra through.
+   * A slot takes as many tools of its type as are picked — the requested
+   * quantity is guidance about what the job needs, not a ceiling on what goes
+   * on the truck. Asking for one grinder and sending three is a normal load.
+   *
+   * What still holds is that one physical tool fills one place: the dialog
+   * disables a row that is already picked or used elsewhere, and this guard is
+   * what actually enforces it, since a stale render or a double click would
+   * otherwise slip a duplicate through.
    */
   function addToSlot(toolType: string, tool: CandidateTool) {
-    const cap = requestedByType.get(toolType) ?? 0
     const chosen = picks.get(toolType) ?? []
-    if (chosen.length >= cap || chosen.includes(tool.id) || usedIds.has(tool.id)) return
+    if (chosen.includes(tool.id) || usedIds.has(tool.id)) return
 
     remember(tool)
     setPicks((current) => {
@@ -207,7 +205,7 @@ export function AssignToolsPanel({
         <CardHeader>
           <CardTitle className="text-base">Requested tools</CardTitle>
           <CardDescription className="tabular-nums">
-            {filled} of {requested} assigned
+            {assignedLabel(filled, requested)}
             {unresolvedSlots > 0 && ` · ${unresolvedSlots} unmatched ${unresolvedSlots === 1 ? "name" : "names"}`}
           </CardDescription>
         </CardHeader>
@@ -305,7 +303,7 @@ export function AssignToolsPanel({
           count is the thing a PM checks before saving. */}
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card/95 p-3 backdrop-blur">
         <span className="text-sm text-muted-foreground tabular-nums">
-          {filled} of {requested} assigned
+          {assignedLabel(filled, requested)}
           {extraTools.length > 0 && ` · ${extraTools.length} extra`}
           {dirty && " · unsaved"}
         </span>

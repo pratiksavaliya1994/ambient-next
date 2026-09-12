@@ -3,13 +3,14 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
+import { AssignedToolRow } from "@/components/assigned-tool-row"
 import { CompleteDeliveryAction } from "@/components/complete-delivery-action"
 import { RequestStatusBadge, statusIcon, statusIndex } from "@/components/request-status-badge"
+import { RequestToolSlots } from "@/components/request-tool-slots"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import {
   Stepper,
   StepperIndicator,
@@ -20,12 +21,12 @@ import {
   StepperTrigger,
 } from "@/components/ui/stepper"
 import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
-import { buildSlots, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
+import { assignedLabel, buildSlots, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
 import { REQUEST_STATUS, type RequestStatus } from "@/lib/bubble/enums"
 import { listToolTypes } from "@/lib/bubble/reference"
 import { getRequest, type ToolRequest } from "@/lib/bubble/requests"
-import { cn } from "@/lib/utils"
+import { deriveTripStatus } from "@/lib/dispatch/summary"
 
 export const metadata: Metadata = { title: "Request" }
 
@@ -51,6 +52,20 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   const resolvedTools = await listToolsByIds([...new Set(toolIds)])
   const toolsById = new Map(resolvedTools.map((tool) => [tool.id, tool]))
   const extraTools = extraToolIds.map((id) => toolsById.get(id)).filter((tool): tool is CandidateTool => Boolean(tool))
+
+  // `Assigned` and `In Transit` both want this — the first to review which
+  // tools the driver will have to collect en route *before* committing to
+  // dispatch, the second to watch them actually being collected. `New` has
+  // nothing assigned to classify and `Delivered` is over. Reuses the same
+  // classification `toDispatchSummaries` gives the Dispatch board / Active
+  // trips screens, off the tools already read above, and colours each row in
+  // the tools list rather than a list of its own.
+  const onTheRoad = request.status === "Assigned" || request.status === "In Transit"
+  const tripStatus = onTheRoad ? deriveTripStatus(request, assigned, toolsById) : null
+  // Confirming a pickup writes a tool `In Transit` with the driver, so it only
+  // means anything once the request itself has been dispatched.
+  const canPickUp = request.status === "In Transit"
+  const pendingPickupCount = tripStatus?.pickupStops.reduce((sum, stop) => sum + stop.toolIds.length, 0) ?? 0
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -134,12 +149,12 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
             <CardHeader>
               <CardTitle className="text-base">Requested tools</CardTitle>
               <span className="text-sm text-muted-foreground tabular-nums">
-                {assignedCount(slots)} of {requestedCount(slots)} assigned
+                {assignedLabel(assignedCount(slots), requestedCount(slots))}
                 {extraToolIds.length > 0 &&
                   ` · ${extraToolIds.length} extra ${extraToolIds.length === 1 ? "tool" : "tools"}`}
               </span>
               <CardAction>
-                <NextAction request={request} toolCount={assigned.length} />
+                <NextAction request={request} toolCount={assigned.length} pendingPickupCount={pendingPickupCount} />
               </CardAction>
             </CardHeader>
             <CardContent>
@@ -157,72 +172,13 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                   </span>
                 </div>
               )}
-              {slots.length === 0 ? (
-                <Empty className="border border-dashed py-8">
-                  <EmptyHeader>
-                    <EmptyTitle>No tools requested</EmptyTitle>
-                    <EmptyDescription>
-                      This request has no tool line — there is nothing to assign against.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                <ul className="divide-y overflow-hidden rounded-lg border">
-                  {slots.map((slot) => {
-                    const tools = slot.toolIds
-                      .map((id) => toolsById.get(id))
-                      .filter((tool): tool is CandidateTool => Boolean(tool))
-
-                    return (
-                      <li key={slot.toolType} className="flex flex-col gap-2 bg-muted/40 px-3 py-2">
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="min-w-0 flex-1 text-sm font-semibold wrap-anywhere">{slot.toolType}</span>
-                          {slot.consumable ? (
-                            <Badge variant="outline">Consumable</Badge>
-                          ) : (
-                            <span
-                              className={cn(
-                                "inline-flex shrink-0 items-center rounded-md px-2 py-1 text-xs font-semibold tabular-nums",
-                                slot.toolIds.length >= slot.requested
-                                  ? "bg-status-ok/15 text-status-ok-foreground"
-                                  : "bg-status-attention/15 text-status-attention-foreground"
-                              )}
-                            >
-                              {slot.toolIds.length} of {slot.requested}
-                            </span>
-                          )}
-                        </div>
-
-                        {tools.length > 0 ? (
-                          <ul className="flex flex-col gap-1.5 border-l-2 border-muted-foreground/25 pl-3">
-                            {tools.map((tool) => (
-                              <li
-                                key={tool.id}
-                                className="flex flex-col gap-0.5 rounded-md border bg-background px-2.5 py-1.5"
-                              >
-                                <span className="text-sm wrap-anywhere" title={tool.name}>
-                                  {tool.name}
-                                </span>
-                                <span className="text-xs wrap-anywhere text-muted-foreground">
-                                  {tool.location}
-                                  {tool.floor && ` · Floor ${tool.floor}`}
-                                  {tool.status && ` · ${tool.status}`}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          !slot.consumable && (
-                            <p className="border-l-2 border-status-attention/50 pl-3 text-xs font-medium text-status-attention-foreground">
-                              No tool assigned yet for this type
-                            </p>
-                          )
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
+              <RequestToolSlots
+                requestId={request.id}
+                slots={slots}
+                toolsById={toolsById}
+                toolStates={tripStatus?.byToolId ?? null}
+                canPickUp={canPickUp}
+              />
 
               {extraTools.length > 0 && (
                 <div className="mt-4 flex flex-col gap-2 border-t pt-4">
@@ -230,20 +186,14 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                   <div className="rounded-lg bg-muted/40 p-3">
                     <ul className="flex flex-col gap-1.5 border-l-2 border-muted-foreground/25 pl-3">
                       {extraTools.map((tool) => (
-                        <li
+                        <AssignedToolRow
                           key={tool.id}
-                          className="flex items-center gap-3 rounded-md border bg-background px-2.5 py-1.5"
-                        >
-                          <div className="flex min-w-0 flex-1 flex-col">
-                            <span className="truncate text-sm" title={tool.name}>
-                              {tool.name}
-                            </span>
-                            <span className="truncate text-xs text-muted-foreground">
-                              {tool.typeName ?? "No type"} · {tool.location}
-                            </span>
-                          </div>
-                          <Badge variant="outline">Extra</Badge>
-                        </li>
+                          requestId={request.id}
+                          tool={tool}
+                          state={tripStatus?.byToolId.get(tool.id) ?? null}
+                          canPickUp={canPickUp}
+                          extra
+                        />
                       ))}
                     </ul>
                   </div>
@@ -307,7 +257,16 @@ function assignedCount(slots: AssignSlot[]): number {
  * reads that to seed its checkbox state. `Delivered` is terminal: the
  * lifecycle is over, so this renders a status pill rather than a dead button.
  */
-function NextAction({ request, toolCount }: { request: ToolRequest; toolCount: number }) {
+function NextAction({
+  request,
+  toolCount,
+  pendingPickupCount,
+}: {
+  request: ToolRequest
+  toolCount: number
+  /** Off-site tools still not picked up — see `TripPickupStatus`/`CompleteDeliveryAction`. */
+  pendingPickupCount: number
+}) {
   if (request.status === "New") {
     return (
       <Link href={`/requests/${request.id}/assign`} className={buttonVariants({ size: "sm" })}>
@@ -333,7 +292,7 @@ function NextAction({ request, toolCount }: { request: ToolRequest; toolCount: n
   }
 
   if (request.status === "In Transit") {
-    return <CompleteDeliveryAction request={request} toolCount={toolCount} />
+    return <CompleteDeliveryAction request={request} toolCount={toolCount} pendingPickupCount={pendingPickupCount} />
   }
 
   return (

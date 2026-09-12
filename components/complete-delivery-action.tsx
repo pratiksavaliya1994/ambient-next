@@ -27,12 +27,41 @@ import type { ToolRequest } from "@/lib/bubble/requests"
  * screen there just repeated the detail page around one button
  * (`offloadAction` → `offloadRequest`, unchanged). Marks the request and
  * every assigned tool `Delivered`, and writes `location` to the job's name.
+ *
+ * `pendingPickupCount` (from `deriveTripStatus`) disables this rather than
+ * letting the dialog open: a tool still sitting off-site hasn't actually
+ * reached the driver yet, so there's nothing truthful to confirm. The tools
+ * list alongside marks exactly which ones and offers each a "Picked up"
+ * button. `offloadAction` itself re-checks the same thing server-side — this
+ * is the UX half, not the only guard.
  */
-export function CompleteDeliveryAction({ request, toolCount }: { request: ToolRequest; toolCount: number }) {
+export function CompleteDeliveryAction({
+  request,
+  toolCount,
+  pendingPickupCount,
+}: {
+  request: ToolRequest
+  toolCount: number
+  pendingPickupCount: number
+}) {
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<OffloadState>(INITIAL_OFFLOAD_STATE)
   const [pending, startTransition] = useTransition()
   const router = useRouter()
+
+  if (pendingPickupCount > 0) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <Button size="sm" disabled>
+          <PackageCheckIcon />
+          Complete delivery
+        </Button>
+        <span className="text-xs text-status-attention-foreground">
+          {pendingPickupCount} {pendingPickupCount === 1 ? "tool" : "tools"} still to pick up
+        </span>
+      </div>
+    )
+  }
 
   function confirm() {
     startTransition(async () => {

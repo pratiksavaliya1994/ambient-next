@@ -20,7 +20,11 @@ delivery's assign screen.
 ## Checklist
 
 - [ ] **1. Read the live location strings** — before writing any constant
-- [ ] **2. `WAREHOUSE_JOB_NAMES`** in `enums.ts` + `warehouseOptions` helper
+- [ ] **2. `WAREHOUSE_JOB_NAMES`** in `enums.ts` + `warehouseOptions` helper —
+      **2D already added `WAREHOUSE_LOCATIONS` there** (`["Warehouse",
+      "1407 Locker", "Other - Not a Job Site"]`, with `isWarehouseLocation`).
+      Extend or rename that one rather than defining a second list that can
+      drift; see [`phase-2d-site-to-site-transfers.md`](./phase-2d-site-to-site-transfers.md)
 - [ ] **3. `returnRequest`** in `requests.ts`
 - [ ] **4. `returnSchema` + `returnAction`**
 - [ ] **5. `complete-pickup-action.tsx`** on the detail page
@@ -92,6 +96,13 @@ tools come back to.
 export const WAREHOUSE_JOB_NAMES = ["Warehouse"] as const
 export const DEFAULT_WAREHOUSE = "Warehouse"
 ```
+
+**Since this was written, 2D shipped `WAREHOUSE_LOCATIONS` in the same file**
+for the inverse question ("is this tool *not* on a job site?"). The two lists
+answer different questions — a returnable *destination* is a narrower set than
+a location that merely doesn't need a pickup stop — so keeping them separate
+may be right. Decide deliberately after step 1 rather than by accident, and if
+they turn out identical, keep one.
 
 Start with whatever step 1 actually confirms. One entry is fine — a `Select`
 with a single option is still the right control, because the *next* warehouse

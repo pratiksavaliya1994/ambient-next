@@ -64,3 +64,17 @@ export const offloadSchema = z.object({
 })
 
 export type OffloadValues = z.infer<typeof offloadSchema>
+
+/**
+ * What the Active trips screen submits to confirm one off-site pickup stop:
+ * the request it belongs to, and just that stop's tool ids. Dispatch leaves
+ * an off-site tool `Available` at its own site rather than moving it to
+ * `In Transit` sight unseen (see `dispatchAction`); this is the driver saying
+ * "I actually have it now."
+ */
+export const confirmPickupSchema = z.object({
+  requestId: z.string().min(1),
+  toolIds: z.array(z.string().min(1)).min(1),
+})
+
+export type ConfirmPickupValues = z.infer<typeof confirmPickupSchema>

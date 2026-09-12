@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache"
 
-import { listAssignedTools } from "@/lib/bubble/assigned-tools"
+import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { getRequest, offloadRequest } from "@/lib/bubble/requests"
 import { requireSession } from "@/lib/auth/session"
+import { deriveTripStatus } from "@/lib/dispatch/summary"
 import { offloadSchema } from "@/lib/schemas/assignment"
 import type { OffloadState } from "@/app/(app)/requests/[requestId]/action-state"
 
@@ -38,6 +39,23 @@ export async function offloadAction(input: unknown): Promise<OffloadState> {
 
   const assigned = await listAssignedTools([requestId])
   const toolIds = [...new Set(assigned.map((entry) => entry.toolId))]
+
+  // The dialog's own trigger is already disabled for this case
+  // (`CompleteDeliveryAction`) — this is the authoritative re-check right
+  // before the write, since a server action is reachable by direct POST. A
+  // tool still sitting off-site hasn't reached the driver yet, so it can't
+  // truthfully be marked `Delivered`.
+  const toolsById = new Map((await listToolsByIds(toolIds)).map((tool) => [tool.id, tool]))
+  const { pickupStops } = deriveTripStatus(request, assigned, toolsById)
+  if (pickupStops.length > 0) {
+    return {
+      status: "error",
+      message:
+        pickupStops.length === 1
+          ? `A tool still needs picking up from ${pickupStops[0].location} before this can be delivered.`
+          : `${pickupStops.length} sites still need picking up before this can be delivered.`,
+    }
+  }
 
   let toolsUpdated: number
   try {

@@ -9,10 +9,12 @@ export const metadata: Metadata = { title: "Tools" }
 
 export default function ToolsPage() {
   return (
-    <div className="flex w-full flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-medium">Tools</h1>
-        <p className="text-sm text-muted-foreground">Every tool, grouped by its current location.</p>
+    <div className="flex w-full flex-col gap-3">
+      {/* Title and blurb share one line — this screen is measured by how many
+          locations fit above the fold, so the header pays for itself in rows. */}
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <h1 className="text-lg font-medium">Tools</h1>
+        <p className="text-xs text-muted-foreground">Every tool, grouped by its current location.</p>
       </div>
 
       <Suspense fallback={<ToolsDashboardSkeleton />}>
@@ -29,9 +31,15 @@ async function ToolsList() {
 
 function ToolsDashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-3">
       <Skeleton className="h-9 w-full max-w-md" />
-      <Skeleton className="h-64 w-full" />
+      {/* Mirrors the real layout's columns so the fallback doesn't reserve a
+          block of a different shape to what replaces it. */}
+      <div className="columns-3xs gap-3">
+        {[36, 24, 44, 28, 32, 20].map((height, index) => (
+          <Skeleton key={index} className="mb-3 block w-full" style={{ height: `${height * 4}px` }} />
+        ))}
+      </div>
     </div>
   )
 }

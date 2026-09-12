@@ -210,10 +210,12 @@ Writes hit the **live** database.
   name rather than leaving it at `Warehouse`, so a manual revert has to reset
   `location` back to `"Warehouse"` explicitly — it no longer already reads
   that on its own.
-- **Site-to-site redeployment isn't supported.** A delivery starts at the
-  Warehouse by definition here. While a load is in transit, `listToolsForJob`
-  returns nothing for it — correct for a warehouse origin, wrong for a move
-  between two job sites.
+- ~~**Site-to-site redeployment isn't supported.**~~ **Lifted by 2D** —
+  see [`phase-2d-site-to-site-transfers.md`](./phase-2d-site-to-site-transfers.md).
+  Dispatch no longer assumes a warehouse origin: an off-site tool is left out
+  of the dispatch write entirely and moves only when a driver confirms picking
+  it up. Note the knock-on for this section's "What it writes" — dispatch now
+  updates a **subset** of a request's tools, not all of them.
 - `ALLOW_DEV_LOGIN=true` "checks nothing" per `CLAUDE.md`. These two slices
   move physical inventory and can make a tool hard to find. They shouldn't
   reach real users while dev-login is on.

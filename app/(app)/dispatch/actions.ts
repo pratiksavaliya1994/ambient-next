@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
-import { isReadyForDispatch } from "@/lib/bubble/enums"
+import { isReadyForDispatch, isWarehouseLocation } from "@/lib/bubble/enums"
 import { dispatchRequests, getRequest } from "@/lib/bubble/requests"
 import { requireSession } from "@/lib/auth/session"
 import { dispatchSchema } from "@/lib/schemas/assignment"
@@ -57,7 +57,8 @@ export async function dispatchAction(input: unknown): Promise<DispatchState> {
   // can be a little stale by the time this fires — re-check each tool's live
   // `statusNew` immediately before the write, the same "narrow, not close"
   // defence `listTakenToolIds` gives the assign screen.
-  const notReady = (await listToolsByIds(toolIds)).filter((tool) => !isReadyForDispatch(tool.status))
+  const tools = await listToolsByIds(toolIds)
+  const notReady = tools.filter((tool) => !isReadyForDispatch(tool.status))
   if (notReady.length > 0) {
     const [first] = notReady
     return {
@@ -69,9 +70,17 @@ export async function dispatchAction(input: unknown): Promise<DispatchState> {
     }
   }
 
+  // A tool already at the warehouse moves to `In Transit` with the driver
+  // right now, same as always. An off-site one is deliberately left out of
+  // this write — `update-request-status` only edits tools in `toolIds`, so
+  // leaving it out is what keeps it `Available` at its own site — until the
+  // driver actually swings by and confirms picking it up on the Active trips
+  // screen (`confirmPickupAction`).
+  const readyToolIds = tools.filter((tool) => isWarehouseLocation(tool.location)).map((tool) => tool.id)
+
   let toolsUpdated: number
   try {
-    ;({ toolsUpdated } = await dispatchRequests(requestIds, driver, toolIds))
+    ;({ toolsUpdated } = await dispatchRequests(requestIds, driver, readyToolIds))
   } catch (error) {
     return {
       status: "error",
@@ -86,8 +95,8 @@ export async function dispatchAction(input: unknown): Promise<DispatchState> {
   for (const id of requestIds) revalidatePath(`/requests/${id}`)
 
   const warning =
-    toolsUpdated !== toolIds.length
-      ? `${toolsUpdated} of ${toolIds.length} tools updated — check Bubble for the rest.`
+    toolsUpdated !== readyToolIds.length
+      ? `${toolsUpdated} of ${readyToolIds.length} tools updated — check Bubble for the rest.`
       : undefined
 
   return { status: "dispatched", count: requestIds.length, warning }

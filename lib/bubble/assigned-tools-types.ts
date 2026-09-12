@@ -98,6 +98,18 @@ function normalise(name: string): string {
 }
 
 /**
+ * How many tools a slot — or a whole request — holds, against how many were
+ * asked for.
+ *
+ * The requested count is guidance about what the job needs, not a cap on what
+ * goes on the truck: a slot can hold more than it. So the two numbers are
+ * labelled separately rather than written as "3 of 1", which reads as a bug.
+ */
+export function assignedLabel(assigned: number, requested: number): string {
+  return `${assigned} assigned · ${requested} requested`
+}
+
+/**
  * The requested lines and the stored assignments, zipped into slots.
  *
  * Grouping is on the **stored** `toolType` string, so a slot keeps its tools

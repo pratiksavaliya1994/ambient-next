@@ -1,43 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { LayersIcon, SearchIcon, TagIcon, XIcon } from "lucide-react"
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { ButtonGroup } from "@/components/ui/button-group"
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Combobox,
-  ComboboxChip,
-  ComboboxChips,
-  ComboboxChipsInput,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxValue,
-  useComboboxAnchor,
-} from "@/components/ui/combobox"
+import { ToolsDashboardFilters } from "@/components/tools-dashboard-filters"
+import { LocationCard } from "@/components/tools-location-card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
-import { ToolStatusBadges } from "@/components/tool-status-badges"
 import { NO_LOCATION, type DashboardTool } from "@/lib/bubble/pickup-tools-types"
-import { cn } from "@/lib/utils"
 
 const STORAGE_KEY = "tools-dashboard:locations"
-
-/** Cap on each card's tool list before it scrolls internally — a location
- *  can hold hundreds of tools, and an uncapped card would tower over the
- *  rest of the grid. */
-const TOOL_LIST_MAX_HEIGHT = "max-h-[28rem]"
-
-/** "Carlos Faner" → "CF"; a lone name falls back to its first two letters. */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/)
-  return parts.length > 1 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase()
-}
 
 function readStoredLocations(): string[] {
   try {
@@ -59,8 +29,6 @@ function writeStoredLocations(locations: string[]) {
 }
 
 export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
-  const anchor = useComboboxAnchor()
-
   const locations = React.useMemo(() => {
     const names = new Set(tools.map((tool) => tool.location))
     const real = [...names].filter((name) => name !== NO_LOCATION).sort()
@@ -68,11 +36,6 @@ export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
   }, [tools])
 
   const [selected, setSelected] = React.useState<string[]>([])
-  // `searchInput` tracks every keystroke for the controlled input; `committedSearch`
-  // only advances on submit (Enter or the search button) so filtering — which, once
-  // a query is present, scans every tool rather than just the selected locations —
-  // doesn't re-run on each keystroke.
-  const [searchInput, setSearchInput] = React.useState("")
   const [committedSearch, setCommittedSearch] = React.useState("")
 
   // Reading the saved selection needs `localStorage`, which doesn't exist
@@ -89,16 +52,6 @@ export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
   function updateSelected(next: string[]) {
     setSelected(next)
     writeStoredLocations(next)
-  }
-
-  function runSearch(event: React.FormEvent) {
-    event.preventDefault()
-    setCommittedSearch(searchInput.trim())
-  }
-
-  function clearSearch() {
-    setSearchInput("")
-    setCommittedSearch("")
   }
 
   const selectedSet = React.useMemo(() => new Set(selected), [selected])
@@ -129,76 +82,17 @@ export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
   }, [tools, selectedSet, locations, committedSearch])
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-2 border-b pb-6">
-        <Combobox
-          multiple
-          items={locations}
-          value={selected}
-          onValueChange={(next) => updateSelected(next as string[])}
-        >
-          <ComboboxChips ref={anchor} className="min-w-72">
-            <ComboboxValue>
-              {(values: string[]) => (
-                <>
-                  {values.map((value) => (
-                    <ComboboxChip key={value}>{value}</ComboboxChip>
-                  ))}
-                  <ComboboxChipsInput placeholder="Search locations…" />
-                </>
-              )}
-            </ComboboxValue>
-          </ComboboxChips>
-          <ComboboxContent anchor={anchor}>
-            <ComboboxEmpty>No locations match.</ComboboxEmpty>
-            <ComboboxList>
-              {(item: string) => (
-                <ComboboxItem key={item} value={item}>
-                  {item}
-                </ComboboxItem>
-              )}
-            </ComboboxList>
-          </ComboboxContent>
-        </Combobox>
-
-        <form onSubmit={runSearch} className="contents">
-          <ButtonGroup className="min-w-72">
-            <InputGroup>
-              <InputGroupAddon>
-                <SearchIcon />
-              </InputGroupAddon>
-              <InputGroupInput
-                placeholder="Search tools by name…"
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-              />
-              {committedSearch && (
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton type="button" size="icon-xs" aria-label="Clear search" onClick={clearSearch}>
-                    <XIcon />
-                  </InputGroupButton>
-                </InputGroupAddon>
-              )}
-            </InputGroup>
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-          </ButtonGroup>
-        </form>
-
-        <Button type="button" variant="outline" size="sm" onClick={() => updateSelected(locations)}>
-          Select all
-        </Button>
-
-        {selected.length > 0 && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => updateSelected([])}>
-            Clear
-          </Button>
-        )}
-      </div>
+    <div className="flex flex-col gap-3">
+      <ToolsDashboardFilters
+        locations={locations}
+        selected={selected}
+        onSelectedChange={updateSelected}
+        onSearch={setCommittedSearch}
+        hasSearch={committedSearch.length > 0}
+      />
 
       {grouped.length === 0 ? (
-        <Empty className="border">
+        <Empty className="border py-8">
           <EmptyHeader>
             <EmptyTitle>{committedSearch ? "No tools match" : "No locations selected"}</EmptyTitle>
             <EmptyDescription>
@@ -209,78 +103,21 @@ export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(18rem,100%),1fr))] items-start gap-5">
+        /* Multi-column, not grid: a grid row reserves the tallest card's
+           height, so a 3-tool card beside a 30-tool one left a dead band
+           beneath it. Columns pack cards vertically with no such gap. Two
+           consequences to know about — reading order is column-major (fine
+           here, since locations are alphabetical), and `gap` only supplies
+           `column-gap` in multicol, so the vertical rhythm has to come from
+           `mb-3` on each card. `Card`'s own `overflow-hidden` already makes it
+           monolithic to the fragmentation algorithm, so it can't be split
+           across a column break; `break-inside-avoid` states the intent. */
+        <div className="columns-3xs gap-1.5">
           {grouped.map((group) => (
-            <LocationCard key={group.location} location={group.location} tools={group.tools} isExtra={group.isExtra} />
+            <div key={group.location} className="mb-1.5 break-inside-avoid">
+              <LocationCard location={group.location} tools={group.tools} isExtra={group.isExtra} />
+            </div>
           ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function LocationCard({ location, tools, isExtra }: { location: string; tools: DashboardTool[]; isExtra: boolean }) {
-  const isUnset = location === NO_LOCATION
-
-  return (
-    <Card className={cn("border", isExtra && "border-dashed border-primary/50")}>
-      <CardHeader className="px-3">
-        <div className="flex flex-col gap-1">
-          <CardTitle className={cn("wrap-anywhere", isUnset && "text-muted-foreground italic")}>{location}</CardTitle>
-          {isExtra && (
-            <span className="text-xs font-normal text-muted-foreground">Match found outside your selection</span>
-          )}
-        </div>
-        <CardAction>
-          <Badge variant="secondary">{tools.length}</Badge>
-        </CardAction>
-      </CardHeader>
-      <CardContent className={cn(TOOL_LIST_MAX_HEIGHT, "gap-1 overflow-y-auto px-2")}>
-        {tools.map((tool) => (
-          <ToolBox key={tool.id} tool={tool} />
-        ))}
-      </CardContent>
-    </Card>
-  )
-}
-
-function ToolBox({ tool }: { tool: DashboardTool }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border bg-background/60 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <span className="text-sm font-medium wrap-anywhere">{tool.name}</span>
-        {/* `tool.status` is `tools.statusNew`, backfilled on every row — a blank
-            one is a row the migration missed, and an empty pill would read as
-            a style bug rather than as missing data. `tool.condition` (phase 3A)
-            only ever adds a second badge, never replaces the first. */}
-        <div className="flex flex-wrap justify-end gap-1">
-          <ToolStatusBadges status={tool.status} condition={tool.condition} />
-        </div>
-      </div>
-
-      {(tool.typeName || tool.floor) && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          {tool.typeName && (
-            <span className="inline-flex items-center gap-1">
-              <TagIcon className="size-3" />
-              {tool.typeName}
-            </span>
-          )}
-          {tool.floor && (
-            <span className="inline-flex items-center gap-1">
-              <LayersIcon className="size-3" />
-              Floor {tool.floor}
-            </span>
-          )}
-        </div>
-      )}
-
-      {tool.currentUser && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Avatar size="sm">
-            <AvatarFallback>{initials(tool.currentUser)}</AvatarFallback>
-          </Avatar>
-          {tool.currentUser}
         </div>
       )}
     </div>
