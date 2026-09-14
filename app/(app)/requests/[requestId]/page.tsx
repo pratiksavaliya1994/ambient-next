@@ -53,19 +53,20 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   const toolsById = new Map(resolvedTools.map((tool) => [tool.id, tool]))
   const extraTools = extraToolIds.map((id) => toolsById.get(id)).filter((tool): tool is CandidateTool => Boolean(tool))
 
-  // `Assigned` and `In Transit` both want this — the first to review which
-  // tools the driver will have to collect en route *before* committing to
-  // dispatch, the second to watch them actually being collected. `New` has
-  // nothing assigned to classify and `Delivered` is over. Reuses the same
-  // classification `toDispatchSummaries` gives the Dispatch board / Active
-  // trips screens, off the tools already read above, and colours each row in
-  // the tools list rather than a list of its own.
-  const onTheRoad = request.status === "Assigned" || request.status === "In Transit"
-  const tripStatus = onTheRoad ? deriveTripStatus(request, assigned, toolsById) : null
-  // Confirming a pickup writes a tool `In Transit` with the driver, so it only
-  // means anything once the request itself has been dispatched.
+  // Every status but `New` wants this — `Assigned` to review which tools the
+  // driver will have to collect en route *before* committing to dispatch,
+  // `In Transit` to watch them actually being collected, and `Delivered` to
+  // keep saying which ones never made it (`classifyTool` collapses everything
+  // else to plain once the trip is over). `New` has nothing assigned to
+  // classify. Reuses the same classification `toDispatchSummaries` gives the
+  // Dispatch board / Active trips screens, off the tools already read above,
+  // and colours each row in the tools list rather than a list of its own.
+  const tripStatus = request.status === "New" ? null : deriveTripStatus(request, assigned, toolsById)
+  // Confirming or declining a pickup writes to a tool on this trip, so both
+  // only mean anything once the request itself has been dispatched.
   const canPickUp = request.status === "In Transit"
   const pendingPickupCount = tripStatus?.pickupStops.reduce((sum, stop) => sum + stop.toolIds.length, 0) ?? 0
+  const leftBehindCount = tripStatus?.leftBehind.length ?? 0
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -154,7 +155,12 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                   ` · ${extraToolIds.length} extra ${extraToolIds.length === 1 ? "tool" : "tools"}`}
               </span>
               <CardAction>
-                <NextAction request={request} toolCount={assigned.length} pendingPickupCount={pendingPickupCount} />
+                <NextAction
+                  request={request}
+                  toolCount={assigned.length}
+                  pendingPickupCount={pendingPickupCount}
+                  leftBehindCount={leftBehindCount}
+                />
               </CardAction>
             </CardHeader>
             <CardContent>
@@ -261,11 +267,14 @@ function NextAction({
   request,
   toolCount,
   pendingPickupCount,
+  leftBehindCount,
 }: {
   request: ToolRequest
   toolCount: number
-  /** Off-site tools still not picked up — see `TripPickupStatus`/`CompleteDeliveryAction`. */
+  /** Off-site tools still waiting to be collected — blocks delivery. See `CompleteDeliveryAction`. */
   pendingPickupCount: number
+  /** Off-site tools the driver reached but couldn't take — doesn't block, but isn't delivered either. */
+  leftBehindCount: number
 }) {
   if (request.status === "New") {
     return (
@@ -292,7 +301,14 @@ function NextAction({
   }
 
   if (request.status === "In Transit") {
-    return <CompleteDeliveryAction request={request} toolCount={toolCount} pendingPickupCount={pendingPickupCount} />
+    return (
+      <CompleteDeliveryAction
+        request={request}
+        toolCount={toolCount}
+        pendingPickupCount={pendingPickupCount}
+        leftBehindCount={leftBehindCount}
+      />
+    )
   }
 
   return (

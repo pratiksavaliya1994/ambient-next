@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache"
 
-import { listToolsByIds } from "@/lib/bubble/assigned-tools"
-import { isReadyForDispatch } from "@/lib/bubble/enums"
-import { dispatchRequests, getRequest } from "@/lib/bubble/requests"
+import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
+import { isReadyForDispatch, isWarehouseLocation } from "@/lib/bubble/enums"
+import { dispatchRequests, getRequest, leaveToolsBehind } from "@/lib/bubble/requests"
 import { requireSession } from "@/lib/auth/session"
-import { confirmPickupSchema } from "@/lib/schemas/assignment"
+import { confirmPickupSchema, leaveBehindSchema } from "@/lib/schemas/assignment"
 import type { PickupState } from "@/app/(app)/dispatch/active/action-state"
 
 /**
@@ -71,4 +71,81 @@ export async function confirmPickupAction(input: unknown): Promise<PickupState> 
       : undefined
 
   return { status: "picked-up", warning }
+}
+
+/**
+ * The other answer at the same stop: the driver got there and the tool wasn't
+ * takeable — still in use, buried, gone. Without this a single uncollectable
+ * tool strands the whole request, since `offloadAction` refuses to mark a
+ * delivery complete while any assigned tool is still sitting off-site.
+ *
+ * Writes `statusNew: "Pickup Requested"` and nothing else (`leaveToolsBehind`),
+ * so the tool keeps the job `location` it was never collected from. That is
+ * what drops it out of `pickupStops` — releasing the delivery — while keeping
+ * it on the request, flagged, rather than quietly unassigning it.
+ *
+ * Final by design: there is no undo action, matching `confirmPickupAction`.
+ * The button behind this opens a confirmation dialog for that reason.
+ */
+export async function leaveBehindAction(input: unknown): Promise<PickupState> {
+  await requireSession()
+
+  const parsed = leaveBehindSchema.safeParse(input)
+  if (!parsed.success) {
+    return { status: "error", message: "That isn't a valid tool to leave behind." }
+  }
+  const { requestId, toolIds } = parsed.data
+
+  const request = await getRequest(requestId)
+  if (!request) {
+    return { status: "error", message: "That request no longer exists in Bubble." }
+  }
+  if (request.status !== "In Transit" || !request.driver) {
+    return { status: "error", message: "This request isn't an active trip. Reload the page." }
+  }
+
+  // Stricter than the pickup confirm, because this writes a status to a tool
+  // rather than moving one the request already owns: an id that isn't actually
+  // on this request is never taken on trust.
+  const assignedIds = new Set((await listAssignedTools([requestId])).map((row) => row.toolId))
+  if (toolIds.some((toolId) => !assignedIds.has(toolId))) {
+    return { status: "error", message: "That tool isn't assigned to this request. Reload the page." }
+  }
+
+  // Re-check live state immediately before the write, the same "narrow, not
+  // close" defence `confirmPickupAction` gives — only a tool genuinely still
+  // waiting at its own site can be left behind, never one already on the truck.
+  const tools = await listToolsByIds(toolIds)
+  const notWaiting = tools.filter((tool) => !isReadyForDispatch(tool.status) || isWarehouseLocation(tool.location))
+  if (notWaiting.length > 0) {
+    const [first] = notWaiting
+    return {
+      status: "error",
+      message: `${first.name} isn't waiting to be picked up anymore (it's ${first.status} at ${first.location}). Reload the page.`,
+    }
+  }
+
+  let toolsUpdated: number
+  try {
+    ;({ toolsUpdated } = await leaveToolsBehind(requestId, toolIds))
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? `Bubble rejected the change: ${error.message}`
+          : "Bubble rejected the change.",
+    }
+  }
+
+  revalidatePath("/dispatch/active")
+  revalidatePath("/requests")
+  revalidatePath(`/requests/${requestId}`)
+
+  const warning =
+    toolsUpdated !== toolIds.length
+      ? `${toolsUpdated} of ${toolIds.length} tools updated — check Bubble for the rest.`
+      : undefined
+
+  return { status: "left-behind", warning }
 }

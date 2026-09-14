@@ -49,10 +49,21 @@ only**. There is deliberately no historical lookback — an earlier draft read
 
 | State            | Rule                                                                                                            | Means                                                     |
 | ---------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `left-behind`    | request is `Delivered` **or** `In Transit`, **and** `tool.statusNew === "Pickup Requested"` **and** `!isWarehouseLocation(tool.location)` | reached, but couldn't be taken — this trip went without it |
 | `carried`        | request is `In Transit` **and** `tool.statusNew === "In Transit"` **and** `tool.location === request.driver`       | already in the vehicle on this trip                       |
 | `not-ready`      | `!isReadyForDispatch(tool.statusNew)`                                                                             | mid-flow on some **other** request — blocks dispatch      |
 | `pending-pickup` | `!isWarehouseLocation(tool.location)`                                                                             | ready, but sitting on another job site                    |
 | `null`           | neither                                                                                                           | ready, at/near the warehouse — the ordinary case          |
+
+`left-behind` is tested **before** `not-ready` — `Pickup Requested` fails
+`isReadyForDispatch` too, so `not-ready` would otherwise swallow it — and is
+gated on the request being `In Transit`/`Delivered`. That gate is load-bearing:
+at `Assigned` the same two fields mean "some *pickup request* already wants this
+tool," a genuine blocker the Dispatch board must keep reporting as `not-ready`,
+not a decision this trip made. A `Delivered` request classifies too, and
+collapses every other state to `null`, so the flag survives completing the
+delivery — otherwise "keep it on the request, flagged" would only hold until the
+driver finished.
 
 `isWarehouseLocation` (`lib/bubble/enums.ts`) is new: `"Warehouse"`,
 `"1407 Locker"`, `"Other - Not a Job Site"`, plus blank/`NO_LOCATION` kept
@@ -105,6 +116,40 @@ Scoping `toolIds` to just the tools being collected is what makes the write
 land on only those; re-setting an already-`In Transit` request to `In Transit`
 is a harmless no-op.
 
+### …or says it couldn't
+
+A driver who reaches the stop and **can't** take the tool — still in use,
+buried, gone — had no way to say so, and one such tool stranded the whole
+request: the gate below refuses the delivery while any assigned tool is still
+sitting off-site, so the tools already on the truck couldn't be dropped either.
+
+`leaveBehindAction` (same file) is the other answer. It guards harder than the
+confirm beside it — the tool must actually be on this request, and must still be
+waiting at its own site — then calls `leaveToolsBehind`
+(`lib/bubble/requests.ts`), which sends **`toolStatus` and nothing else**:
+
+```ts
+{ requestIds: [requestId], status: "In Transit", toolIds, toolStatus: "Pickup Requested" }
+```
+
+Step 3 guards `toolLocation` and `toolUser` with *only when not empty*, so
+omitting them leaves the tool's `location` at its own job site and its
+`currentUser` alone. That is the entire mechanism: `statusNew` changes, the tool
+doesn't move, and it drops out of `pickupStops` because `pending-pickup`
+requires `isReadyForDispatch` (`Available` or `Assigned`), which `Pickup
+Requested` fails. It stays **assignable** to a *different* request, though —
+see `isFreeToAssign` in `lib/bubble/enums.ts`, added alongside the
+assign-time `Available`/`Assigned` gate (`docs/phase-2-lifecycle.md`'s
+Availability section): it accepts `Pickup Requested` specifically so this
+tool isn't silently locked out of the picker by that later change.
+
+This is the same call [`phase-3c-actual-pickup.md`](./phase-3c-actual-pickup.md)
+specifies for its left-behind set, arriving one slice early. No Bubble change of
+any kind, again.
+
+**Final, behind a confirmation dialog.** There is no undo action, matching the
+pickup confirm; `LeaveBehindButton` asks first for exactly that reason.
+
 ### Offload refuses to lie
 
 `offloadAction` re-derives `pickupStops` immediately before its write and
@@ -114,6 +159,13 @@ driver, so it cannot truthfully be marked `Delivered` at the job. The UI half
 outstanding rather than letting the confirm dialog open at all; the server
 check is the authoritative one, since server actions are reachable by direct
 POST.
+
+It then **subtracts `leftBehind` from what it writes.** Offload used to send
+every `assignedtools` id; a tool the driver couldn't collect would have been
+recorded `Delivered` at a job it never reached, which is the same lie in a
+quieter form. A request whose tools were *all* left behind is refused outright —
+there's no drop to record — while a request with no assigned tools at all
+(materials only) still completes, as before.
 
 ## What renders where
 
@@ -132,39 +184,42 @@ from a job site first. A 4px left border repeats the verdict down a list.
 
 Two separate conditions, easy to conflate:
 
-| Request status | Coloured rows | "Picked up" button |
-| -------------- | ------------- | ------------------ |
-| `New`          | —             | —                  |
-| `Assigned`     | yes           | —                  |
-| `In Transit`   | yes           | yes                |
-| `Delivered`    | —             | —                  |
+| Request status | Coloured rows        | "Picked up" / "Not picked up" buttons |
+| -------------- | -------------------- | ------------------------------------- |
+| `New`          | —                    | —                                     |
+| `Assigned`     | yes                  | —                                     |
+| `In Transit`   | yes                  | yes                                   |
+| `Delivered`    | `left-behind` only   | —                                     |
 
 Rows are coloured from `Assigned` onward so a PM can **review the extra stops
-before committing to dispatch**. The button is `In Transit` only, because
-confirming a pickup writes the tool to the driver — meaningless before the trip
-exists, and `confirmPickupAction` would reject it anyway.
+before committing to dispatch**. The buttons are `In Transit` only, because both
+answers write to a tool on this trip — meaningless before the trip exists, and
+both actions would reject it anyway. `Delivered` colours nothing except the
+tools that never made it; see the state table above.
 
-`PickupToolButton` calls `preventDefault`/`stopPropagation`: the Active trips
-card wraps each request in a `Link`, and without it a pickup would also
-navigate away from the screen it happened on.
+Both buttons call `preventDefault`/`stopPropagation`: the Active trips card
+wraps each request in a `Link`, and without it a pickup — or opening the
+leave-behind dialog — would also navigate away from the screen it happened on.
 
 ## Files
 
 | File                                            | What                                                                                                       |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `lib/bubble/enums.ts`                           | `WAREHOUSE_LOCATIONS`, `isWarehouseLocation`                                                               |
-| `lib/dispatch/summary.ts`                       | `ToolTripState`, `TripTool`, `classifyTool`, `deriveTripStatus`; `DispatchRequestSummary.tools` is now `TripTool[]` |
-| `lib/schemas/assignment.ts`                     | `confirmPickupSchema`                                                                                      |
+| `lib/bubble/enums.ts`                           | `WAREHOUSE_LOCATIONS`, `isWarehouseLocation`, `TOOL_STATUS_PICKUP_REQUESTED`                               |
+| `lib/bubble/requests.ts`                        | `leaveToolsBehind` — `toolStatus` only, no `toolLocation`/`toolUser`                                       |
+| `lib/dispatch/summary.ts`                       | `ToolTripState`, `TripTool`, `classifyTool`, `deriveTripStatus` (incl. `leftBehind`); `DispatchRequestSummary.tools` is now `TripTool[]` |
+| `lib/schemas/assignment.ts`                     | `confirmPickupSchema`, `leaveBehindSchema`                                                                 |
 | `app/(app)/dispatch/actions.ts`                 | splits `toolIds` into warehouse-now / off-site-later                                                       |
-| `app/(app)/dispatch/active/actions.ts`          | `confirmPickupAction` (new)                                                                                |
+| `app/(app)/dispatch/active/actions.ts`          | `confirmPickupAction`, `leaveBehindAction`                                                                 |
 | `app/(app)/dispatch/active/action-state.ts`     | `PickupState` (new)                                                                                        |
-| `app/(app)/requests/[requestId]/actions.ts`     | `offloadAction`'s outstanding-pickup guard                                                                 |
-| `app/(app)/requests/[requestId]/page.tsx`       | computes trip state for `Assigned` + `In Transit`                                                          |
+| `app/(app)/requests/[requestId]/actions.ts`     | `offloadAction`'s outstanding-pickup guard, and subtracting `leftBehind` from the write                    |
+| `app/(app)/requests/[requestId]/page.tsx`       | computes trip state for every status but `New`                                                             |
 | `components/assigned-tool-row.tsx`              | the shared row (new)                                                                                       |
 | `components/pickup-tool-button.tsx`             | one tool's confirm (new)                                                                                   |
+| `components/leave-behind-button.tsx`            | one tool's "couldn't take it", behind a confirm dialog (new)                                               |
 | `components/request-tool-slots.tsx`             | detail page's slot list, extracted (new)                                                                   |
 | `components/trip-tool-list.tsx`                 | compact list for both dispatch screens (new)                                                               |
-| `components/complete-delivery-action.tsx`       | `pendingPickupCount` guard                                                                                 |
+| `components/complete-delivery-action.tsx`       | `pendingPickupCount` guard, `leftBehindCount` copy and the nothing-collected case                          |
 | `components/dispatch-board.tsx`, `components/active-trips.tsx` | badge rows replaced by `TripToolList`                                                       |
 
 **Written and then deleted during this slice** — none reached a commit, so
@@ -197,14 +252,30 @@ because this app still has no writer for "mark a tool Available on a job site":
 5. Dispatch it. In Bubble, confirm the warehouse tool moved to `In Transit` at
    the driver's name and **the off-site tool is untouched** — still
    `Available`, still at its own job.
-6. `/dispatch/active` and `/requests/[id]` both now offer **Picked up** on the
-   off-site tool. **Complete delivery** is disabled, captioned "1 tool still to
-   pick up".
+6. `/dispatch/active` and `/requests/[id]` both now offer **Picked up** and
+   **Not picked up** on the off-site tool. **Complete delivery** is disabled,
+   captioned "1 tool still to pick up".
 7. Click **Picked up**. That tool moves to `In Transit` at the driver's name,
    its row turns green **On the truck**, and Complete delivery enables.
 8. Complete the delivery and confirm both tools land at the job's name.
 9. Reset the tool's `statusNew`/`location` afterwards — this is the live
    database.
+
+Then the same setup again for the other answer:
+
+10. At step 7, click **Not picked up** and confirm the dialog instead. The row
+    turns amber **Not picked up**, reading "Left at {job} — not collected on
+    this trip", and Complete delivery enables.
+11. In Bubble, confirm that tool reads `statusNew = "Pickup Requested"` with its
+    **`location` still the job's name**, `currentUser` untouched and `condition`
+    unchanged.
+12. Complete the delivery. The warehouse tool lands `Delivered` at the request's
+    job; **the left-behind tool must not have moved**. Its row still shows the
+    **Not picked up** flag on the now-`Delivered` request.
+13. Guards: a direct re-POST of `leaveBehindAction` against the delivered
+    request must refuse; so must one naming a tool assigned to a different
+    request. A request whose *every* tool was left behind must refuse to
+    complete at all.
 
 Repeat with two tools at two different sites to confirm both stops render and
 group separately.
@@ -221,9 +292,23 @@ group separately.
   every confirm is an independent, idempotent per-tool write — so a future
   sequence field would change display order only, never the write path.
   Correctness does not depend on the order confirms arrive in.
-- **A pickup can't be undone from the app.** Confirming moves the tool to the
-  driver; reverting is a Bubble edit, the same as every other mistake after
-  dispatch.
+- **Neither answer can be undone from the app.** Confirming moves the tool to
+  the driver; leaving it behind flags it `Pickup Requested`. Reverting either is
+  a Bubble edit, the same as every other mistake after dispatch. Agreed with the
+  user rather than deferred — the leave-behind button asks for confirmation
+  instead of offering an undo.
+- **`left-behind` is read off the tool, not the assignment.** `assignedtools`
+  has no field to hold "not collected on this request" and none is being added,
+  so the marker is the tool's own `Pickup Requested` + off-site `location`. A
+  tool flagged by the PM-facing Pickup flow (`update-tool-status`) while also
+  assigned to an `In Transit` delivery therefore reads as left behind. It
+  already classified as `not-ready` before this slice, and the operational
+  conclusion — *it isn't coming on this trip* — is the same either way.
+- **A left-behind tool loses the record of the trip that skipped it.** The
+  `assignedtools` row survives, so the request still names the unit, but nothing
+  stores *why*, and a second request assigning the same tool overwrites the
+  flag. A reason picker was considered and dropped: there is no Bubble field to
+  store one in.
 - **An `assignedtools` row pointing at a deleted `tools` row** is skipped by
   `deriveTripStatus` — it survives only in `toolCount`, so the count badge can
   out-count the list by one. Rare enough to leave.

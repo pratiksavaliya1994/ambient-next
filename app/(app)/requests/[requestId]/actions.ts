@@ -46,7 +46,7 @@ export async function offloadAction(input: unknown): Promise<OffloadState> {
   // tool still sitting off-site hasn't reached the driver yet, so it can't
   // truthfully be marked `Delivered`.
   const toolsById = new Map((await listToolsByIds(toolIds)).map((tool) => [tool.id, tool]))
-  const { pickupStops } = deriveTripStatus(request, assigned, toolsById)
+  const { pickupStops, leftBehind } = deriveTripStatus(request, assigned, toolsById)
   if (pickupStops.length > 0) {
     return {
       status: "error",
@@ -57,9 +57,27 @@ export async function offloadAction(input: unknown): Promise<OffloadState> {
     }
   }
 
+  // Only what's actually on the truck gets written `Delivered` at the job. A
+  // tool the driver marked "Not picked up" (`leaveBehindAction`) never reached
+  // them, so it keeps the `Pickup Requested` and job-site `location` Bubble
+  // already holds — the same reason the guard above exists, applied to a stop
+  // that was answered rather than one still outstanding.
+  const leftBehindIds = new Set(leftBehind)
+  const deliverableIds = toolIds.filter((toolId) => !leftBehindIds.has(toolId))
+
+  // A request with no tools at all is legitimate (materials only); a request
+  // whose every tool was left behind has nothing to deliver, so completing it
+  // would record a drop that didn't happen.
+  if (toolIds.length > 0 && deliverableIds.length === 0) {
+    return {
+      status: "error",
+      message: "None of this request's tools were collected — there's nothing to deliver.",
+    }
+  }
+
   let toolsUpdated: number
   try {
-    ;({ toolsUpdated } = await offloadRequest(requestId, toolIds, request.job))
+    ;({ toolsUpdated } = await offloadRequest(requestId, deliverableIds, request.job))
   } catch (error) {
     return {
       status: "error",
@@ -73,8 +91,8 @@ export async function offloadAction(input: unknown): Promise<OffloadState> {
   revalidatePath(`/requests/${requestId}`)
 
   const warning =
-    toolsUpdated !== toolIds.length
-      ? `${toolsUpdated} of ${toolIds.length} tools updated — check Bubble for the rest.`
+    toolsUpdated !== deliverableIds.length
+      ? `${toolsUpdated} of ${deliverableIds.length} tools updated — check Bubble for the rest.`
       : undefined
 
   return { status: "delivered", warning }

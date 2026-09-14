@@ -9,8 +9,8 @@ import { RequestStatusBadge } from "@/components/request-status-badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { listAssignedTools, listCandidateTools, listTakenToolIds, listToolsByIds } from "@/lib/bubble/assigned-tools"
-import { buildSlots, type CandidateTool, type Conflict } from "@/lib/bubble/assigned-tools-types"
+import { listAssignedTools, listCandidateTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
+import { buildSlots, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
 import { listToolTypes } from "@/lib/bubble/reference"
 import { getRequest } from "@/lib/bubble/requests"
@@ -65,9 +65,8 @@ async function AssignBody({ requestId }: { requestId: string }) {
     .filter((slot) => !slot.consumable && slot.typeId)
     .map((slot) => slot.typeId as string)
 
-  const [candidates, conflicts, alreadyAssigned] = await Promise.all([
+  const [candidates, alreadyAssigned] = await Promise.all([
     listCandidateTools([...new Set(typeIds)]),
-    listTakenToolIds(request),
     // Extras, and slot fills whose tool the candidate query wouldn't return
     // (a renamed type, a blank `tools.type`) — resolved by id so every
     // assigned tool has a name on screen.
@@ -79,9 +78,6 @@ async function AssignBody({ requestId }: { requestId: string }) {
   // searched for.
   const pool = new Map<string, CandidateTool>()
   for (const tool of [...candidates, ...alreadyAssigned]) pool.set(tool.id, tool)
-
-  const conflictsByTool: Record<string, Conflict> = {}
-  for (const [toolId, conflict] of conflicts) conflictsByTool[toolId] = conflict
 
   const unresolved = slots.filter((slot) => !slot.consumable && !slot.typeId).length
 
@@ -122,7 +118,6 @@ async function AssignBody({ requestId }: { requestId: string }) {
             slots={slots}
             extraToolIds={extraToolIds}
             pool={[...pool.values()]}
-            conflicts={conflictsByTool}
             unresolvedSlots={unresolved}
           />
         </div>

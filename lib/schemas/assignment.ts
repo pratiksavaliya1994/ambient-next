@@ -78,3 +78,16 @@ export const confirmPickupSchema = z.object({
 })
 
 export type ConfirmPickupValues = z.infer<typeof confirmPickupSchema>
+
+/**
+ * The opposite answer at the same stop: the driver got there and **couldn't**
+ * take these tools. Same shape as `confirmPickupSchema` and deliberately a
+ * separate export — the two write different tool statuses and `leaveBehindAction`
+ * guards harder, so sharing one schema would invite sharing one action.
+ */
+export const leaveBehindSchema = z.object({
+  requestId: z.string().min(1),
+  toolIds: z.array(z.string().min(1)).min(1),
+})
+
+export type LeaveBehindValues = z.infer<typeof leaveBehindSchema>

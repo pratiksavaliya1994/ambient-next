@@ -20,7 +20,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { ItemGroup } from "@/components/ui/item"
 import { Spinner } from "@/components/ui/spinner"
-import type { CandidateTool, Conflict } from "@/lib/bubble/assigned-tools-types"
+import type { CandidateTool } from "@/lib/bubble/assigned-tools-types"
 
 /** Bubble's `text contains` on a one-letter needle is the whole table. */
 const MIN_QUERY = 2
@@ -36,12 +36,10 @@ const MIN_QUERY = 2
  */
 export function ExtraToolsPicker({
   picked,
-  conflicts,
   onAdd,
   onRemove,
 }: {
   picked: Set<string>
-  conflicts: Record<string, Conflict>
   onAdd: (tool: CandidateTool) => void
   onRemove: (toolId: string) => void
 }) {
@@ -129,7 +127,8 @@ export function ExtraToolsPicker({
             <EmptyHeader>
               <EmptyTitle>No tools match</EmptyTitle>
               <EmptyDescription>
-                Nothing named like that is available. Tools marked for repair or maintenance are never offered.
+                Nothing named like that is free to assign right now. Tools busy on another request, or marked for
+                repair or maintenance, are never offered.
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
@@ -139,7 +138,6 @@ export function ExtraToolsPicker({
               <ToolRow
                 key={tool.id}
                 tool={tool}
-                conflict={conflicts[tool.id]}
                 picked={picked.has(tool.id)}
                 usedElsewhere={false}
                 onAdd={() => onAdd(tool)}

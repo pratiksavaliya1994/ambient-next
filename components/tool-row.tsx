@@ -5,35 +5,34 @@ import { CheckIcon, PlusIcon, XIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
-import type { CandidateTool, Conflict } from "@/lib/bubble/assigned-tools-types"
-import { newYorkDayLabel } from "@/lib/bubble/dates"
+import type { CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { cn } from "@/lib/utils"
 
 /**
  * One offerable physical tool, shared by the slot dialog and the extras
  * picker so both read identically.
  *
- * A tool another request holds over these dates is **listed but disabled**,
- * naming the request that has it. Hiding it would make "where did my grinder
- * go" unanswerable, which is the question this whole phase exists to answer.
+ * A tool already committed elsewhere never reaches here at all — the queries
+ * behind this (`listCandidateTools`/`searchTools`) filter on `isFreeToAssign`
+ * before this component ever sees a row, so the only thing left to disable is
+ * a purely local, same-request concern: already picked for a different slot
+ * in this same editing session.
  */
 export function ToolRow({
   tool,
-  conflict,
   picked,
   usedElsewhere,
   onAdd,
   onRemove,
 }: {
   tool: CandidateTool
-  conflict: Conflict | undefined
   picked: boolean
   /** Already on this request, but filling a different slot. */
   usedElsewhere: boolean
   onAdd: () => void
   onRemove: () => void
 }) {
-  const blocked = Boolean(conflict) || (usedElsewhere && !picked)
+  const blocked = usedElsewhere && !picked
 
   return (
     <Item
@@ -46,11 +45,7 @@ export function ToolRow({
           {tool.name}
         </ItemTitle>
         <ItemDescription className="truncate">
-          {conflict ? (
-            <>
-              On {conflict.job} · {newYorkDayLabel(conflict.start)}
-            </>
-          ) : usedElsewhere && !picked ? (
+          {blocked ? (
             "Already filling another slot on this request"
           ) : (
             <>

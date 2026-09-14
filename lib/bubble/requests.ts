@@ -9,8 +9,11 @@ import {
   DEFAULT_REQUEST_STATUS,
   REQUEST_STATUS,
   requestColor,
+  TOOL_STATUS_ASSIGNED,
+  TOOL_STATUS_AVAILABLE,
   TOOL_STATUS_DELIVERED,
   TOOL_STATUS_IN_TRANSIT,
+  TOOL_STATUS_PICKUP_REQUESTED,
   type RequestStatus,
 } from "@/lib/bubble/enums"
 import type { Job } from "@/lib/bubble/reference-types"
@@ -597,11 +600,67 @@ export async function createPickupToolRequest(
 }
 
 // Phase 2B/2C's shared workflow — see `docs/bubble-request-status-workflow.md`
-// §6. Not yet built in Bubble; `dispatchRequests` below is its first caller.
+// §6. Built in Bubble; every tool-status write in this file goes through it —
+// `dispatchRequests` was its first caller, `markToolsAssigned` /
+// `releaseToolsToAvailable` below are its assign-time ones.
 const UPDATE_REQUEST_STATUS_WORKFLOW = "update-request-status"
 
 /** `{ ok, requests, tools }` — only the two counts are acted on. */
 const updateStatusResult = z.looseObject({ requests: z.number(), tools: z.number() })
+
+/**
+ * The Assign step's tool-status half, called right after `assignTools`
+ * (`create-assigned-tool`) commits the `assignedtools` rows: flips every
+ * newly-committed tool to `Assigned`. This is what makes
+ * `statusNew === "Available"` a real double-booking guard — see the reversal
+ * note on `TOOL_STATUS_NEW` in `lib/bubble/enums.ts`.
+ *
+ * `toolLocation`/`toolUser` are deliberately not sent, same reasoning as
+ * `leaveToolsBehind` below — a newly-assigned tool hasn't moved, so its
+ * `location`/`currentUser` stay exactly what they were.
+ *
+ * `status` is required by the workflow and sent unchanged: `assignTools`
+ * already set `request.status = "Assigned"` earlier in the same save, so step
+ * 1 here is a no-op.
+ */
+export async function markToolsAssigned(requestId: string, toolIds: string[]): Promise<{ toolsUpdated: number }> {
+  const raw = await bubbleRunWorkflow(UPDATE_REQUEST_STATUS_WORKFLOW, {
+    requestIds: [requestId],
+    status: "Assigned" satisfies RequestStatus,
+    toolIds,
+    toolStatus: TOOL_STATUS_ASSIGNED,
+  })
+  const result = updateStatusResult.parse(raw)
+
+  if (result.requests !== 1) {
+    throw new Error("Bubble did not accept the assignment. Reload and try again.")
+  }
+
+  return { toolsUpdated: result.tools }
+}
+
+/**
+ * The reverse: a tool dropped from this request's assignment (before
+ * dispatch) goes back to `Available`, freeing it for any other request's
+ * picker. This is currently the **only** writer of `Available` anywhere in
+ * this app — see the "no general reset path yet" limit in
+ * `docs/phase-2-lifecycle.md`.
+ */
+export async function releaseToolsToAvailable(requestId: string, toolIds: string[]): Promise<{ toolsUpdated: number }> {
+  const raw = await bubbleRunWorkflow(UPDATE_REQUEST_STATUS_WORKFLOW, {
+    requestIds: [requestId],
+    status: "Assigned" satisfies RequestStatus,
+    toolIds,
+    toolStatus: TOOL_STATUS_AVAILABLE,
+  })
+  const result = updateStatusResult.parse(raw)
+
+  if (result.requests !== 1) {
+    throw new Error("Bubble did not release the unassigned tools. Reload and try again.")
+  }
+
+  return { toolsUpdated: result.tools }
+}
 
 /**
  * Moves N `Assigned` requests and every tool assigned across them to
@@ -639,6 +698,38 @@ export async function dispatchRequests(
     throw new Error(
       `Bubble moved ${result.requests} of ${requestIds.length} requests. Reload the board and try again.`
     )
+  }
+
+  return { toolsUpdated: result.tools }
+}
+
+/**
+ * The other half of a pickup stop: the driver got there and **couldn't** take
+ * the tool. It stays where it is, flagged `Pickup Requested` — still on site,
+ * still wanted — and stops blocking this request's own delivery.
+ *
+ * `toolLocation` and `toolUser` are deliberately **not sent**. Step 3 of
+ * `update-request-status` guards each with *only when not empty*
+ * (`docs/bubble-update-request-status-spec.md`), so omitting them leaves the
+ * tool's `location` at its own job site and its `currentUser` alone — which is
+ * what keeps it findable by `listToolsForJob` afterwards. Writing `statusNew`
+ * and nothing else is the entire point of this call.
+ *
+ * `status` is required by the workflow and is sent unchanged: the request is
+ * already `In Transit`, so step 1 is a no-op, the same trick `confirmPickupAction`
+ * relies on.
+ */
+export async function leaveToolsBehind(requestId: string, toolIds: string[]): Promise<{ toolsUpdated: number }> {
+  const raw = await bubbleRunWorkflow(UPDATE_REQUEST_STATUS_WORKFLOW, {
+    requestIds: [requestId],
+    status: "In Transit" satisfies RequestStatus,
+    toolIds,
+    toolStatus: TOOL_STATUS_PICKUP_REQUESTED,
+  })
+  const result = updateStatusResult.parse(raw)
+
+  if (result.requests !== 1) {
+    throw new Error("Bubble did not accept the left-behind tools. Reload and try again.")
   }
 
   return { toolsUpdated: result.tools }

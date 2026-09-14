@@ -108,23 +108,43 @@ original `status` column is never written by this phase.
 
 | Step | `statusNew` | `location` | `currentUser` | Slice |
 | --- | --- | --- | --- | --- |
-| Assign | unchanged | unchanged | unchanged | 2A |
-| Unassign | unchanged | unchanged | unchanged | 2A |
+| Assign | `Assigned` | unchanged | unchanged | 2A (reversed, see below) |
+| Unassign | `Available` | unchanged | unchanged | 2A (reversed, see below) |
 | Dispatch | `In Transit` | **the driver's name** | driver | 2B |
 | Offload | `Delivered` | the job's `name` | driver (kept) | 2C |
 
-> **Decided against: `Assign` → `Assigned`, `Unassign` → `Available`.** The
-> original plan had assign/unassign flip `statusNew` alongside the
-> `assignedtools` row. Dropped because a tool can legitimately be assigned to
-> a *future* request while it's currently mid-flow on a different one (`In
-> Transit`, `Delivered` elsewhere, `Pickup Requested`) — writing `Assigned`
-> at assign time would clobber that real current state with a value that's
-> only true for the one case it's harmless (a tool sitting `Available` in the
-> warehouse), which is exactly the case that needed no flag in the first
-> place. The `assignedtools` row is the sole record of the commitment — it's
-> already what the date-overlap availability check reads, so no
-> double-booking guarantee depends on `statusNew` either. See
-> `docs/bubble-update-request-status-spec.md` §6.
+> **Reversed 2026-09-14 — the "Decided against" call below didn't hold up.**
+> It assumed availability stayed date-driven, so flipping `statusNew` at
+> assign time was unnecessary risk for no payoff. In practice the date-overlap
+> check it depended on was wrong in both directions: a job that ran long left
+> a genuinely-busy tool bookable the moment its planned end date passed, and a
+> job that finished early left a genuinely-free tool blocked until its planned
+> end date arrived — both confirmed live. Availability is now
+> `isFreeToAssign(statusNew)` — `Available` or `Pickup Requested` — so
+> Assign/Unassign have to be real writers of it again. Traded away: a tool can
+> no longer be pre-booked for a future request while busy on a different one
+> — see `lib/bubble/enums.ts`'s `TOOL_STATUS_NEW`/`isFreeToAssign` doc
+> comments, and `lib/bubble/requests.ts`'s `markToolsAssigned`/
+> `releaseToolsToAvailable`.
+>
+> **Original "Decided against: `Assign` → `Assigned`, `Unassign` →
+> `Available`" note, kept for context.** The original plan had assign/unassign
+> flip `statusNew` alongside the `assignedtools` row. Dropped because a tool
+> can legitimately be assigned to a *future* request while it's currently
+> mid-flow on a different one (`In Transit`, `Delivered` elsewhere, `Pickup
+> Requested`) — writing `Assigned` at assign time would clobber that real
+> current state with a value that's only true for the one case it's harmless
+> (a tool sitting `Available` in the warehouse), which is exactly the case
+> that needed no flag in the first place. The `assignedtools` row is the sole
+> record of the commitment — it's already what the date-overlap availability
+> check reads, so no double-booking guarantee depends on `statusNew` either.
+> See `docs/bubble-update-request-status-spec.md` §6.
+>
+> **Known gap left by the reversal, accepted deliberately:** nothing resets a
+> tool to `Available` except a clean pre-dispatch Unassign. A tool that reaches
+> `Delivered` — or is left mid-flow — stays non-`Available` until someone
+> edits the row directly in Bubble Studio. A dedicated "mark tool Available"
+> screen is planned but not yet built.
 
 > **Superseded — the original design left `location` unchanged at dispatch.**
 > The reasoning was that a synthetic `"In Transit"` location string would
@@ -280,6 +300,36 @@ using the already-written-but-unused helper in `lib/bubble/client.ts`, plus an
 
 ## Availability
 
+**Reversed 2026-09-14, along with the Assign/Unassign row above.** This
+section originally described a date-overlap check, kept below for history —
+see `lib/bubble/assigned-tools.ts`'s module doc comment for the current
+design. Availability is now `isFreeToAssign(tools.statusNew)`, checked
+directly off the tool — no cross-request query at all.
+
+- Condition still filters separately, unchanged: drop `Maintenance Required`,
+  `Repair Required`, `Under Repair`, `Inspection Required`, `Missing`
+  (`isAssignable`).
+- `isFreeToAssign` (`lib/bubble/enums.ts`) accepts `Available` **and**
+  `Pickup Requested` — a tool `leaveBehindAction` left behind stays offerable
+  for a future request by design, it's just never silently reverted to
+  `Available`. `Assigned`, `In Transit` and `Delivered` are the only real
+  holds.
+- The candidate queries (`listCandidateTools`/`searchTools`) filter on both
+  checks and **drop** anything that fails either — a PM assigning tools only
+  ever sees ones it's actually possible to add, full stop. A tool already on
+  *this* request is unaffected: it's merged in separately by id
+  (`listToolsByIds`), regardless of its live status, so it stays
+  removable/re-addable in the same editing session.
+- **Re-run the check inside the assign action** immediately before the write,
+  scoped to only the *newly*-picked ids (a diff against the request's prior
+  `assignedtools`) — re-submitting a tool already on this request isn't a new
+  claim and needs no re-check. Bubble has no transactions or unique
+  constraints, so this narrows the double-assign window from minutes to about
+  a second. It cannot close it.
+
+<details>
+<summary>Original date-overlap design (retired)</summary>
+
 Two queries, both patterns the repo already proves.
 
 ```ts
@@ -300,23 +350,15 @@ const taken = await bubbleListAll("assignedtools", {
 })
 ```
 
-- **Do not add an `is_not_empty` constraint on a list field.** Bubble documents
-  a *separate* operator pair (`empty` / `not empty`) for lists, and it tends to
-  **ignore** a constraint it doesn't understand rather than error — so the
-  wrong operator silently returns every request in the window and never fails a
-  test. Query 2 already returns only assigned tools, so it isn't needed.
-- Rows with **no dates** drop out of query 1, but they also have no
-  `assignedtools` children, so they cannot conflict. Not a hole.
-- Then filter on condition: drop `Maintenance Required`, `Repair Required`,
-  `Under Repair`, `Inspection Required`, `Missing`. The five lifecycle values
-  stay offerable — a tool `Delivered` to another job last month is a legitimate
-  pick for next week, and the overlap check is what decides that.
-- Taken tools are **listed but disabled**, showing which request and date holds
-  them. Hiding them makes "where did my grinder go" unanswerable.
-- **Re-run the check inside the assign action** immediately before the write and
-  reject on conflict. Bubble has no transactions or unique constraints, so this
-  narrows the double-assign window from minutes to about a second. It cannot
-  close it.
+Why it was dropped: both directions of date drift turned out to be real. A job
+running long left a genuinely-busy tool looking free the moment its planned
+end date passed (no overlap detected); a job finishing early left a
+genuinely-free tool looking taken until its planned end date arrived (overlap
+still detected). There's no actual-completion timestamp in Bubble to fix that
+with, only the planned dates — so the fix was to stop trusting dates for this
+at all.
+
+</details>
 
 ---
 
@@ -343,3 +385,11 @@ const taken = await bubbleListAll("assignedtools", {
   `app/(app)/requests/actions.ts:18` and absent from both pickup actions, so
   those three server actions are reachable unauthenticated by direct POST.
   Fixed as part of 2A.
+- **No advance scheduling, since the Availability reversal above.** A tool
+  can't be pre-booked for a future request while it's busy on a different one
+  — it simply isn't offered until it's back to `Available`.
+- **No general reset-to-`Available` path yet.** The new Unassign write is
+  currently the *only* writer of `Available` anywhere in this app. A tool that
+  reaches `Delivered`, or is left mid-flow, stays stuck until someone edits
+  the row directly in Bubble Studio, or a planned "mark tool Available" screen
+  ships.

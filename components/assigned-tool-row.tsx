@@ -1,5 +1,6 @@
-import { MapPinIcon, TriangleAlertIcon, TruckIcon } from "lucide-react"
+import { MapPinIcon, PackageXIcon, TriangleAlertIcon, TruckIcon } from "lucide-react"
 
+import { LeaveBehindButton } from "@/components/leave-behind-button"
 import { PickupToolButton } from "@/components/pickup-tool-button"
 import { Badge } from "@/components/ui/badge"
 import type { CandidateTool } from "@/lib/bubble/assigned-tools-types"
@@ -13,9 +14,10 @@ import { cn } from "@/lib/utils"
  * up; `state` is `null` before a request is assigned and after it's delivered,
  * and the row falls back to the plain location line.
  *
- * A tool still sitting on another job site carries its own "Picked up" button
- * where that action is live (`canPickUp`), so the itinerary lives on the tools
- * themselves rather than in a separate list repeating them.
+ * A tool still sitting on another job site carries its own "Picked up" and
+ * "Not picked up" buttons where those actions are live (`canPickUp`), so the
+ * itinerary lives on the tools themselves rather than in a separate list
+ * repeating them.
  */
 export function AssignedToolRow({
   requestId,
@@ -88,14 +90,26 @@ export function AssignedToolRow({
         <span className="min-w-0 flex-1 wrap-anywhere">{detail}</span>
       </span>
 
+      {/* Both answers a driver can give at the stop, side by side: the tool is
+          on the truck, or it isn't coming. Without the second one an
+          uncollectable tool strands the whole request. */}
       {canPickUp && state === "pending-pickup" && (
-        <PickupToolButton
-          requestId={requestId}
-          toolId={tool.id}
-          toolName={tool.name}
-          location={tool.location}
-          compact={compact}
-        />
+        <div className="grid grid-cols-2 gap-1">
+          <PickupToolButton
+            requestId={requestId}
+            toolId={tool.id}
+            toolName={tool.name}
+            location={tool.location}
+            compact={compact}
+          />
+          <LeaveBehindButton
+            requestId={requestId}
+            toolId={tool.id}
+            toolName={tool.name}
+            location={tool.location}
+            compact={compact}
+          />
+        </div>
       )}
     </li>
   )
@@ -126,6 +140,19 @@ function describe(tool: CandidateTool, state: ToolTripState | null, extra: boole
       flagTone: "bg-status-active text-white",
       Icon: MapPinIcon,
       detail: `Not at the warehouse — collect from ${tool.location}${tool.floor ? `, floor ${tool.floor}` : ""} on the way`,
+    }
+  }
+
+  if (state === "left-behind") {
+    // Attention, not destructive: the tool is fine and exactly where it should
+    // be. What's notable is that this trip went without it.
+    return {
+      tone: "border-status-attention/40 border-l-status-attention bg-status-attention/10",
+      detailTone: "text-status-attention-foreground",
+      flag: "Not picked up",
+      flagTone: "bg-status-attention text-white",
+      Icon: PackageXIcon,
+      detail: `Left at ${tool.location} — not collected on this trip`,
     }
   }
 

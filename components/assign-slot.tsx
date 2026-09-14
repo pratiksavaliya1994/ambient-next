@@ -19,7 +19,7 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { ItemGroup } from "@/components/ui/item"
-import { assignedLabel, type AssignSlot, type CandidateTool, type Conflict } from "@/lib/bubble/assigned-tools-types"
+import { assignedLabel, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { cn } from "@/lib/utils"
 
 /**
@@ -37,7 +37,6 @@ export function AssignSlotCard({
   slot,
   chosen,
   candidates,
-  conflicts,
   usedElsewhere,
   onAdd,
   onRemove,
@@ -45,7 +44,6 @@ export function AssignSlotCard({
   slot: AssignSlot
   chosen: CandidateTool[]
   candidates: CandidateTool[]
-  conflicts: Record<string, Conflict>
   usedElsewhere: Set<string>
   onAdd: (tool: CandidateTool) => void
   onRemove: (toolId: string) => void
@@ -98,8 +96,8 @@ export function AssignSlotCard({
               <DialogHeader>
                 <DialogTitle className="wrap-anywhere">{slot.toolType}</DialogTitle>
                 <DialogDescription>
-                  {candidates.length} {candidates.length === 1 ? "tool" : "tools"} of this type. Tools already on
-                  another request over these dates are shown but can&rsquo;t be picked.
+                  {candidates.length} {candidates.length === 1 ? "tool" : "tools"} of this type currently free to
+                  assign.
                 </DialogDescription>
               </DialogHeader>
 
@@ -122,7 +120,7 @@ export function AssignSlotCard({
                     <EmptyDescription>
                       {candidates.length === 0
                         ? slot.typeId
-                          ? "Every tool of this type is out of service, or there are none on file. Add an extra tool instead."
+                          ? "Every tool of this type is busy, out of service, or there are none on file. Add an extra tool instead."
                           : "This requested name doesn't match a toolstype row, so there are no candidates to offer. Add an extra tool instead."
                         : "Try a different search."}
                     </EmptyDescription>
@@ -136,7 +134,6 @@ export function AssignSlotCard({
                       <ToolRow
                         key={tool.id}
                         tool={tool}
-                        conflict={conflicts[tool.id]}
                         picked={picked}
                         usedElsewhere={usedElsewhere.has(tool.id)}
                         onAdd={() => onAdd(tool)}

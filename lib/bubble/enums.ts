@@ -91,17 +91,18 @@ export const DEFAULT_REQUEST_STATUS: RequestStatus = "New"
  * Delivered, Pickup Requested) with *what condition it is in* (the rest).
  * Condition wins for assignment — see `UNASSIGNABLE_TOOL_STATUS`.
  *
- * **No `Assigned` value.** Delivery-assign (`assignToolsAction` /
- * `create-assigned-tool`) only ever writes `assignedtools` rows and
- * `request.status` — see `lib/bubble/assigned-tools.ts#assignTools`. A tool
- * assigned to a future request keeps whatever `statusNew` already describes
- * its real current state; the assignment itself is fully and only recorded
- * in `assignedtools`, which is what the date-overlap availability check
- * reads. A dedicated `Assigned` flow value was considered and dropped —
- * writing it at assign time would either clobber a tool's true current state
- * (if it's busy elsewhere) or need to be built, tested and maintained just to
- * cover the one case it's safe (a tool sitting `Available` in the warehouse),
- * for no operational payoff anyone needed.
+ * **`Assigned` is back, reversing the original phase 2A call.** That call
+ * (dropping the value because writing it at assign time could clobber a
+ * tool's true state if it were busy elsewhere) assumed availability stayed
+ * date-driven. It wasn't safe in practice — a job running long left a
+ * genuinely-busy tool bookable once its planned end date passed, and a job
+ * finishing early left a genuinely-free tool blocked until its planned end
+ * date arrived. Availability is now `statusNew === "Available"`, full stop,
+ * so `Assigned` is what a tool reads the instant it's committed to a request
+ * (`assignToolsAction`) — see `TOOL_STATUS_ASSIGNED` below — and it reverts to
+ * `Available` on Unassign. The tradeoff: a tool can no longer be pre-booked
+ * for a future request while busy on a different one; see
+ * `docs/phase-2-lifecycle.md` for the fuller writeup.
  *
  * **Phase 3A split condition off this field** into `tools.condition` /
  * `ToolCondition` below. The five condition values (`Maintenance Required`
@@ -112,6 +113,7 @@ export const DEFAULT_REQUEST_STATUS: RequestStatus = "New"
  */
 export const TOOL_STATUS_NEW = [
   "Available",
+  "Assigned",
   "In Transit",
   "Delivered",
   "Pickup Requested",
@@ -127,27 +129,40 @@ export type ToolStatusNew = (typeof TOOL_STATUS_NEW)[number]
  * The `tools.statusNew` values the lifecycle *writes*, named rather than typed
  * as literals at each call site so no transition can drift.
  *
- * `TOOL_STATUS_AVAILABLE` backs `isReadyForDispatch`'s dispatch-time gate, and
- * is also kept for phase 3D (pickup return-to-warehouse). `TOOL_STATUS_IN_TRANSIT` /
- * `TOOL_STATUS_DELIVERED` back dispatch (2B) and offload (2C).
+ * `TOOL_STATUS_AVAILABLE` is the ordinary "free" state — the candidate queries
+ * (`listCandidateTools`/`searchTools`) filter to it, alongside
+ * `TOOL_STATUS_PICKUP_REQUESTED` — see `isFreeToAssign` below for why both
+ * count. Also read by `isReadyForDispatch`, and kept for phase 3D (pickup
+ * return-to-warehouse). `TOOL_STATUS_ASSIGNED` is written the moment a tool is
+ * committed to a request (`assignToolsAction`) and reverted to `Available` on
+ * Unassign — see the reversal note on `TOOL_STATUS_NEW` above.
+ * `TOOL_STATUS_IN_TRANSIT` / `TOOL_STATUS_DELIVERED` back dispatch (2B) and
+ * offload (2C).
+ *
+ * `TOOL_STATUS_PICKUP_REQUESTED` is written when a driver reaches a site-to-site
+ * pickup stop and *can't* take the tool (`leaveBehindAction`): it stays where it
+ * is, flagged as still wanted. Dispatch never writes it pre-emptively — only an
+ * actual failed pickup does, which is what keeps it meaning one specific thing.
+ * It is deliberately absent from `UNASSIGNABLE_TOOL_STATUS` — nothing is wrong
+ * with the tool — and deliberately *not* silently reverted to `Available`
+ * either, so it stays visibly distinguishable while remaining just as
+ * offerable for a future request; see `isFreeToAssign`.
  */
 export const TOOL_STATUS_AVAILABLE: ToolStatusNew = "Available"
+export const TOOL_STATUS_ASSIGNED: ToolStatusNew = "Assigned"
 export const TOOL_STATUS_IN_TRANSIT: ToolStatusNew = "In Transit"
 export const TOOL_STATUS_DELIVERED: ToolStatusNew = "Delivered"
+export const TOOL_STATUS_PICKUP_REQUESTED: ToolStatusNew = "Pickup Requested"
 
 /**
- * A tool whose `statusNew` reads one of these is never offered for assignment.
- * The remaining flow values stay offerable: a tool `Delivered` to another job
- * last month is a legitimate pick for next week, and the date-overlap check is
- * what decides that.
+ * A tool whose `statusNew` reads one of these is never offered for assignment,
+ * regardless of `isFreeToAssign` — this is the condition-based exclusion,
+ * orthogonal to the flow-state one.
  *
  * **This is read from `statusNew` only**, and that field is now backfilled on
  * every live row, so the filter really does hide broken tools — a row whose
  * old `status` said `To be Repaired` reads `Repair Required` here and drops
  * out of the candidate lists.
- *
- * The overlap check in `listTakenToolIds` is a separate and stricter guard: it,
- * not this list, is what prevents a double-booking.
  */
 export const UNASSIGNABLE_TOOL_STATUS: readonly string[] = [
   "Maintenance Required",
@@ -197,18 +212,36 @@ export function isAssignable(condition: string, statusNew: string): boolean {
 }
 
 /**
- * Whether an already-*assigned* tool is actually sitting at the warehouse
- * right now, as opposed to still mid-flow on a different, not-yet-offloaded
- * request (`In Transit`, `Delivered`, `Pickup Requested`) or flagged for
- * condition. Assign-time deliberately allows any of those — see
- * `TOOL_STATUS_NEW`'s doc — but Dispatch is the moment a tool actually leaves
- * the building, so it needs the stricter, real-time answer this checks instead.
+ * Whether a tool is genuinely free to be picked for a *new* request right now
+ * — the flow-state half of "offerable," alongside `isAssignable`'s
+ * condition-state half; a caller populating a picker checks both.
+ *
+ * `Available` is the ordinary case. `Pickup Requested` also counts:
+ * `leaveBehindAction` deliberately doesn't revert it to `Available` (see
+ * `TOOL_STATUS_NEW`'s doc comment), so treating it as *not* free here would
+ * silently make every left-behind tool unassignable — the opposite of what
+ * that feature decided. Blank stays lenient, same reasoning as
+ * `isAssignable`/`isReadyForDispatch`. `Assigned`, `In Transit` and
+ * `Delivered` are the only true holds: some request already has a live claim.
+ */
+export function isFreeToAssign(statusNew: string): boolean {
+  return statusNew === "" || statusNew === TOOL_STATUS_AVAILABLE || statusNew === TOOL_STATUS_PICKUP_REQUESTED
+}
+
+/**
+ * Whether an already-*assigned* tool is actually fit to leave the building on
+ * *this* dispatch. `Assigned` is the expected value here — every tool that
+ * made it through the picker was `Available` and got flipped to `Assigned` by
+ * this same request's own assign step, so it must pass. `Available` is also
+ * accepted for tools backfilled or edited outside the app. Anything else
+ * (`In Transit`, `Delivered`, `Pickup Requested`, or a condition value) means
+ * the tool is genuinely elsewhere or flagged, so dispatch refuses it.
  *
  * Blank stays ready, same leniency as `isAssignable`: after the backfill an
  * empty `statusNew` is a migration gap, not a signal the tool is unavailable.
  */
 export function isReadyForDispatch(statusNew: string): boolean {
-  return statusNew === "" || statusNew === TOOL_STATUS_AVAILABLE
+  return statusNew === "" || statusNew === TOOL_STATUS_AVAILABLE || statusNew === TOOL_STATUS_ASSIGNED
 }
 
 /**

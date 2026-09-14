@@ -3,23 +3,25 @@ import "server-only"
 import { z } from "zod"
 
 import { bubbleListAll, bubbleRunWorkflow, BubbleError, type BubbleThing } from "@/lib/bubble/client"
-import { isAssignable } from "@/lib/bubble/enums"
+import { isAssignable, isFreeToAssign } from "@/lib/bubble/enums"
 import { NO_LOCATION } from "@/lib/bubble/pickup-tools-types"
 import { listToolTypes } from "@/lib/bubble/reference"
-import type {
-  AssignedTool,
-  AssignmentEntry,
-  CandidateTool,
-  Conflict,
-} from "@/lib/bubble/assigned-tools-types"
-import type { ToolRequest } from "@/lib/bubble/requests"
+import type { AssignedTool, AssignmentEntry, CandidateTool } from "@/lib/bubble/assigned-tools-types"
 
-export type { AssignedTool, CandidateTool, Conflict }
+export type { AssignedTool, CandidateTool }
 
 /**
  * Phase 2A: which physical tools a request holds (`assignedtools`), which
- * tools it could hold (`tools`, by type), which of those another request
- * already has over the same dates — and the one write that changes it.
+ * tools it could hold (`tools`, by type) — and the one write that changes it.
+ *
+ * Availability used to also mean "no other request holds this tool over the
+ * same dates" (`listTakenToolIds`, a date-overlap check). That was retired:
+ * dates proved unreliable as a proxy for whether a tool was actually free
+ * (see the reversal note on `TOOL_STATUS_NEW` in `lib/bubble/enums.ts`), and
+ * availability is now simply `isFreeToAssign(statusNew)` — checked, alongside
+ * `isAssignable`'s condition check, right in the candidate queries below. A
+ * tool that isn't offerable is dropped from the results, not shown disabled:
+ * a PM assigning tools only ever sees ones it's actually possible to add.
  *
  * Reads of `assignedtools` go through `listMaybeMissing`, which turns a 404
  * into an empty list. That was written because the UI shipped before the
@@ -28,17 +30,14 @@ export type { AssignedTool, CandidateTool, Conflict }
  *
  * The write goes through a Bubble backend workflow, never `PATCH /obj/...`:
  * `create-assigned-tool` owns the delete-then-recreate that makes saving
- * idempotent, and sets `request.status` itself.
- *
- * There is deliberately **no `updateRequestStatus`** here yet — the
- * `update-request-status` workflow it would call doesn't exist in Bubble.
- * Until it lands, nothing in this app writes `tools.statusNew`. See
- * `docs/phase-2a-assignment-handoff.md`.
+ * idempotent, and sets `request.status` itself. Tool-status writes
+ * (`markToolsAssigned`/`releaseToolsToAvailable` in `lib/bubble/requests.ts`)
+ * go through the separate `update-request-status` workflow, called right
+ * after by `assignToolsAction`.
  */
 
 const ASSIGNED_TOOLS = "assignedtools"
 const TOOLS = "tools"
-const REQUEST = "request"
 
 const assignedToolRow = z.looseObject({
   _id: z.string(),
@@ -65,13 +64,6 @@ const toolRow = z.looseObject({
   condition: z.string().optional(),
   floor: z.string().optional(),
   currentUser: z.string().optional(),
-})
-
-const windowRow = z.looseObject({
-  _id: z.string(),
-  job: z.string().optional(),
-  requestDateStart: z.string().optional(),
-  requestDateEnd: z.string().optional(),
 })
 
 /**
@@ -144,10 +136,12 @@ function sortCandidates(tools: CandidateTool[]): CandidateTool[] {
  * Bubble understands as "match nothing" — at the cost of one full read, which
  * only happens when the narrow query returned nothing at all.
  *
- * Condition filtering (`isAssignable`) is applied here, against both
- * `condition` and `statusNew`: a tool that needs repair is not offered,
- * whatever the dates say. Checking both fields is what keeps this correct
- * across phase 3A's backfill — see `isAssignable`'s doc comment.
+ * Two filters, both applied here: `isAssignable` drops a tool whose
+ * *condition* is wrong (needs repair, full stop), `isFreeToAssign` drops one
+ * whose *flow state* is already claimed elsewhere (`Assigned`, `In Transit`,
+ * `Delivered`). A tool already on file for *this* request doesn't come
+ * through here at all — the assign page merges it in separately, by id
+ * (`listToolsByIds`), so it stays pickable regardless of its live status.
  */
 export async function listCandidateTools(typeIds: string[]): Promise<CandidateTool[]> {
   if (typeIds.length === 0) return []
@@ -172,7 +166,7 @@ export async function listCandidateTools(typeIds: string[]): Promise<CandidateTo
     rows
       .map((raw) => toolRow.parse(raw))
       .filter((row) => row.name && row.type && wanted.has(row.type))
-      .filter((row) => isAssignable(row.condition ?? "", row.statusNew ?? ""))
+      .filter((row) => isAssignable(row.condition ?? "", row.statusNew ?? "") && isFreeToAssign(row.statusNew ?? ""))
       .map((row) => toCandidate(row, typeNameById))
   )
 }
@@ -220,7 +214,7 @@ export async function listToolsByIds(ids: string[]): Promise<CandidateTool[]> {
  *
  * Deliberately **not** constrained by `type`: tools with a blank or dangling
  * `type` are invisible to `listCandidateTools` and this is how they stay
- * reachable. Condition still applies.
+ * reachable. Condition and free-to-assign both still apply, same as there.
  */
 export async function searchTools(query: string, limit = 50): Promise<CandidateTool[]> {
   const needle = query.trim()
@@ -239,79 +233,9 @@ export async function searchTools(query: string, limit = 50): Promise<CandidateT
     rows
       .map((raw) => toolRow.parse(raw))
       .filter((row) => row.name)
-      .filter((row) => isAssignable(row.condition ?? "", row.statusNew ?? ""))
+      .filter((row) => isAssignable(row.condition ?? "", row.statusNew ?? "") && isFreeToAssign(row.statusNew ?? ""))
       .map((row) => toCandidate(row, typeNameById))
   ).slice(0, limit)
-}
-
-/** A day either side of the window, in milliseconds. */
-const WIDEN_MS = 24 * 60 * 60 * 1000
-
-/**
- * The tools other requests hold over this request's dates, keyed by tool id.
- *
- * Two queries. The first is widened a day each side because the two write
- * paths disagree about `requestDateEnd` — `createToolRequest` sets New York
- * midnight of the last day (which excludes that day), `createPickupToolRequest`
- * sets start + 30 minutes — so the precise overlap is done here in JS against a
- * normalised end. The second is one `in` on the overlapping request ids, the
- * shape `withLines` already proves.
- *
- * A request with no dates can't be checked, and rows with no dates drop out of
- * the first query — but those also have no `assignedtools` children, so they
- * cannot conflict.
- */
-export async function listTakenToolIds(request: ToolRequest): Promise<Map<string, Conflict>> {
-  const taken = new Map<string, Conflict>()
-
-  const start = request.start ? new Date(request.start) : null
-  const end = request.end ? new Date(request.end) : start
-  if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return taken
-
-  const overlapping = await bubbleListAll(REQUEST, {
-    constraints: [
-      {
-        key: "requestDateEnd",
-        constraint_type: "greater than",
-        value: new Date(start.getTime() - WIDEN_MS).toISOString(),
-      },
-      {
-        key: "requestDateStart",
-        constraint_type: "less than",
-        value: new Date(end.getTime() + WIDEN_MS).toISOString(),
-      },
-    ],
-  })
-
-  const conflicts = new Map<string, Conflict>()
-  for (const raw of overlapping) {
-    const row = windowRow.parse(raw)
-    if (row._id === request.id || !row.requestDateStart) continue
-
-    const rowStart = new Date(row.requestDateStart)
-    const rawEnd = row.requestDateEnd ? new Date(row.requestDateEnd) : rowStart
-    // A pickup's end is start + 30 min; a delivery's is midnight of the last
-    // day, which can land before its own start. Either way the window is at
-    // least the start instant.
-    const rowEnd = rawEnd.getTime() < rowStart.getTime() ? rowStart : rawEnd
-    if (rowStart.getTime() > end.getTime() || rowEnd.getTime() < start.getTime()) continue
-
-    conflicts.set(row._id, {
-      requestId: row._id,
-      job: row.job ?? "(no job)",
-      start: row.requestDateStart,
-      end: row.requestDateEnd ?? null,
-    })
-  }
-
-  if (conflicts.size === 0) return taken
-
-  for (const assigned of await listAssignedTools([...conflicts.keys()])) {
-    const conflict = conflicts.get(assigned.requestId)
-    if (conflict) taken.set(assigned.toolId, conflict)
-  }
-
-  return taken
 }
 
 // Pinned to a constant for the same reason `NEW_REQUEST_WORKFLOW` is: a
@@ -346,8 +270,11 @@ const assignResult = z.looseObject({ count: z.number() })
  * `AssignmentEntry` shape directly — no delimited encoding, unlike the Pickup
  * flow's `tool-status-updates.ts`.
  *
- * This does not write any tool's `statusNew`. `request.status` is set to
- * `Assigned` by the workflow's own last step, not from here.
+ * This does not itself write any tool's `statusNew` — `request.status` is set
+ * to `Assigned` by the workflow's own last step, not from here.
+ * `assignToolsAction` (`app/(app)/requests/[requestId]/assign/actions.ts`) is
+ * what writes `statusNew`, in a separate call right after this one succeeds,
+ * via `markToolsAssigned`/`releaseToolsToAvailable`.
  */
 export async function assignTools(requestId: string, entries: readonly AssignmentEntry[]): Promise<void> {
   const raw = await bubbleRunWorkflow(CREATE_ASSIGNED_TOOL_WORKFLOW, {

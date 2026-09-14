@@ -34,20 +34,29 @@ import type { ToolRequest } from "@/lib/bubble/requests"
  * list alongside marks exactly which ones and offers each a "Picked up"
  * button. `offloadAction` itself re-checks the same thing server-side — this
  * is the UX half, not the only guard.
+ *
+ * `leftBehindCount` is the resolved half of the same idea: those stops were
+ * answered, with "couldn't take it". They don't block, but the dialog must
+ * stop claiming it delivers *every* tool — `offloadAction` writes only the
+ * ones that were actually collected.
  */
 export function CompleteDeliveryAction({
   request,
   toolCount,
   pendingPickupCount,
+  leftBehindCount,
 }: {
   request: ToolRequest
   toolCount: number
   pendingPickupCount: number
+  /** Assigned tools the driver reached but couldn't collect — not delivered. */
+  leftBehindCount: number
 }) {
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<OffloadState>(INITIAL_OFFLOAD_STATE)
   const [pending, startTransition] = useTransition()
   const router = useRouter()
+  const deliverableCount = toolCount - leftBehindCount
 
   if (pendingPickupCount > 0) {
     return (
@@ -59,6 +68,20 @@ export function CompleteDeliveryAction({
         <span className="text-xs text-status-attention-foreground">
           {pendingPickupCount} {pendingPickupCount === 1 ? "tool" : "tools"} still to pick up
         </span>
+      </div>
+    )
+  }
+
+  // Every tool was left behind, so there is no drop to record. `offloadAction`
+  // refuses this too; here it's a reason rather than an error after the fact.
+  if (toolCount > 0 && deliverableCount === 0) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <Button size="sm" disabled>
+          <PackageCheckIcon />
+          Complete delivery
+        </Button>
+        <span className="text-xs text-status-attention-foreground">No tools were collected</span>
       </div>
     )
   }
@@ -97,8 +120,10 @@ export function CompleteDeliveryAction({
         <DialogHeader>
           <DialogTitle>Complete delivery?</DialogTitle>
           <DialogDescription>
-            Marks every tool on this load Delivered, at <span className="font-medium">{request.job}</span> —{" "}
-            {toolCount} {toolCount === 1 ? "tool" : "tools"}.
+            Marks this load Delivered, at <span className="font-medium">{request.job}</span> —{" "}
+            {leftBehindCount > 0
+              ? `${deliverableCount} of ${toolCount} tools, with ${leftBehindCount} left behind at ${leftBehindCount === 1 ? "its site" : "their sites"}.`
+              : `${toolCount} ${toolCount === 1 ? "tool" : "tools"}.`}
           </DialogDescription>
         </DialogHeader>
 

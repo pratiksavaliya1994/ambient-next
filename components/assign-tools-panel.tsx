@@ -20,7 +20,6 @@ import {
   type AssignmentEntry,
   type AssignSlot,
   type CandidateTool,
-  type Conflict,
 } from "@/lib/bubble/assigned-tools-types"
 
 /**
@@ -45,14 +44,12 @@ export function AssignToolsPanel({
   slots,
   extraToolIds,
   pool,
-  conflicts,
   unresolvedSlots,
 }: {
   requestId: string
   slots: AssignSlot[]
   extraToolIds: string[]
   pool: CandidateTool[]
-  conflicts: Record<string, Conflict>
   /** Requested names that matched no `toolstype` row — those slots offer no candidates. */
   unresolvedSlots: number
 }) {
@@ -233,7 +230,6 @@ export function AssignToolsPanel({
                     slot={slot}
                     chosen={chosen}
                     candidates={slot.typeId ? (candidatesByType.get(slot.typeId) ?? []) : []}
-                    conflicts={conflicts}
                     usedElsewhere={usedIds}
                     onAdd={(tool) => addToSlot(slot.toolType, tool)}
                     onRemove={(toolId) => removeFromSlot(slot.toolType, toolId)}
@@ -252,7 +248,6 @@ export function AssignToolsPanel({
           <CardAction className="self-center">
             <ExtraToolsPicker
               picked={usedIds}
-              conflicts={conflicts}
               onAdd={addExtra}
               onRemove={(toolId) => removeExtra(toolId)}
             />

@@ -64,14 +64,6 @@ export type CandidateTool = {
   currentUser: string | null
 }
 
-/** Why a tool can't be picked: another request already holds it over this one's dates. */
-export type Conflict = {
-  requestId: string
-  job: string
-  start: string | null
-  end: string | null
-}
-
 /**
  * One requested tool type on the assign screen: how many were asked for, which
  * physical tools currently fill it, and the `toolstype` its candidates come
