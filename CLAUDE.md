@@ -101,7 +101,7 @@ Header row, 24 business fields. The ones this app writes:
 | `notes` | text | |
 | `tentative`, `completed` | yes/no | |
 | `color` | text | Calendar colour: `#2299ff` when delivery, `#ff7744` pickup-only. |
-| `order` | number | Always `100`. |
+| `order` | number | `100` on create. Doubles as the **stop sequence** on a driver's trip: `/dispatch/active` writes `101, 102, 103…` when a route is reordered, and offload puts it back to `100`. Offset above `100` deliberately — the old Bubble UI's calendar sorts on this field, so a sequenced row keeps its existing place there. See `isSequenced`/`stopPosition` in `lib/bubble/enums.ts` and [`docs/bubble-set-request-order-spec.md`](docs/bubble-set-request-order-spec.md). |
 | `searchable` | text | What Bubble's search box matches: job `description` + ` - ` + date as `M-D-YYYY h:mm am` ET. |
 
 Not written: `pictures`, `onClickUp`, `realGC`, `Slug`.

@@ -7,7 +7,8 @@ import { ActiveTrips } from "@/components/active-trips"
 import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { listRequestsByStatus } from "@/lib/bubble/requests"
-import { toDispatchSummaries, type DispatchRequestSummary } from "@/lib/dispatch/summary"
+import { compareStops } from "@/lib/dispatch/stop-order"
+import { toDispatchSummaries, type DispatchRequestSummary, type DriverTrip } from "@/lib/dispatch/summary"
 
 export const metadata: Metadata = { title: "Active trips" }
 
@@ -58,13 +59,22 @@ async function ActiveTripsBody() {
   const inTransit = await listRequestsByStatus("In Transit")
   const summaries = await toDispatchSummaries(inTransit)
 
-  const tripsByDriver = new Map<string, DispatchRequestSummary[]>()
+  // `null` stays `null` rather than becoming an "Unknown driver" string: a
+  // driverless bucket can't be sequenced (see `DriverTrip`), and the card has
+  // to be able to tell that apart from a driver actually named that.
+  const tripsByDriver = new Map<string | null, DispatchRequestSummary[]>()
   for (const request of summaries) {
-    const key = request.driver ?? "Unknown driver"
-    const list = tripsByDriver.get(key) ?? []
+    const list = tripsByDriver.get(request.driver) ?? []
     list.push(request)
-    tripsByDriver.set(key, list)
+    tripsByDriver.set(request.driver, list)
   }
 
-  return <ActiveTrips tripsByDriver={[...tripsByDriver.entries()].sort((a, b) => a[0].localeCompare(b[0]))} />
+  // `compareStops` puts sequenced stops in their saved order and everything
+  // else by time — which, until someone saves an order, is still an
+  // improvement on the `Created Date` descending order these arrive in.
+  const trips: DriverTrip[] = [...tripsByDriver.entries()]
+    .map(([driver, stops]) => ({ driver, stops: [...stops].sort(compareStops) }))
+    .sort((a, b) => (a.driver === null ? 1 : b.driver === null ? -1 : a.driver.localeCompare(b.driver)))
+
+  return <ActiveTrips trips={trips} />
 }

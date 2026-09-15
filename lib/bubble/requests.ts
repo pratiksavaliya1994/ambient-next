@@ -67,6 +67,10 @@ const requestRow = z.looseObject({
   // silently on a Bubble option-set write.
   status: z.enum(REQUEST_STATUS).optional(),
   driver: z.string().optional(),
+  // Pre-existing, unlike the two above: every live row carries `100`. Read back
+  // now because it doubles as the driver's stop sequence on `/dispatch/active`
+  // — see `isSequenced` and `lib/dispatch/stop-order.ts`.
+  order: z.number().optional(),
 })
 
 const requestedToolsRow = z.looseObject({
@@ -119,6 +123,12 @@ export type ToolRequest = {
   status: RequestStatus
   /** Phase 2B. The driver/PM's name, same free-text convention as `fieldPM2`. */
   driver: string | null
+  /**
+   * `request.order` — this request's position on its driver's trip, offset
+   * above `STOP_ORDER_BASE` (stop 1 is `101`). `100` means never sequenced,
+   * which is every row that predates this; `isSequenced` is the test.
+   */
+  order: number
 }
 
 /** Stands in for `request.job` when the Bubble row has none. */
@@ -173,6 +183,9 @@ function toToolRequest(
     materials,
     status: row.status ?? DEFAULT_REQUEST_STATUS,
     driver: row.driver?.trim() || null,
+    // Defaulting to the constant rather than `null` keeps this a plain number,
+    // so "absent" and "never sequenced" are the same case downstream.
+    order: row.order ?? DEFAULT_REQUEST_ORDER,
   }
 }
 

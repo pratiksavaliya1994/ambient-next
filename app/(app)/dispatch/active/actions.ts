@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache"
 
 import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { isReadyForDispatch, isWarehouseLocation } from "@/lib/bubble/enums"
-import { dispatchRequests, getRequest, leaveToolsBehind } from "@/lib/bubble/requests"
+import { setRequestOrder } from "@/lib/bubble/request-order"
+import { dispatchRequests, getRequest, leaveToolsBehind, listRequestsByStatus } from "@/lib/bubble/requests"
 import { requireSession } from "@/lib/auth/session"
-import { confirmPickupSchema, leaveBehindSchema } from "@/lib/schemas/assignment"
-import type { PickupState } from "@/app/(app)/dispatch/active/action-state"
+import { toStopOrders } from "@/lib/dispatch/stop-order"
+import { confirmPickupSchema, leaveBehindSchema, setStopOrderSchema } from "@/lib/schemas/assignment"
+import type { PickupState, StopOrderState } from "@/app/(app)/dispatch/active/action-state"
 
 /**
  * Confirms a driver has physically collected one off-site pickup stop's
@@ -148,4 +150,52 @@ export async function leaveBehindAction(input: unknown): Promise<PickupState> {
       : undefined
 
   return { status: "left-behind", warning }
+}
+
+/**
+ * Saves the order a dispatcher dragged a driver's stops into — one write for
+ * the whole route, never one per drag. The card holds the new arrangement in
+ * local state until Save, the same shape `components/assign-tools-panel.tsx`
+ * uses for assignments.
+ *
+ * Writes `request.order` and nothing else, through its own workflow rather
+ * than `update-request-status`; see `lib/bubble/request-order.ts` for why.
+ */
+export async function setStopOrderAction(input: unknown): Promise<StopOrderState> {
+  await requireSession()
+
+  const parsed = setStopOrderSchema.safeParse(input)
+  if (!parsed.success) {
+    return { status: "error", message: "That stop order isn't valid." }
+  }
+  const { driver, requestIds } = parsed.data
+
+  // The card is however old the page render is. Re-read the whole trip — the
+  // same "narrow, not close" defence the two actions above give their writes —
+  // and refuse anything but an exact match: renumbering 1..N over a set that
+  // has since gained or lost a stop would save a route nobody ever saw.
+  const live = await listRequestsByStatus("In Transit", driver)
+  const liveIds = new Set(live.map((request) => request.id))
+  if (live.length !== requestIds.length || requestIds.some((id) => !liveIds.has(id))) {
+    return {
+      status: "error",
+      message: `${driver}'s trip now has ${live.length} ${live.length === 1 ? "stop" : "stops"}. Reload the page and set the order again.`,
+    }
+  }
+
+  try {
+    await setRequestOrder(toStopOrders(requestIds))
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error ? `Bubble rejected the new order: ${error.message}` : "Bubble rejected the new order.",
+    }
+  }
+
+  // Not `/requests` or `/requests/{id}` — neither reads `order`.
+  revalidatePath("/dispatch/active")
+  revalidatePath("/dispatch")
+
+  return { status: "ordered", count: requestIds.length }
 }

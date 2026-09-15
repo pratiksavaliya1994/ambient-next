@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { MAX_STOP_ORDER } from "@/lib/bubble/enums"
+
 /**
  * What the assign screen submits. Validated in the client island **and**
  * re-validated in the action, the same pair `requestFormSchema` forms — a
@@ -91,3 +93,28 @@ export const leaveBehindSchema = z.object({
 })
 
 export type LeaveBehindValues = z.infer<typeof leaveBehindSchema>
+
+/**
+ * What a driver trip card submits when its stops are dragged into a new order:
+ * whose trip it is, and every stop in its new position. No positions — the
+ * action derives `101, 102, 103…` from the array itself (`toStopOrders`), the
+ * same "don't trust the client's copy" call `dispatchSchema` makes by carrying
+ * no `toolIds`.
+ *
+ * `driver` is sent so the action can re-read that trip live and refuse to
+ * renumber a set that has since gained or lost a stop.
+ */
+export const setStopOrderSchema = z
+  .object({
+    driver: z.string().min(1),
+    // Two, because a one-stop trip has no order to set. The cap is what keeps
+    // `isSequenced` a total test — a 100th stop would collide with the
+    // unsequenced default.
+    requestIds: z.array(z.string().min(1)).min(2).max(MAX_STOP_ORDER),
+  })
+  .refine((value) => new Set(value.requestIds).size === value.requestIds.length, {
+    message: "The same stop can't appear twice.",
+    path: ["requestIds"],
+  })
+
+export type SetStopOrderValues = z.infer<typeof setStopOrderSchema>

@@ -21,3 +21,17 @@ export type PickupState =
   | { status: "left-behind"; warning?: string }
 
 export const INITIAL_PICKUP_STATE: PickupState = { status: "idle" }
+
+/**
+ * Saving a driver's stop order, from `components/driver-trip-card.tsx`.
+ *
+ * No `warning` slot, unlike the three states above: there's no second table to
+ * half-update here. `setRequestOrder` writes one field on N requests and
+ * throws unless Bubble reports all N, so the result is whole or it's an error.
+ */
+export type StopOrderState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "ordered"; count: number }
+
+export const INITIAL_STOP_ORDER_STATE: StopOrderState = { status: "idle" }

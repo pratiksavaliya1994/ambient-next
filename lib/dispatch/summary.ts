@@ -20,6 +20,12 @@ export type DispatchRequestSummary = {
   timeRange: string | null
   fieldPm: string | null
   driver: string | null
+  /**
+   * `request.order` — this stop's position on its driver's trip, offset above
+   * `STOP_ORDER_BASE`. `100` means never sequenced. `compareStops`
+   * (`lib/dispatch/stop-order.ts`) is what reads it.
+   */
+  order: number
   /** Physical tools on `assignedtools` for this request — not the requested quantity. */
   toolCount: number
   /**
@@ -62,6 +68,17 @@ export type DispatchRequestSummary = {
    */
   pickupStops: { location: string; toolIds: string[]; tools: { name: string; count: number }[] }[]
 }
+
+/**
+ * One driver's whole `In Transit` load — the unit `/dispatch/active` renders a
+ * card per, and the unit a stop sequence is saved against.
+ *
+ * `driver` stays `null` for the no-driver bucket rather than being folded into
+ * an "Unknown driver" string: that bucket can't be sequenced (the write action
+ * re-reads the trip with an `equals` constraint, which is not a reliable
+ * is-empty query), and the card needs to know that structurally.
+ */
+export type DriverTrip = { driver: string | null; stops: DispatchRequestSummary[] }
 
 type PickupStopAccumulator = { toolIds: Set<string>; byToolName: Map<string, number> }
 
@@ -249,6 +266,7 @@ export async function toDispatchSummaries(requests: ToolRequest[]): Promise<Disp
       timeRange: request.timeRange,
       fieldPm: request.fieldPm,
       driver: request.driver,
+      order: request.order,
       toolCount: assignedRows.length,
       tools,
       missing,

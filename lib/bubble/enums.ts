@@ -62,6 +62,34 @@ export function requestColor(delivery: boolean, pickup: boolean): string {
 export const DEFAULT_REQUEST_ORDER = 100
 
 /**
+ * `request.order` doubles as a driver's stop sequence on `/dispatch/active`.
+ *
+ * Positions are stored **offset above** `DEFAULT_REQUEST_ORDER` — stop 1 is
+ * `101`, not `1` — so a sequenced row keeps sorting exactly where it already
+ * does in the old Bubble UI's `order`-sorted calendar, a UI this repo doesn't
+ * own. Plain `1..N` would have jumped every sequenced request to the top of it.
+ * See `docs/bubble-set-request-order-spec.md` §7.
+ */
+export const STOP_ORDER_BASE = DEFAULT_REQUEST_ORDER
+
+/** A trip never has 99 stops. This is also what keeps `isSequenced` a total test. */
+export const MAX_STOP_ORDER = 99
+
+/**
+ * Whether this row has ever been sequenced. `100` (the create-time default),
+ * `0` and absent all collapse to "no" — the entire legacy story for the ~1,550
+ * rows that predate this, every one of which carries `100`.
+ */
+export function isSequenced(order: number): boolean {
+  return Number.isInteger(order) && order > STOP_ORDER_BASE && order <= STOP_ORDER_BASE + MAX_STOP_ORDER
+}
+
+/** `101` → `1`. Only meaningful when `isSequenced(order)`. */
+export function stopPosition(order: number): number {
+  return order - STOP_ORDER_BASE
+}
+
+/**
  * `request.status` — the phase 2 lifecycle. **Text in Bubble, not an option
  * set** (see `docs/phase-2-lifecycle.md`), so an unexpected value fails loudly
  * in Zod here rather than silently on a Bubble write. A row with no `status`

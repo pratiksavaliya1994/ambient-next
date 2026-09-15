@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
+import { clearRequestOrder } from "@/lib/bubble/request-order"
 import { getRequest, offloadRequest } from "@/lib/bubble/requests"
 import { requireSession } from "@/lib/auth/session"
 import { deriveTripStatus } from "@/lib/dispatch/summary"
@@ -84,6 +85,18 @@ export async function offloadAction(input: unknown): Promise<OffloadState> {
       message:
         error instanceof Error ? `Bubble rejected the offload: ${error.message}` : "Bubble rejected the offload.",
     }
+  }
+
+  // The trip is over, so this request's place on it is meaningless. Clearing it
+  // is what stops a stale position riding along if the request is ever
+  // dispatched again — under a different driver, on a route where `3` means
+  // something else. Deliberately not fatal and deliberately not part of the
+  // offload write: the delivery is complete either way, and a leftover `order`
+  // only affects where a hypothetical future trip would sort it.
+  try {
+    await clearRequestOrder(requestId)
+  } catch {
+    // Nothing to tell the driver — the delivery landed.
   }
 
   revalidatePath("/dispatch/active")

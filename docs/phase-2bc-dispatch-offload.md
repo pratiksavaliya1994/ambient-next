@@ -123,6 +123,33 @@ A request leaves that set the moment it is offloaded, so the query is
 self-cleaning. If trip *history* ever matters, one `tripId` text field on
 `request` stamped at dispatch is the cheapest addition — nothing else changes.
 
+### Stop order lives on `/dispatch/active`
+
+`/dispatch/active` now owns a trip's **route order**: a dispatcher drags a
+driver's stops into sequence and saves the whole route in one write to
+`request.order` (`setStopOrderAction` → `set-request-order`). Stop numbers
+render there and on the Dispatch board.
+
+It sits here rather than on the Dispatch board because **the card is the
+trip** — that is the only screen where requests are grouped into a route at
+all. The board is a flat, time-sorted picker across every driver; a position
+there would be a number about nothing, so it shows the stored number read-only
+and nothing else.
+
+Two consequences of trips being derived rather than stored, both intended:
+
+- A driver's whole `In Transit` load is **one** route even when it arrived as
+  two dispatches, and `order` carries no date. Stops added by a later dispatch
+  come in unsequenced and sort to the end by time until someone renumbers the
+  lot — which is right, since a driver holding five loads drives one route.
+- `setStopOrderAction` re-reads `listRequestsByStatus("In Transit", driver)`
+  before writing and refuses unless it matches the card exactly. Renumbering
+  1..N over a set that has since gained or lost a stop would save a route
+  nobody ever saw.
+
+Because there is no trip identity to hang it on, `order` would otherwise
+outlive its route — so `offloadAction` clears it back to `100` on delivery.
+
 ### Routes and components
 
 | Path | Purpose |

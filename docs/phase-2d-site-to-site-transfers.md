@@ -286,12 +286,18 @@ group separately.
   flow and it still only happens in Bubble, the old UI, or a future
   tools-management screen the client explicitly deferred. Until then the slice
   is dormant in normal use.
-- **Stop order is alphabetical by location**, and nothing yet lets a driver
-  resequence pickups and drops. The shapes are built to absorb that later:
-  `pickupStops` is an ordered array, each entry carries its own `toolIds`, and
-  every confirm is an independent, idempotent per-tool write — so a future
-  sequence field would change display order only, never the write path.
-  Correctness does not depend on the order confirms arrive in.
+- **~~Stop order is alphabetical by location~~ — half-resolved.** *Delivery*
+  stops are now resequenceable: `/dispatch/active` lets a dispatcher drag a
+  driver's requests into route order and save the lot in one write to
+  `request.order` (see `docs/bubble-set-request-order-spec.md` and
+  `lib/dispatch/stop-order.ts`). As predicted here, that changed display order
+  only — no write path moved, and `pickupStops` is untouched.
+
+  **The pickup stops *within* one request are still alphabetical by location**
+  and still can't be resequenced. The same reasoning still holds: each entry
+  carries its own `toolIds` and every confirm is an independent, idempotent
+  per-tool write, so correctness does not depend on the order confirms arrive
+  in.
 - **Neither answer can be undone from the app.** Confirming moves the tool to
   the driver; leaving it behind flags it `Pickup Requested`. Reverting either is
   a Bubble edit, the same as every other mistake after dispatch. Agreed with the
