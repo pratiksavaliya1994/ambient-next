@@ -12,11 +12,27 @@ import { cn } from "@/lib/utils"
  * nothing when the request was never sequenced — that board isn't grouped by
  * driver, so a positional index there would be a number about nothing.
  */
-export function StopNumber({ position, className }: { position: number; className?: string }) {
+export function StopNumber({
+  position,
+  tone = "muted",
+  className,
+}: {
+  position: number
+  /**
+   * `"primary"` where the number *is* the point — the trip builder's route,
+   * whose whole job is the order you'd drive. Everywhere else the position is
+   * context beside a location, and a loud badge would compete with it.
+   */
+  tone?: "muted" | "primary"
+  className?: string
+}) {
   return (
     <span
       className={cn(
-        "flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[0.625rem] font-medium text-muted-foreground tabular-nums",
+        "flex shrink-0 items-center justify-center rounded-full font-medium tabular-nums",
+        tone === "primary"
+          ? "size-6 bg-primary text-xs text-primary-foreground"
+          : "size-5 bg-muted text-[0.625rem] text-muted-foreground",
         className
       )}
       aria-label={`Stop ${position}`}

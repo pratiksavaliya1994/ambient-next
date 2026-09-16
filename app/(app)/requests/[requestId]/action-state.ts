@@ -15,3 +15,18 @@ export type OffloadState =
   | { status: "delivered"; warning?: string }
 
 export const INITIAL_OFFLOAD_STATE: OffloadState = { status: "idle" }
+
+/**
+ * Closing a request by hand — the escape hatch for requested slots nobody will
+ * ever fill.
+ *
+ * Its own union rather than a member on `OffloadState`: closing writes a status
+ * and moves no tools, which is the opposite of what offload does, and the two
+ * render side by side on the same page.
+ */
+export type CloseRequestState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "closed"; requestStatus: string }
+
+export const INITIAL_CLOSE_REQUEST_STATE: CloseRequestState = { status: "idle" }

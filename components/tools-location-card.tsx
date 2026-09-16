@@ -94,15 +94,29 @@ export function LocationCard({
       className={cn("gap-1 border ring-0 [--card-spacing:--spacing(2)]", isExtra && "ring-2 ring-primary/60")}
       title={isExtra ? `${location} — match found outside your selection` : undefined}
     >
-      <CardHeader>
+      {/* A full-bleed band, not just styled text: `-mt-(--card-spacing)` cancels
+          `Card`'s top padding so it reaches the card's top edge, where the
+          card's own `overflow-hidden rounded-xl` clips its corners for it.
+          `items-center` (over the slot's `items-start`) centres the count badge
+          against the title now that the band is the only thing setting this
+          row's height.
+
+          `bg-primary` + `text-primary-foreground`: the app's amber, so the band
+          carries no colour of its own and the pair is contrast-correct by
+          construction in both themes (`--primary` is the same value in each).
+          It's what separates the site name from the tool names beneath it — the
+          name itself no longer needs a tint.
+
+          `py-0.5`, not the card spacing: at this density the band only needs to
+          clear the text. No `border-b` — the fill already separates it, and the
+          slot's `[.border-b]:pb-(--card-spacing)` variant outranks any plain
+          `pb-*`, so a border here would silently pin the padding back open. */}
+      <CardHeader className="-mt-(--card-spacing) items-center bg-primary/10 py-0.5">
         {/* `truncate`, not `wrap-anywhere`: a job name like "107 Greenwich St -
-            J24-0407" wrapped to three lines at this column width. Tinted so the
-            site name separates at a glance from the tool names beneath it —
-            except when unset, where "no data" outranks "which site". */}
-        <CardTitle
-          className={cn("truncate text-sm text-location-foreground", isUnset && "text-muted-foreground italic")}
-          title={location}
-        >
+            J24-0407" wrapped to three lines at this column width. Unset fades
+            its own text rather than switching to `--muted-foreground`, which is
+            a grey picked to sit on `--background`, not on the amber band. */}
+        <CardTitle className={cn("truncate text-sm text-primary", isUnset && "italic opacity-70")} title={location}>
           {location}
         </CardTitle>
         {isExtra && <span className="sr-only">Match found outside your selection</span>}
@@ -144,7 +158,7 @@ export function LocationCard({
  *  compositing layer on every one of the dozens of cards on screen. */
 function TypeHeader({ typeName, count }: { typeName: string; count: number }) {
   return (
-    <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-card px-1 pt-1.5 first:pt-0 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+    <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-card px-1 pt-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase first:pt-0">
       <span className="truncate" title={typeName}>
         {typeName}
       </span>

@@ -1,4 +1,4 @@
-import { CheckCircle2Icon, ListChecksIcon, PackageCheckIcon, TruckIcon, WrenchIcon } from "lucide-react"
+import { CheckCircle2Icon, ListChecksIcon, PackageCheckIcon, TruckIcon, WarehouseIcon, WrenchIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { Suspense } from "react"
@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkDayLabel, newYorkDaysAgo, newYorkInstant } from "@/lib/bubble/dates"
-import type { RequestStatus } from "@/lib/bubble/enums"
+import { isPickupRequest, type RequestStatus } from "@/lib/bubble/enums"
 import { hasContent, listRequestsSince, searchRequests, type ToolRequest } from "@/lib/bubble/requests"
 import { cn } from "@/lib/utils"
 
@@ -230,11 +230,20 @@ const NEXT_ACTIONS: Record<
       "border-status-attention/40 bg-status-attention/25 text-status-attention-foreground hover:bg-status-attention/40 dark:bg-status-attention/30",
   },
   "In Transit": {
-    label: "Complete delivery",
+    label: "Track trip",
     icon: PackageCheckIcon,
     href: (id) => `/requests/${id}`,
     className:
       "border-status-repair/40 bg-status-repair/25 text-status-repair-foreground hover:bg-status-repair/40 dark:bg-status-repair/30",
+  },
+  // Both partials keep a live action: that is the whole point of them — the
+  // request is half-done and the rest still has to get on a trip.
+  "Partially Delivered": {
+    label: "Add to a trip",
+    icon: TruckIcon,
+    href: (id) => `/trips/new?requestId=${id}`,
+    className:
+      "border-status-attention/40 bg-status-attention/25 text-status-attention-foreground hover:bg-status-attention/40 dark:bg-status-attention/30",
   },
   Delivered: {
     label: "Delivered",
@@ -243,6 +252,53 @@ const NEXT_ACTIONS: Record<
     className:
       "border-status-ok/40 bg-status-ok/25 text-status-ok-foreground hover:bg-status-ok/40 dark:bg-status-ok/30",
   },
+  "Partially Returned": {
+    label: "Add to a trip",
+    icon: TruckIcon,
+    href: (id) => `/trips/new?requestId=${id}`,
+    className:
+      "border-status-attention/40 bg-status-attention/25 text-status-attention-foreground hover:bg-status-attention/40 dark:bg-status-attention/30",
+  },
+  Returned: {
+    label: "Returned",
+    icon: WarehouseIcon,
+    href: null,
+    className:
+      "border-status-ok/40 bg-status-ok/25 text-status-ok-foreground hover:bg-status-ok/40 dark:bg-status-ok/30",
+  },
+}
+
+/**
+ * The pickup overrides — a live bug until now, and one 3B would have made
+ * reachable on every new request had phase 4 not folded it in.
+ *
+ * Both maps keyed off `status` **alone**, so a pickup-only request at
+ * `Assigned` offered **"Assign tools"** pointing at `/requests/[id]/assign` —
+ * a screen built entirely around requested tool *types* and their quantities,
+ * which a pickup request does not have. Its tools are named at creation.
+ *
+ * Only the two states that actually differ are overridden; everything else
+ * falls through to `NEXT_ACTIONS`.
+ */
+const PICKUP_NEXT_ACTIONS: Partial<Record<RequestStatus, (typeof NEXT_ACTIONS)[RequestStatus]>> = {
+  New: {
+    label: "Add to a trip",
+    icon: TruckIcon,
+    href: (id) => `/trips/new?requestId=${id}`,
+    className:
+      "border-status-active/40 bg-status-active/20 text-status-active-foreground hover:bg-status-active/35 dark:bg-status-active/25",
+  },
+  Assigned: {
+    label: "Add to a trip",
+    icon: TruckIcon,
+    href: (id) => `/trips/new?requestId=${id}`,
+    className:
+      "border-status-attention/40 bg-status-attention/25 text-status-attention-foreground hover:bg-status-attention/40 dark:bg-status-attention/30",
+  },
+}
+
+export function nextActionFor(request: ToolRequest) {
+  return (isPickupRequest(request) ? PICKUP_NEXT_ACTIONS[request.status] : undefined) ?? NEXT_ACTIONS[request.status]
 }
 
 /**
@@ -258,7 +314,7 @@ function dateLabelFor(request: ToolRequest) {
 
 function RequestCard({ request }: { request: ToolRequest }) {
   const theme = themeFor(request)
-  const action = NEXT_ACTIONS[request.status]
+  const action = nextActionFor(request)
   const ActionIcon = action.icon
   const totalTools = request.tools.reduce((sum, tool) => sum + tool.quantity, 0)
   const hasNotes = request.notes || request.toolsNotes

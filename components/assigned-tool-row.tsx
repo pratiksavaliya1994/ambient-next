@@ -1,18 +1,20 @@
-import { MapPinIcon, PackageXIcon, TriangleAlertIcon, TruckIcon } from "lucide-react"
+import { MapPinIcon, PackageCheckIcon, PackageXIcon, TriangleAlertIcon, TruckIcon, UndoIcon } from "lucide-react"
 
 import { LeaveBehindButton } from "@/components/leave-behind-button"
 import { PickupToolButton } from "@/components/pickup-tool-button"
 import { Badge } from "@/components/ui/badge"
 import type { CandidateTool } from "@/lib/bubble/assigned-tools-types"
-import type { ToolTripState } from "@/lib/dispatch/summary"
+import { isWarehouseLocation } from "@/lib/bubble/enums"
+import type { ToolTripState } from "@/lib/dispatch/tool-state"
 import { cn } from "@/lib/utils"
 
 /**
  * One physical tool, coloured by where it actually is right now
  * (`deriveTripStatus`). Shared by the request detail page's tools list, the
  * Dispatch board and Active trips, so a tool looks the same wherever it turns
- * up; `state` is `null` before a request is assigned and after it's delivered,
- * and the row falls back to the plain location line.
+ * up; `state` is `null` for an unremarkable tool — one sitting free at the
+ * warehouse, before its request is assigned or after it was closed without
+ * ever moving — and the row falls back to the plain location line.
  *
  * A tool still sitting on another job site carries its own "Picked up" and
  * "Not picked up" buttons where those actions are live (`canPickUp`), so the
@@ -121,6 +123,24 @@ export function AssignedToolRow({
  * the same verdict at a glance down a list of rows.
  */
 function describe(tool: CandidateTool, state: ToolTripState | null, extra: boolean) {
+  // The tool is at its destination. Both the request's own earlier trip and a
+  // later one land here, so a `Partially Delivered` request reads as what it is
+  // — some tools dropped, the rest still to go — rather than showing the
+  // dropped ones as unavailable because `Delivered` isn't a dispatchable status.
+  if (state === "delivered" || state === "returned") {
+    return {
+      tone: "border-status-ok/40 border-l-status-ok bg-status-ok/10",
+      detailTone: "text-status-ok-foreground",
+      flag: state === "delivered" ? "Delivered" : "Returned",
+      flagTone: "bg-status-ok text-white",
+      Icon: PackageCheckIcon,
+      detail:
+        state === "delivered"
+          ? `Already delivered to ${tool.location} — nothing left to move`
+          : `Already back at ${tool.location} — nothing left to move`,
+    }
+  }
+
   if (state === "carried") {
     return {
       tone: "border-status-ok/40 border-l-status-ok bg-status-ok/10",
@@ -153,6 +173,25 @@ function describe(tool: CandidateTool, state: ToolTripState | null, extra: boole
       flagTone: "bg-status-attention text-white",
       Icon: PackageXIcon,
       detail: `Left at ${tool.location} — not collected on this trip`,
+    }
+  }
+
+  if (state === "refused") {
+    // The one state a tool can be in while looking completely ordinary in
+    // Bubble: a refused delivery writes nothing to `tools` on the way out and
+    // plain `Available` at `"Warehouse"` on the way back, so without this row
+    // the yard cannot tell it from a tool that never went anywhere — and the
+    // obvious next move is sending it back to the site that just said no.
+    // Amber rather than destructive: the tool is fine, the delivery isn't.
+    return {
+      tone: "border-status-attention/40 border-l-status-attention bg-status-attention/10",
+      detailTone: "text-status-attention-foreground",
+      flag: "Refused",
+      flagTone: "bg-status-attention text-white",
+      Icon: UndoIcon,
+      detail: isWarehouseLocation(tool.location)
+        ? `The site turned it away — back at ${tool.location}, still to deliver`
+        : `The site turned it away — on its way back with ${tool.location}`,
     }
   }
 

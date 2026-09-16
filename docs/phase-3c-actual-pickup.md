@@ -1,3 +1,17 @@
+> **Superseded by [`phase-4-trips.md`](./phase-4-trips.md) (2026-09-15). Not
+> built, and not to be built.**
+>
+> This slice was "the driver collects the tools." Once a trip is an ordered list
+> of stops, that is simply a **collect at a stop** — the same row, the same
+> workflow and the same screen a delivery uses, with no pickup-specific route,
+> action or component. Its left-behind case survives intact as
+> `triptool.state = "Skipped"`, which writes `statusNew` and nothing else,
+> exactly as specified below.
+>
+> Kept as the record of what the pickup lifecycle was meant to do, and of the
+> decisions phase 4 inherited from it — `Returned` as the terminal status, and
+> the partial-pickup rule.
+
 # Phase 3C — actual pickup
 
 Read [`phase-3-pickup-lifecycle.md`](./phase-3-pickup-lifecycle.md) first.

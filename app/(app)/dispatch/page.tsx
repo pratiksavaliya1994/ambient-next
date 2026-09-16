@@ -1,103 +1,28 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { Suspense } from "react"
-import { ListIcon } from "lucide-react"
-
-import { DispatchBoard } from "@/components/dispatch-board"
-import { buttonVariants } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
-import { listFieldPms, listUsers } from "@/lib/bubble/reference"
-import { listRequestsByStatus } from "@/lib/bubble/requests"
-import { toDispatchSummaries } from "@/lib/dispatch/summary"
-
-export const metadata: Metadata = { title: "Dispatch" }
+import { redirect } from "next/navigation"
 
 /**
- * The board a driver/PM dispatches from: requests at `Assigned`, checked off
- * to go out under one driver. The trips already under way live on their own
- * screen, `/dispatch/active` (`app/(app)/dispatch/active/page.tsx`) — this
- * page only links there, and only fetches the count needed for that link.
+ * The old dispatch board, retired by phase 4.
  *
- * **Frontend only for now.** `update-request-status` — the Bubble workflow
- * that would move `request.status` (and every assigned tool) to `In Transit`
- * — isn't built yet, so `DispatchBoard` renders a working picker with the
- * Dispatch button disabled. See `docs/phase-2bc-dispatch-offload.md`.
+ * It ticked whole **requests** and sent them out under one driver, which is
+ * exactly the constraint this phase removed — a request's tools can now go out
+ * on several trips, under several drivers, on several days. `/trips/new` is
+ * where that happens.
  *
- * The reads themselves are cheap enough that the doc calls out no
- * `<Suspense>` split is needed, unlike the assign screen's much heavier read
- * set — one is kept anyway, matching `/requests` and `/tools`, so navigating
- * here shows a fallback rather than a blank beat.
+ * A redirect rather than a deletion because `?requestId=` links to this route
+ * are scattered through older screens and, more to the point, sitting in
+ * people's browser history and bookmarks. Carrying the param through means such
+ * a link still lands somewhere useful instead of on a 404.
  *
- * `?requestId=` lets the request detail page's own `Dispatch` button land
- * here with that request already checked, since a per-request dispatch route
- * doesn't exist — `DispatchBoard` seeds its selection from it.
+ * **The rest of this subtree is not dead yet.** `active/actions.ts` still backs
+ * the per-tool pickup buttons on requests dispatched before phase 4, which have
+ * no `triptool` rows and so no run sheet to finish them from. Delete the lot
+ * once those have drained — see `docs/phase-4-trips.md`.
  */
-export default async function DispatchPage({
+export default async function DispatchRedirect({
   searchParams,
 }: {
   searchParams: Promise<{ requestId?: string }>
 }) {
   const { requestId } = await searchParams
-
-  return (
-    <div className="flex w-full flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-medium">Dispatch</h1>
-          <p className="text-sm text-muted-foreground">
-            Send assigned requests out with a driver, and see what&rsquo;s already on the road.
-          </p>
-        </div>
-        <Link
-          href="/requests"
-          className={buttonVariants({ variant: "ghost", size: "sm", className: "text-muted-foreground" })}
-        >
-          <ListIcon />
-          Requests
-        </Link>
-      </div>
-
-      <Suspense fallback={<DispatchSkeleton />}>
-        <DispatchBody preselectedId={requestId} />
-      </Suspense>
-    </div>
-  )
-}
-
-async function DispatchBody({ preselectedId }: { preselectedId?: string }) {
-  const [assigned, inTransitCount, pms, users] = await Promise.all([
-    listRequestsByStatus("Assigned"),
-    listRequestsByStatus("In Transit").then((requests) => requests.length),
-    listFieldPms(),
-    listUsers(),
-  ])
-
-  const assignedRequests = (await toDispatchSummaries(assigned)).sort((a, b) =>
-    (a.start ?? "").localeCompare(b.start ?? "")
-  )
-
-  // `pms` and `user` are both offered — neither is an actual driver roster
-  // (see the doc's open question), so this is a quick-pick convenience and
-  // `driver` stays free text either way.
-  const driverOptions = [...new Set([...pms.map((pm) => pm.name), ...users.map((user) => user.name)])].sort((a, b) =>
-    a.localeCompare(b)
-  )
-
-  return (
-    <DispatchBoard
-      assignedRequests={assignedRequests}
-      activeTripCount={inTransitCount}
-      driverOptions={driverOptions}
-      preselectedId={preselectedId}
-    />
-  )
-}
-
-function DispatchSkeleton() {
-  return (
-    <div className="flex flex-col gap-6">
-      <Skeleton className="h-64 w-full rounded-xl" />
-      <Skeleton className="h-40 w-full rounded-xl" />
-    </div>
-  )
+  redirect(requestId ? `/trips/new?requestId=${requestId}` : "/trips/new")
 }

@@ -2,7 +2,7 @@ import { AssignedToolRow } from "@/components/assigned-tool-row"
 import { Badge } from "@/components/ui/badge"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { assignedLabel, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
-import type { ToolTripState } from "@/lib/dispatch/summary"
+import type { ToolTripState } from "@/lib/dispatch/tool-state"
 import { cn } from "@/lib/utils"
 
 /**

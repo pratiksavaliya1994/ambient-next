@@ -35,28 +35,28 @@ import type { ToolRequest } from "@/lib/bubble/requests"
  * button. `offloadAction` itself re-checks the same thing server-side — this
  * is the UX half, not the only guard.
  *
- * `leftBehindCount` is the resolved half of the same idea: those stops were
- * answered, with "couldn't take it". They don't block, but the dialog must
- * stop claiming it delivers *every* tool — `offloadAction` writes only the
- * ones that were actually collected.
+ * `undeliverableCount` is the resolved half of the same idea: those stops were
+ * answered — with "couldn't take it" at a collect, or "we won't have it" at the
+ * drop. Neither blocks, but the dialog must stop claiming it delivers *every*
+ * tool — `offloadAction` writes only the ones that can truthfully land.
  */
 export function CompleteDeliveryAction({
   request,
   toolCount,
   pendingPickupCount,
-  leftBehindCount,
+  undeliverableCount,
 }: {
   request: ToolRequest
   toolCount: number
   pendingPickupCount: number
-  /** Assigned tools the driver reached but couldn't collect — not delivered. */
-  leftBehindCount: number
+  /** Assigned tools never collected, or refused at the site — not delivered either way. */
+  undeliverableCount: number
 }) {
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<OffloadState>(INITIAL_OFFLOAD_STATE)
   const [pending, startTransition] = useTransition()
   const router = useRouter()
-  const deliverableCount = toolCount - leftBehindCount
+  const deliverableCount = toolCount - undeliverableCount
 
   if (pendingPickupCount > 0) {
     return (
@@ -72,8 +72,9 @@ export function CompleteDeliveryAction({
     )
   }
 
-  // Every tool was left behind, so there is no drop to record. `offloadAction`
-  // refuses this too; here it's a reason rather than an error after the fact.
+  // Nothing on this request can land, so there is no drop to record.
+  // `offloadAction` refuses this too; here it's a reason rather than an error
+  // after the fact.
   if (toolCount > 0 && deliverableCount === 0) {
     return (
       <div className="flex flex-col items-end gap-1">
@@ -81,7 +82,7 @@ export function CompleteDeliveryAction({
           <PackageCheckIcon />
           Complete delivery
         </Button>
-        <span className="text-xs text-status-attention-foreground">No tools were collected</span>
+        <span className="text-xs text-status-attention-foreground">No tools reached the job</span>
       </div>
     )
   }
@@ -121,8 +122,8 @@ export function CompleteDeliveryAction({
           <DialogTitle>Complete delivery?</DialogTitle>
           <DialogDescription>
             Marks this load Delivered, at <span className="font-medium">{request.job}</span> —{" "}
-            {leftBehindCount > 0
-              ? `${deliverableCount} of ${toolCount} tools, with ${leftBehindCount} left behind at ${leftBehindCount === 1 ? "its site" : "their sites"}.`
+            {undeliverableCount > 0
+              ? `${deliverableCount} of ${toolCount} tools, with ${undeliverableCount} not delivered.`
               : `${toolCount} ${toolCount === 1 ? "tool" : "tools"}.`}
           </DialogDescription>
         </DialogHeader>

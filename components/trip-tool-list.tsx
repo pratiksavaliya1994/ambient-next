@@ -1,5 +1,5 @@
 import { AssignedToolRow } from "@/components/assigned-tool-row"
-import type { TripTool } from "@/lib/dispatch/summary"
+import type { TripTool } from "@/lib/dispatch/tool-state"
 
 /**
  * A request's tools on the Dispatch board and Active trips cards — the same

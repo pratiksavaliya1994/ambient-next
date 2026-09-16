@@ -35,8 +35,8 @@ import { signOutAction } from "@/lib/auth/actions"
  */
 const NAV_ITEMS = [
   { title: "Requests", href: "/requests", icon: ClipboardListIcon },
-  { title: "Dispatch", href: "/dispatch", icon: RouteIcon },
-  { title: "Active trips", href: "/dispatch/active", icon: NavigationIcon },
+  { title: "Trips", href: "/trips", icon: NavigationIcon },
+  { title: "New trip", href: "/trips/new", icon: RouteIcon },
   { title: "New delivery request", href: "/requests/new", icon: TruckIcon },
   { title: "New pickup request", href: "/requests/new/pickup", icon: ShoppingCartIcon },
   { title: "Tools", href: "/tools", icon: MapPinIcon },

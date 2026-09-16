@@ -20,7 +20,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { ItemGroup } from "@/components/ui/item"
 import { Spinner } from "@/components/ui/spinner"
-import type { CandidateTool } from "@/lib/bubble/assigned-tools-types"
+import type { CandidateTool, ToolRequestClaim } from "@/lib/bubble/assigned-tools-types"
 
 /** Bubble's `text contains` on a one-letter needle is the whole table. */
 const MIN_QUERY = 2
@@ -35,16 +35,22 @@ const MIN_QUERY = 2
  * candidates and this is the only way to reach them.
  */
 export function ExtraToolsPicker({
+  requestId,
   picked,
   onAdd,
   onRemove,
 }: {
+  /** Excluded from the claim lookup — this request's own rows aren't a conflict with itself. */
+  requestId: string
   picked: Set<string>
   onAdd: (tool: CandidateTool) => void
   onRemove: (toolId: string) => void
 }) {
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<CandidateTool[] | null>(null)
+  // Resolved by the same call that returns the rows, so a result never renders
+  // for a tick without its warning — see `searchToolsAction`.
+  const [heldElsewhere, setHeldElsewhere] = useState<Map<string, ToolRequestClaim>>(() => new Map())
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -59,7 +65,9 @@ export function ExtraToolsPicker({
     setError(null)
     startTransition(async () => {
       try {
-        setResults(await searchToolsAction(needle))
+        const { tools, claims } = await searchToolsAction(needle, requestId)
+        setResults(tools)
+        setHeldElsewhere(new Map(claims.map((claim) => [claim.toolId, claim])))
       } catch {
         setError("Bubble didn't answer. Try again.")
       }
@@ -140,6 +148,7 @@ export function ExtraToolsPicker({
                 tool={tool}
                 picked={picked.has(tool.id)}
                 usedElsewhere={false}
+                heldBy={heldElsewhere.get(tool.id)}
                 onAdd={() => onAdd(tool)}
                 onRemove={() => onRemove(tool.id)}
               />

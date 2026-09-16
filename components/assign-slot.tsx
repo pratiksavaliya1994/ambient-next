@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { PlusIcon, SearchIcon, XIcon } from "lucide-react"
+import { LockIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react"
 
 import { ToolRow } from "@/components/tool-row"
 import { Badge } from "@/components/ui/badge"
@@ -19,7 +19,12 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { ItemGroup } from "@/components/ui/item"
-import { assignedLabel, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
+import {
+  assignedLabel,
+  type AssignSlot,
+  type CandidateTool,
+  type ToolRequestClaim,
+} from "@/lib/bubble/assigned-tools-types"
 import { cn } from "@/lib/utils"
 
 /**
@@ -32,12 +37,19 @@ import { cn } from "@/lib/utils"
  * is equally fine, since what a job needs is the loader's call, not a number
  * typed on the request. The count reads `N assigned · M requested` for exactly
  * that reason.
+ *
+ * Short is also **recoverable later**: this card is reachable while the request
+ * is out on the road, so a slot can be filled in after the rest of the load has
+ * already gone. The tools that went are in `lockedIds` and lose their remove
+ * control; everything else here works unchanged.
  */
 export function AssignSlotCard({
   slot,
   chosen,
   candidates,
   usedElsewhere,
+  lockedIds,
+  heldElsewhere,
   onAdd,
   onRemove,
 }: {
@@ -45,6 +57,14 @@ export function AssignSlotCard({
   chosen: CandidateTool[]
   candidates: CandidateTool[]
   usedElsewhere: Set<string>
+  /**
+   * Tools already on a truck or landed, plus the ones a saved trip is on its way
+   * to collect — listed, but not removable. See `isLockedToTrip` and
+   * `ToolTripClaim`; the panel is what unions the two.
+   */
+  lockedIds: Set<string>
+  /** Tools a *different* open request already holds — a warning on the row, not a block. */
+  heldElsewhere: Map<string, ToolRequestClaim>
   onAdd: (tool: CandidateTool) => void
   onRemove: (toolId: string) => void
 }) {
@@ -136,6 +156,8 @@ export function AssignSlotCard({
                         tool={tool}
                         picked={picked}
                         usedElsewhere={usedElsewhere.has(tool.id)}
+                        locked={lockedIds.has(tool.id)}
+                        heldBy={heldElsewhere.get(tool.id)}
                         onAdd={() => onAdd(tool)}
                         onRemove={() => onRemove(tool.id)}
                       />
@@ -163,23 +185,43 @@ export function AssignSlotCard({
         </Empty>
       ) : (
         <ul className="flex flex-col gap-1.5 border-l-2 border-muted-foreground/25 pl-3">
-          {chosen.map((tool) => (
-            <li key={tool.id} className="flex items-center gap-3 rounded-md border bg-background px-2.5 py-1.5">
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm" title={tool.name}>
-                  {tool.name}
-                </span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {tool.location}
-                  {tool.floor && ` · Floor ${tool.floor}`}
-                  {` · ${tool.status}`}
-                </span>
-              </div>
-              <Button variant="ghost" size="icon-sm" onClick={() => onRemove(tool.id)} aria-label={`Remove ${tool.name}`}>
-                <XIcon />
-              </Button>
-            </li>
-          ))}
+          {chosen.map((tool) => {
+            const locked = lockedIds.has(tool.id)
+
+            return (
+              <li key={tool.id} className="flex items-center gap-3 rounded-md border bg-background px-2.5 py-1.5">
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm" title={tool.name}>
+                    {tool.name}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {tool.location}
+                    {tool.floor && ` · Floor ${tool.floor}`}
+                    {` · ${tool.status}`}
+                  </span>
+                </div>
+                {/* Gone, or spoken for by a trip. The badge replaces the X
+                    rather than sitting beside a disabled one: either way this
+                    tool does not come back off the request from here — the
+                    notice at the top of the panel says which case it is. */}
+                {locked ? (
+                  <Badge variant="outline" className="shrink-0">
+                    <LockIcon />
+                    On a trip
+                  </Badge>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => onRemove(tool.id)}
+                    aria-label={`Remove ${tool.name}`}
+                  >
+                    <XIcon />
+                  </Button>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

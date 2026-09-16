@@ -1,11 +1,12 @@
 "use client"
 
 import { useMemo, useState, useTransition } from "react"
-import { AlertCircleIcon, RotateCcwIcon, SaveIcon, XIcon } from "lucide-react"
+import { AlertCircleIcon, LockIcon, RotateCcwIcon, SaveIcon, XIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { INITIAL_CREATE_STATE, type CreateRequestState } from "@/app/(app)/requests/action-state"
 import { assignToolsAction } from "@/app/(app)/requests/[requestId]/assign/actions"
+import { AssignLockNotice } from "@/components/assign-lock-notice"
 import { AssignSlotCard } from "@/components/assign-slot"
 import { ExtraToolsPicker } from "@/components/extra-tools-picker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -20,7 +21,10 @@ import {
   type AssignmentEntry,
   type AssignSlot,
   type CandidateTool,
+  type ToolRequestClaim,
+  type ToolTripClaim,
 } from "@/lib/bubble/assigned-tools-types"
+import { isLockedToTrip } from "@/lib/bubble/tool-enums"
 
 /**
  * The assign screen's one client island.
@@ -38,18 +42,38 @@ import {
  * **stored** `toolType` string), which are extras, and a growing pool of
  * everything known about a tool id — the pool grows because the extras dialog
  * fetches tools the page never loaded.
+ *
+ * **A request stays assignable after it has been dispatched.** A load that went
+ * out short is the case the partial statuses exist for, and its missing tools
+ * have to be fillable later or the request can never finish. What that costs is
+ * this screen now routinely renders tools it must refuse to unpick — the ones
+ * already on a truck or already dropped, *and* the ones a saved trip is on its
+ * way to collect — so `lockedIds` takes their remove control away.
+ * `assignToolsAction` rejects the save regardless; this is so nobody spends a
+ * minute building one that will be rejected.
  */
 export function AssignToolsPanel({
   requestId,
   slots,
   extraToolIds,
   pool,
+  claims,
+  requestClaims,
   unresolvedSlots,
 }: {
   requestId: string
   slots: AssignSlot[]
   extraToolIds: string[]
   pool: CandidateTool[]
+  /** Which of this request's tools a saved trip already holds. See `ToolTripClaim`. */
+  claims: ToolTripClaim[]
+  /**
+   * Which *offered* tools a different open request already holds. Note the
+   * different population to `claims`: that one covers only what this request
+   * has, because it gates removal; this covers everything the pickers show,
+   * because it warns before an addition. See `ToolRequestClaim`.
+   */
+  requestClaims: ToolRequestClaim[]
   /** Requested names that matched no `toolstype` row — those slots offer no candidates. */
   unresolvedSlots: number
 }) {
@@ -80,6 +104,44 @@ export function AssignToolsPanel({
     for (const ids of picks.values()) for (const id of ids) used.add(id)
     return used
   }, [picks, extras])
+
+  const claimsByTool = useMemo(() => new Map(claims.map((claim) => [claim.toolId, claim])), [claims])
+
+  const heldElsewhere = useMemo(
+    () => new Map(requestClaims.map((claim) => [claim.toolId, claim])),
+    [requestClaims]
+  )
+
+  /**
+   * The two reasons a tool on this request can't be unpicked here, split
+   * because the way out of each differs — see `AssignLockNotice`.
+   *
+   * `isLockedToTrip` reads the pool as the page rendered it, the same live
+   * `statusNew` the server guard does. A claim is a *separate* question and has
+   * to be, because `statusNew` says nothing about a trip until the tool is
+   * physically collected: a tool planned onto a saved trip still reads
+   * `Assigned`. Neither lock is ever lost between renders — a tool only gains
+   * one — so a stale copy can only be over-permissive, which the server catches.
+   *
+   * A tool mid-trip answers to both. "Gone out" wins: it is the stronger thing
+   * to say, and the only one of the two with nothing to be done about it.
+   */
+  const locks = useMemo(() => {
+    const gone: string[] = []
+    const claimed: ToolTripClaim[] = []
+    for (const id of usedIds) {
+      const claim = claimsByTool.get(id)
+      if (isLockedToTrip(known.get(id)?.status ?? "")) gone.push(id)
+      else if (claim) claimed.push(claim)
+    }
+    return { gone, claimed }
+  }, [usedIds, known, claimsByTool])
+
+  const lockedIds = useMemo(() => {
+    const locked = new Set<string>(claimsByTool.keys())
+    for (const tool of known.values()) if (isLockedToTrip(tool.status)) locked.add(tool.id)
+    return locked
+  }, [known, claimsByTool])
 
   const requested = slots.filter((slot) => !slot.consumable).reduce((sum, slot) => sum + slot.requested, 0)
   const filled = [...picks.values()].reduce((sum, ids) => sum + ids.length, 0)
@@ -116,6 +178,7 @@ export function AssignToolsPanel({
   }
 
   function removeFromSlot(toolType: string, toolId: string) {
+    if (lockedIds.has(toolId)) return
     setPicks((current) => {
       const next = new Map(current)
       next.set(
@@ -133,6 +196,7 @@ export function AssignToolsPanel({
   }
 
   function removeExtra(toolId: string) {
+    if (lockedIds.has(toolId)) return
     setExtras((current) => current.filter((id) => id !== toolId))
   }
 
@@ -188,6 +252,8 @@ export function AssignToolsPanel({
         </Alert>
       )}
 
+      <AssignLockNotice gone={locks.gone.length} claimed={locks.claimed} />
+
       {/* The rows committed and a `tools.status` write didn't — not a failure,
           but not silent either: saving again is what clears it. */}
       {state.status === "created" && state.warning && (
@@ -231,6 +297,8 @@ export function AssignToolsPanel({
                     chosen={chosen}
                     candidates={slot.typeId ? (candidatesByType.get(slot.typeId) ?? []) : []}
                     usedElsewhere={usedIds}
+                    lockedIds={lockedIds}
+                    heldElsewhere={heldElsewhere}
                     onAdd={(tool) => addToSlot(slot.toolType, tool)}
                     onRemove={(toolId) => removeFromSlot(slot.toolType, toolId)}
                   />
@@ -247,6 +315,7 @@ export function AssignToolsPanel({
           <CardDescription>Anything going on the truck that nobody asked for.</CardDescription>
           <CardAction className="self-center">
             <ExtraToolsPicker
+              requestId={requestId}
               picked={usedIds}
               onAdd={addExtra}
               onRemove={(toolId) => removeExtra(toolId)}
@@ -278,14 +347,21 @@ export function AssignToolsPanel({
                       </span>
                     </div>
                     <Badge variant="outline">Extra</Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => removeExtra(tool.id)}
-                      aria-label={`Remove ${tool.name}`}
-                    >
-                      <XIcon />
-                    </Button>
+                    {lockedIds.has(tool.id) ? (
+                      <Badge variant="outline" className="shrink-0">
+                        <LockIcon />
+                        On a trip
+                      </Badge>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => removeExtra(tool.id)}
+                        aria-label={`Remove ${tool.name}`}
+                      >
+                        <XIcon />
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -19,7 +19,7 @@
  * the wire parameter name is deliberate.
  */
 
-import type { ToolCondition } from "@/lib/bubble/enums"
+import type { ToolCondition } from "@/lib/bubble/tool-enums"
 
 export type ToolConditionUpdate = { toolId: string; condition: ToolCondition }
 

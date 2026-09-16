@@ -6,7 +6,6 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --color-location-foreground: var(--location-foreground);
   --color-card-both: color-mix(in oklab, var(--both) var(--card-wash), var(--card));
   --color-card-pickup: color-mix(in oklab, var(--pickup) var(--card-wash), var(--card));
   --color-card-delivery: color-mix(in oklab, var(--delivery) var(--card-wash), var(--card));
@@ -124,11 +123,6 @@
   --status-attention-foreground: oklch(0.47 0.12 90);
   --status-repair: oklch(0.72 0.17 45);
   --status-repair-foreground: oklch(0.46 0.15 45);
-  /* Location names on the Tools dashboard. A teal deliberately clear of every
-     accent already in use — the status ramp (145/230/90/45), the movement
-     hues (250/155/293) and the amber --primary (87) — so a site name never
-     reads as a status. Same darken-for-light / lighten-for-dark pairing. */
-  --location-foreground: oklch(0.47 0.09 200);
 }
 
 .dark {
@@ -178,7 +172,6 @@
   --status-attention-foreground: oklch(0.88 0.1 90);
   --status-repair: oklch(0.72 0.17 45);
   --status-repair-foreground: oklch(0.84 0.1 45);
-  --location-foreground: oklch(0.84 0.08 200);
 }
 
 /* A slim, tinted scrollbar for the small scroll areas that sit inside cards.

@@ -36,16 +36,36 @@ Delivery solved this with `assignedtools`. Pickup reuses it unchanged.
 
 ## Checklist
 
-- [ ] **1. Bubble Studio** — `new-pickup-request` gains `assignments`, the
-      fan-out step, `status = "Assigned"`, and the `Pickup Requested` list-change
-- [ ] **2. The picker** — `PickupSelection.typeName` + `assignmentsOfPickup`
-- [ ] **3. Schema + payload** — `assignments` through to the workflow call
-- [ ] **4. Detail page** — requested vs recorded for pickup requests
-- [ ] **5. Next-action fix** — branch on `request.pickup`, disabled until 3C
+- [x] **1. Bubble Studio** — `new-pickup-request` gains **`toolIds`** (see the
+      note in §1), the fan-out step, `status = "Assigned"`, and the
+      `Pickup Requested` list-change
+- [x] **2. The picker** — `PickupSelection.typeName` + `toolIdsOfPickup`
+- [x] **3. Schema + payload** — `toolIds` through to the workflow call
+- [ ] **4. Detail page** — requested vs recorded for pickup requests. Wording
+      only, and the lowest-value item here: phase 4 replaced this card's body
+      with per-tool trip progress, so the counts are already direction-correct
+      and just the heading still reads "Requested tools" for both
+- [x] **5. Next-action fix** — delivered by phase 4 rather than here.
+      `PICKUP_NEXT_ACTIONS` (`app/(app)/requests/page.tsx`) and `NextAction`
+      both branch on `isPickupRequest`, so the "Assign tools" bug is gone
 
 ---
 
 ## 1. Bubble Studio — `new-pickup-request`
+
+> **Superseded 2026-09-15 by
+> [`bubble-trip-workflows-spec.md`](./bubble-trip-workflows-spec.md) §10, which
+> is the build sheet to follow.** The `assignments` object parameter described
+> in §1a/§1b below was **not built and is not to be built**: the live workflow
+> takes everything as text/primitives, so the parameter became a single
+> **`toolIds` text list**, and the fan-out runs over
+> `Search for tools (unique id is in toolIds)` instead of over the parameter.
+>
+> That change turned out to be an improvement rather than a concession —
+> iterating over `tools` rows means `toolType` and `extra` are read off each
+> row *inside* Bubble, so the browser chooses which rows are written and never
+> what is written about them. §1c, §1d and everything from §2 on still stand
+> exactly as written.
 
 Four additions to the existing workflow. **No new workflow.**
 
@@ -143,12 +163,16 @@ at the write site so nobody "fixes" it to a type name later.
 
 | File | Change |
 | --- | --- |
-| `lib/schemas/pickup-request.ts` | Add `assignments: z.array(assignmentEntrySchema)`, **importing `assignmentEntrySchema` from `lib/schemas/assignment.ts`** rather than redefining the shape |
-| `components/pickup-tool-picker.tsx` | `PickupSelection` gains `typeName: string \| null`; `selectionOfTools` seeds it from `tool.typeName`; new export `assignmentsOfPickup(selected): AssignmentEntry[]` mapping `{ toolId: id, extra: false, toolType: name }` — the physical name, per §2. `extra` is always `false`: on a pickup every tool *is* the request |
-| `components/pickup-request-form.tsx` | `updateSelected` also sets `assignments` via `setValue` |
-| `lib/bubble/requests.ts` | `createPickupToolRequest` sends `assignments` (and `toolIds`, if you took that route in §1d) in the `new-pickup-request` payload |
+**As built**, following §1's revision — ids only, no object parameter:
 
-`assignmentsOfPickup` sits beside the existing `toolLinesOfPickup` and
+| File | Change |
+| --- | --- |
+| `lib/schemas/pickup-request.ts` | Add `toolIds: z.array(z.string().min(1))`, plus a `refine` that it matches `tools.length` — two projections of one selection that must not drift |
+| `components/pickup-tool-picker.tsx` | `PickupSelection` gains `typeName: string \| null`; `selectionOfTools` seeds it from `tool.typeName`; new export `toolIdsOfPickup(selected): string[]`. `extra` and `toolType` are **not** sent — Bubble derives both per row, per §1's note |
+| `components/pickup-request-form.tsx` | `updateSelected` also sets `toolIds` via `setValue` |
+| `lib/bubble/requests.ts` | `createPickupToolRequest` sends `toolIds` in the `new-pickup-request` payload |
+
+`toolIdsOfPickup` sits beside the existing `toolLinesOfPickup` and
 `changedConditionLines` — three pure derivations off the same `Map`, which is
 why the picker keeps its id-keyed selection state rather than a `Set` of names.
 

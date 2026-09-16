@@ -12,7 +12,9 @@ Next.js frontend for the Tipp Floor Covering / Ambient Flooring tool workflow. *
 
 **In progress — phase 2:** the request lifecycle (assign → dispatch → offload) and the tool location lifecycle. Design and build sheets live in [`docs/phase-2-lifecycle.md`](docs/phase-2-lifecycle.md); **read that before touching `tools`, `assignedtools`, or `request.status`.** The Bubble Studio steps are in [`docs/bubble-request-status-workflow.md`](docs/bubble-request-status-workflow.md). **A delivery no longer assumes its tools start at the Warehouse** — see [`docs/phase-2d-site-to-site-transfers.md`](docs/phase-2d-site-to-site-transfers.md) before changing dispatch, offload, or anything that decides where a tool is.
 
-**Designed, not started — phase 3:** the **pickup** lifecycle, mirroring phase 2 on the same fields (`New → Assigned → In Transit → Returned`). Master design in [`docs/phase-3-pickup-lifecycle.md`](docs/phase-3-pickup-lifecycle.md), one build sheet per slice ([3A](docs/phase-3a-condition-split.md) condition split · [3B](docs/phase-3b-pickup-assignments.md) pickup assignments · [3C](docs/phase-3c-actual-pickup.md) actual pickup · [3D](docs/phase-3d-warehouse-offload.md) warehouse offload). **3A goes first** — it splits condition off `tools.statusNew` into a new `tools.condition` field, and 3C would otherwise overwrite the PM's condition pick. No new Bubble workflow is needed in phase 3.
+**Phase 3 — the pickup lifecycle.** 3A (condition split) is done. 3B (pickup requests record their physical tools) was absorbed into phase 4 and its Next.js half is built. **3C and 3D are cancelled** — phase 4 turned both into ordinary trip stops. Master design in [`docs/phase-3-pickup-lifecycle.md`](docs/phase-3-pickup-lifecycle.md); its decisions all still hold.
+
+**In progress — phase 4: trips.** Dispatch stops being request-shaped. A trip becomes a real Bubble row — a driver and an **ordered list of stops**, each with tools to collect and tools to drop — so a request's tools can go out on several trips, a partially-sent request stays open, and a site-to-site collect is a *stop* rather than something nested under the request that wanted it. Master design in [`docs/phase-4-trips.md`](docs/phase-4-trips.md); **the Bubble Studio half is not built** — build sheet in [`docs/bubble-trip-workflows-spec.md`](docs/bubble-trip-workflows-spec.md). **Read the master before touching `request.status`, `assignedtools`, or anything under `lib/trips/`.**
 
 **Not built:** approve/reject, QR scanning, GPS.
 
@@ -101,7 +103,7 @@ Header row, 24 business fields. The ones this app writes:
 | `notes` | text | |
 | `tentative`, `completed` | yes/no | |
 | `color` | text | Calendar colour: `#2299ff` when delivery, `#ff7744` pickup-only. |
-| `order` | number | `100` on create. Doubles as the **stop sequence** on a driver's trip: `/dispatch/active` writes `101, 102, 103…` when a route is reordered, and offload puts it back to `100`. Offset above `100` deliberately — the old Bubble UI's calendar sorts on this field, so a sequenced row keeps its existing place there. See `isSequenced`/`stopPosition` in `lib/bubble/enums.ts` and [`docs/bubble-set-request-order-spec.md`](docs/bubble-set-request-order-spec.md). |
+| `order` | number | `100` on create. **Vestigial since phase 4** — it briefly doubled as a driver's stop sequence (`101, 102, …`), but stops live on `tripstop.seq` now and nothing reads this any more. Left at whatever each row holds rather than cleared: the old Bubble UI's calendar sorts on it, so resetting ~1,550 rows would visibly reshuffle a UI this repo doesn't own. See [`docs/bubble-set-request-order-spec.md`](docs/bubble-set-request-order-spec.md) §7 for the reasoning, now historical. |
 | `searchable` | text | What Bubble's search box matches: job `description` + ` - ` + date as `M-D-YYYY h:mm am` ET. |
 
 Not written: `pictures`, `onClickUp`, `realGC`, `Slug`.
@@ -195,7 +197,7 @@ All 1,445 jobs go to the combobox; `toJobOption` strips `description` (~100KB, s
 - App Router, TypeScript, server actions for all mutations
 - One Bubble client module (`lib/bubble/client.ts`) — retry, rate limiting, pagination and error shaping live there and nowhere else
 - Domain modules expose domain functions (`createToolRequest`, `listRecentRequests`), not raw fetches
-- Option set values as `as const` unions in `lib/bubble/enums.ts`
+- Option set values as `as const` unions in `lib/bubble/enums.ts` (request, job and location vocabulary) or `lib/bubble/tool-enums.ts` (the `tools` lifecycle — split out in phase 4 to keep either file under the 300-line cap). Trip vocabulary lives in `lib/trips/plan-types.ts`, which is pure and client-safe
 - Zod-validate every payload crossing the network boundary **in both directions** — Bubble returns loosely typed JSON and a renamed field fails silently otherwise
 - Never `fetch` Bubble from a client component
 - Prettier-enforced (`.prettierrc`): no semicolons, double quotes, 2-space indent, `es5` trailing commas, `prettier-plugin-tailwindcss` sorting classes

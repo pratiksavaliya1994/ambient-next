@@ -2,13 +2,20 @@ import "server-only"
 
 import { z } from "zod"
 
-import { bubbleListAll, bubbleRunWorkflow, BubbleError, type BubbleThing } from "@/lib/bubble/client"
-import { isAssignable, isFreeToAssign } from "@/lib/bubble/enums"
+import { bubbleListAll, bubbleListMaybeMissing, bubbleRunWorkflow, type BubbleThing } from "@/lib/bubble/client"
+import { isPickupRequest } from "@/lib/bubble/enums"
+import { isAssignable, isFreeToAssign } from "@/lib/bubble/tool-enums"
 import { NO_LOCATION } from "@/lib/bubble/pickup-tools-types"
 import { listToolTypes } from "@/lib/bubble/reference"
-import type { AssignedTool, AssignmentEntry, CandidateTool } from "@/lib/bubble/assigned-tools-types"
+import { listOpenRequestsByIds } from "@/lib/bubble/requests"
+import type {
+  AssignedTool,
+  AssignmentEntry,
+  CandidateTool,
+  ToolRequestClaim,
+} from "@/lib/bubble/assigned-tools-types"
 
-export type { AssignedTool, CandidateTool }
+export type { AssignedTool, CandidateTool, ToolRequestClaim }
 
 /**
  * Phase 2A: which physical tools a request holds (`assignedtools`), which
@@ -66,30 +73,11 @@ const toolRow = z.looseObject({
   currentUser: z.string().optional(),
 })
 
-/**
- * A `bubbleListAll` that treats "no such type" as "no rows".
- *
- * Only 404 is swallowed, and only with a warning — a type that exists and
- * errors for any other reason still throws, because an availability check that
- * silently reports "nothing is taken" is worse than a broken page.
- */
-async function listMaybeMissing(type: string, options: Parameters<typeof bubbleListAll>[1]) {
-  try {
-    return await bubbleListAll(type, options)
-  } catch (error) {
-    if (error instanceof BubbleError && error.status === 404) {
-      console.warn(`[assigned-tools] Bubble type "${type}" does not exist yet — treating as empty.`)
-      return []
-    }
-    throw error
-  }
-}
-
 /** Every `assignedtools` row for these requests, in one `in` query. */
 export async function listAssignedTools(requestIds: string[]): Promise<AssignedTool[]> {
   if (requestIds.length === 0) return []
 
-  const rows = await listMaybeMissing(ASSIGNED_TOOLS, {
+  const rows = await bubbleListMaybeMissing(ASSIGNED_TOOLS, {
     constraints: [{ key: "requestID", constraint_type: "in", value: requestIds }],
   })
 
@@ -103,6 +91,66 @@ export async function listAssignedTools(requestIds: string[]): Promise<AssignedT
       toolType: row.toolType ?? "",
       extra: row.extra ?? false,
     }))
+}
+
+/**
+ * Which of these tools a **different open request** already holds — the
+ * assign screen's warning, and the exact counterpart of `listToolClaims`.
+ *
+ * Two reads, because Bubble cannot join: the `assignedtools` rows pointing at
+ * these tools, then the requests those rows belong to, keeping only the open
+ * ones (`listOpenRequestsByIds`). A `Delivered`/`Returned` request releases its
+ * tools, which is what stops every tool that has ever been on a job from
+ * reading as claimed forever.
+ *
+ * `excludeRequestId` is the request being edited. Its own `assignedtools` rows
+ * are not a conflict with itself — without this every tool already on the
+ * request would warn about the request you are looking at.
+ *
+ * Deliberately **not** wired into `assignToolsAction`'s guards. This is
+ * information, not a gate: see `ToolRequestClaim` for why double-booking stays
+ * legal and where it is actually refused (`validatePlan`'s `duplicate-tool`).
+ *
+ * First claim wins when a tool is somehow on three requests — the warning names
+ * one, and naming one is enough to send the PM looking.
+ */
+export async function listRequestClaims(
+  toolIds: readonly string[],
+  excludeRequestId?: string
+): Promise<Map<string, ToolRequestClaim>> {
+  if (toolIds.length === 0) return new Map()
+
+  const rows = await bubbleListMaybeMissing(ASSIGNED_TOOLS, {
+    constraints: [{ key: "toolID", constraint_type: "in", value: [...toolIds] }],
+  })
+
+  const wanted = new Set(toolIds)
+  const held = rows
+    .map((raw) => assignedToolRow.parse(raw))
+    .filter(
+      (row) => row.requestID && row.toolID && row.requestID !== excludeRequestId && wanted.has(row.toolID)
+    )
+  if (held.length === 0) return new Map()
+
+  const open = new Map(
+    (await listOpenRequestsByIds([...new Set(held.map((row) => row.requestID!))])).map((request) => [
+      request.id,
+      request,
+    ])
+  )
+
+  const byTool = new Map<string, ToolRequestClaim>()
+  for (const row of held) {
+    const request = open.get(row.requestID!)
+    if (!request || byTool.has(row.toolID!)) continue
+    byTool.set(row.toolID!, {
+      toolId: row.toolID!,
+      requestId: request.id,
+      job: request.job,
+      pickup: isPickupRequest(request),
+    })
+  }
+  return byTool
 }
 
 function toCandidate(row: z.infer<typeof toolRow>, typeNameById: Map<string, string>): CandidateTool {

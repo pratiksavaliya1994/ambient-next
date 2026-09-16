@@ -4,13 +4,14 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { AssignedToolRow } from "@/components/assigned-tool-row"
+import { CloseRequestAction } from "@/components/close-request-action"
 import { CompleteDeliveryAction } from "@/components/complete-delivery-action"
 import { RequestStatusBadge, statusIcon, statusIndex } from "@/components/request-status-badge"
 import { RequestToolSlots } from "@/components/request-tool-slots"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Stepper,
   StepperIndicator,
@@ -23,10 +24,12 @@ import {
 import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { assignedLabel, buildSlots, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
-import { REQUEST_STATUS, type RequestStatus } from "@/lib/bubble/enums"
+import { isOpenRequest, isPickupRequest, requestSteps, type RequestStatus } from "@/lib/bubble/enums"
+import { listTripFlags } from "@/lib/bubble/triptool-read"
+import { listToolClaims } from "@/lib/bubble/trips-read"
 import { listToolTypes } from "@/lib/bubble/reference"
 import { getRequest, type ToolRequest } from "@/lib/bubble/requests"
-import { deriveTripStatus } from "@/lib/dispatch/summary"
+import { deriveTripStatus } from "@/lib/dispatch/tool-state"
 
 export const metadata: Metadata = { title: "Request" }
 
@@ -53,20 +56,49 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   const toolsById = new Map(resolvedTools.map((tool) => [tool.id, tool]))
   const extraTools = extraToolIds.map((id) => toolsById.get(id)).filter((tool): tool is CandidateTool => Boolean(tool))
 
+  // Which trip, if any, is carrying each of this request's tools — so the page
+  // can say "on Rosa's trip" instead of just "In Transit", now that a request's
+  // tools can be spread across several — and what the last trip made of each,
+  // which is what the amber "Not picked up" and "Refused" rows are read off.
+  const [claims, flagsByRequest] = await Promise.all([listToolClaims(toolIds), listTripFlags(toolIds)])
+
   // Every status but `New` wants this — `Assigned` to review which tools the
   // driver will have to collect en route *before* committing to dispatch,
-  // `In Transit` to watch them actually being collected, and `Delivered` to
-  // keep saying which ones never made it (`classifyTool` collapses everything
-  // else to plain once the trip is over). `New` has nothing assigned to
-  // classify. Reuses the same classification `toDispatchSummaries` gives the
-  // Dispatch board / Active trips screens, off the tools already read above,
-  // and colours each row in the tools list rather than a list of its own.
-  const tripStatus = request.status === "New" ? null : deriveTripStatus(request, assigned, toolsById)
+  // `In Transit` to watch them actually being collected, a partial to tell the
+  // tools already dropped from the ones still owed, and a terminal one to keep
+  // saying which ones never made it. `New` has nothing assigned to classify.
+  // Reuses the same classification `toDispatchSummaries` gives the Dispatch
+  // board / Active trips screens, off the tools already read above, and colours
+  // each row in the tools list rather than a list of its own.
+  const tripStatus =
+    request.status === "New"
+      ? null
+      : deriveTripStatus(request, assigned, toolsById, flagsByRequest.get(request.id))
   // Confirming or declining a pickup writes to a tool on this trip, so both
   // only mean anything once the request itself has been dispatched.
   const canPickUp = request.status === "In Transit"
   const pendingPickupCount = tripStatus?.pickupStops.reduce((sum, stop) => sum + stop.toolIds.length, 0) ?? 0
-  const leftBehindCount = tripStatus?.leftBehind.length ?? 0
+  const undeliverableCount = tripStatus?.undeliverable.length ?? 0
+
+  // An `In Transit` request with no trip row at all was dispatched under the
+  // pre-phase-4 flow. It has no run sheet to finish it from, so the old
+  // Complete-delivery path stays reachable for it. See the migration note in
+  // `docs/phase-4-trips.md`.
+  const hasLegacyTrip = request.status === "In Transit" && claims.size === 0
+  const outstandingSlots = incompleteSlots.reduce((sum, slot) => sum + (slot.requested - slot.toolIds.length), 0)
+
+  // Assigned tools a trip could still take: not yet where this request was
+  // sending them (`hasLanded`, via `deriveTripStatus`'s two landed states — the
+  // same test the builder's own pool filters on) and not already held by an
+  // open trip. Both halves are what makes "Add to a trip" honest. A partially
+  // delivered request whose every assigned tool had landed offered the link
+  // anyway, and it led to a builder the request wasn't even listed in — with no
+  // way to assign the tools it was actually short of.
+  const movableCount = tripStatus
+    ? tripStatus.tools.filter(
+        (entry) => entry.state !== "delivered" && entry.state !== "returned" && !claims.has(entry.tool.id)
+      ).length
+    : assigned.length
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -92,7 +124,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      <StatusStepper status={request.status} />
+      <StatusStepper status={request.status} steps={requestSteps(request)} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
         {/* Left column — the request itself */}
@@ -147,21 +179,26 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
         {/* Right column — tools to assign + materials */}
         <div className="flex flex-col gap-6">
           <Card data-size="sm">
-            <CardHeader>
-              <CardTitle className="text-base">Requested tools</CardTitle>
-              <span className="text-sm text-muted-foreground tabular-nums">
-                {assignedLabel(assignedCount(slots), requestedCount(slots))}
-                {extraToolIds.length > 0 &&
-                  ` · ${extraToolIds.length} extra ${extraToolIds.length === 1 ? "tool" : "tools"}`}
-              </span>
-              <CardAction>
+            <CardHeader className="flex flex-wrap items-start gap-x-4 gap-y-2">
+              <div className="flex flex-col gap-1">
+                <CardTitle className="text-base">Requested tools</CardTitle>
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  {assignedLabel(assignedCount(slots), requestedCount(slots))}
+                  {extraToolIds.length > 0 &&
+                    ` · ${extraToolIds.length} extra ${extraToolIds.length === 1 ? "tool" : "tools"}`}
+                </span>
+              </div>
+              <div className="ml-auto">
                 <NextAction
                   request={request}
                   toolCount={assigned.length}
                   pendingPickupCount={pendingPickupCount}
-                  leftBehindCount={leftBehindCount}
+                  undeliverableCount={undeliverableCount}
+                  outstandingSlots={outstandingSlots}
+                  movableCount={movableCount}
+                  hasLegacyTrip={hasLegacyTrip}
                 />
-              </CardAction>
+              </div>
             </CardHeader>
             <CardContent>
               {incompleteSlots.length > 0 && (
@@ -254,78 +291,144 @@ function assignedCount(slots: AssignSlot[]): number {
 }
 
 /**
- * The one thing to do next, from the request's status.
+ * What can be done next, from the request's status and what is actually left
+ * outstanding.
  *
- * `Assigned` gets two actions: `Edit assignment` (the assign screen, in case
- * the load needs to change) and `Dispatch`, which sends the driver to
- * `/dispatch` — a shared board across many requests, not a per-request route
- * — with this request preselected via `?requestId=`, since `DispatchBoard`
- * reads that to seed its checkbox state. `Delivered` is terminal: the
- * lifecycle is over, so this renders a status pill rather than a dead button.
+ * Since phase 4 this page is **read-only about trips**: a request no longer
+ * dispatches itself, because its tools can go out on several different trips
+ * under several different drivers. "Add to a trip" is a link into the builder,
+ * not an action here — and it only appears when the builder would have
+ * something of this request's to show (`movableCount`), since a request whose
+ * every assigned tool has landed is not waiting on a drive, it is waiting on
+ * the tools nobody assigned.
+ *
+ * Which is the other half: **assigning stays open for the whole life of an
+ * open request**, not just before dispatch. A load that goes out short is
+ * exactly what the partial statuses exist for, and until this it was a dead
+ * end — the trip left, the button vanished, and the missing tools could never
+ * be added. `assignToolsAction` keeps the status from sliding back to
+ * `Assigned` and the assign screen locks whatever has already gone.
+ *
+ * Pickup is the one exception, which is a live bug fixed in passing: a
+ * pickup-only request offered "Assign tools" pointing at a screen built
+ * entirely around requested tool *types* and their quantities — which a pickup
+ * request does not have, since its physical tools are named at creation.
+ *
+ * Both terminal values render a pill rather than a dead button. So does an
+ * `In Transit` request with nothing left to decide, which is the only case
+ * where there is genuinely nothing to offer.
  */
 function NextAction({
   request,
   toolCount,
   pendingPickupCount,
-  leftBehindCount,
+  undeliverableCount,
+  outstandingSlots,
+  movableCount,
+  hasLegacyTrip,
 }: {
   request: ToolRequest
   toolCount: number
   /** Off-site tools still waiting to be collected — blocks delivery. See `CompleteDeliveryAction`. */
   pendingPickupCount: number
-  /** Off-site tools the driver reached but couldn't take — doesn't block, but isn't delivered either. */
-  leftBehindCount: number
+  /** Tools never collected or turned away at the site — doesn't block, but isn't delivered either. */
+  undeliverableCount: number
+  /** Requested units never assigned — what makes "Close request" meaningful. */
+  outstandingSlots: number
+  /** Assigned tools not yet where this request was sending them — what a trip would carry. */
+  movableCount: number
+  /**
+   * `In Transit` under the **pre-trip** flow — dispatched before phase 4, so it
+   * has no `triptool` rows and no run sheet to finish it from. The old
+   * Complete-delivery path stays reachable for exactly these until they drain;
+   * see `docs/phase-4-trips.md`.
+   */
+  hasLegacyTrip: boolean
 }) {
-  if (request.status === "New") {
+  const pickup = isPickupRequest(request)
+  const terminal = pickup ? "Returned" : "Delivered"
+
+  if (!isOpenRequest(request.status)) {
     return (
-      <Link href={`/requests/${request.id}/assign`} className={buttonVariants({ size: "sm" })}>
-        <WrenchIcon />
-        Assign tools
-      </Link>
+      <Badge className="border-transparent bg-status-ok/15 text-sm text-status-ok-foreground">
+        <CheckIcon className="size-3.5" />
+        {request.status}
+      </Badge>
     )
   }
 
-  if (request.status === "Assigned") {
-    return (
-      <div className="flex items-center gap-1.5">
-        <Link href={`/requests/${request.id}/assign`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-          <WrenchIcon />
-          Edit assignment
-        </Link>
-        <Link href={`/dispatch?requestId=${request.id}`} className={buttonVariants({ size: "sm" })}>
-          <TruckIcon />
-          Dispatch
-        </Link>
-      </div>
-    )
-  }
+  const partial = request.status === "Partially Delivered" || request.status === "Partially Returned"
+  const dispatched = request.status !== "New" && request.status !== "Assigned"
+  const legacy = request.status === "In Transit" && hasLegacyTrip
 
-  if (request.status === "In Transit") {
-    return (
-      <CompleteDeliveryAction
-        request={request}
-        toolCount={toolCount}
-        pendingPickupCount={pendingPickupCount}
-        leftBehindCount={leftBehindCount}
-      />
-    )
-  }
+  // A pickup names its tools at creation, so there is no type-and-quantity
+  // assignment to edit. Once a request is on the road the link narrows to the
+  // one job still worth doing from here — filling the slots that went out
+  // short; swapping tools around a load already moving is not it.
+  const canAssign = !pickup && (!dispatched || outstandingSlots > 0)
+  const assignLabel = dispatched ? "Assign remaining" : request.status === "New" ? "Assign tools" : "Edit assignment"
+  const nothingToOffer = !canAssign && movableCount === 0 && !partial && !legacy
 
   return (
-    <Badge className="border-transparent bg-status-ok/15 text-sm text-status-ok-foreground">
-      <CheckIcon className="size-3.5" />
-      Delivered
-    </Badge>
+    <div className="flex flex-wrap items-center justify-end gap-1.5">
+      {/* Legacy only — see `hasLegacyTrip`. Everything else finishes at a trip stop. */}
+      {legacy && (
+        <CompleteDeliveryAction
+          request={request}
+          toolCount={toolCount}
+          pendingPickupCount={pendingPickupCount}
+          undeliverableCount={undeliverableCount}
+        />
+      )}
+
+      {partial && (
+        <CloseRequestAction requestId={request.id} outstanding={outstandingSlots} terminalLabel={terminal} />
+      )}
+
+      {canAssign && (
+        <Link href={`/requests/${request.id}/assign`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <WrenchIcon />
+          {assignLabel}
+        </Link>
+      )}
+
+      {movableCount > 0 && (
+        <Link href={`/trips/new?requestId=${request.id}`} className={buttonVariants({ size: "sm" })}>
+          <TruckIcon />
+          Add to a trip
+        </Link>
+      )}
+
+      {/* Out on the road, fully assigned, nothing of this request's left to
+          load. The badge is the whole answer — and by construction it never
+          sits beside a button. */}
+      {nothingToOffer && request.status === "In Transit" && (
+        <Badge className="border-transparent bg-status-attention/15 text-sm text-status-attention-foreground">
+          <TruckIcon className="size-3.5" />
+          On a trip
+        </Badge>
+      )}
+    </div>
   )
 }
 
-function StatusStepper({ status }: { status: RequestStatus }) {
+/**
+ * The four steps of *this request's* branch — `requestSteps` picks delivery or
+ * pickup, so a pickup ends at `Returned` rather than showing a `Delivered` step
+ * it will never reach.
+ *
+ * It walks `steps`, not `REQUEST_STATUS`. Since phase 4 the union carries seven
+ * values across two terminal branches, and both partials share a slot with
+ * `In Transit` (`statusStepIndex`) — rendering the union flat would give every
+ * request three columns it never passes through.
+ */
+function StatusStepper({ status, steps }: { status: RequestStatus; steps: readonly RequestStatus[] }) {
   const current = statusIndex(status)
 
   return (
     <Stepper value={current + 1} indicators={{ completed: <CheckIcon className="size-3.5" /> }}>
       <StepperNav className="gap-3">
-        {REQUEST_STATUS.map((step, index) => {
+        {steps.map((step, index) => {
           const Icon = statusIcon(step)
 
           return (
@@ -344,7 +447,7 @@ function StatusStepper({ status }: { status: RequestStatus }) {
                 </div>
               </StepperTrigger>
 
-              {index < REQUEST_STATUS.length - 1 && (
+              {index < steps.length - 1 && (
                 <StepperSeparator className="absolute inset-x-0 start-9 top-4 m-0 group-data-[orientation=horizontal]/stepper-nav:w-[calc(100%-2rem)] group-data-[orientation=horizontal]/stepper-nav:flex-none group-data-[state=completed]/step:bg-status-ok" />
               )}
             </StepperItem>

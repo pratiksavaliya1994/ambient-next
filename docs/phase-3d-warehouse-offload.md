@@ -1,3 +1,23 @@
+> **Superseded by [`phase-4-trips.md`](./phase-4-trips.md) (2026-09-15). Not
+> built as its own slice.**
+>
+> "Drop a collected load at a warehouse" is a **drop at a `Warehouse`-kind
+> stop**: the tool becomes `Available` at the warehouse's name, `currentUser`
+> stays the driver, and `condition` is untouched — precisely what §2 below
+> specifies, reached through `complete-trip-stop` rather than a `returnRequest`
+> of its own.
+>
+> **§1 was carried out and its answer is recorded.** The live read it asked for
+> happened on 2026-09-15: `"Warehouse"` is the only warehouse string in
+> `tools.location` (229 of 532 tools, no variants). `WAREHOUSE_JOB_NAMES` and
+> `DEFAULT_WAREHOUSE` exist in `lib/bubble/enums.ts` as specified, and the
+> question this doc asked — whether they should differ from
+> `WAREHOUSE_LOCATIONS` — was answered **yes**.
+>
+> Its "No partial return" limit is **lifted**: each `triptool` row carries its
+> own `toLocation`, so one trip can return different tools to different
+> warehouses.
+
 # Phase 3D — warehouse offload
 
 Read [`phase-3-pickup-lifecycle.md`](./phase-3-pickup-lifecycle.md) first.

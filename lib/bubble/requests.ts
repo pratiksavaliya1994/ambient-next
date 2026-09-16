@@ -7,15 +7,18 @@ import { newYorkDayAfter, newYorkInstant, newYorkStamp } from "@/lib/bubble/date
 import {
   DEFAULT_REQUEST_ORDER,
   DEFAULT_REQUEST_STATUS,
+  isOpenRequest,
   REQUEST_STATUS,
   requestColor,
+  type RequestStatus,
+} from "@/lib/bubble/enums"
+import {
   TOOL_STATUS_ASSIGNED,
   TOOL_STATUS_AVAILABLE,
   TOOL_STATUS_DELIVERED,
   TOOL_STATUS_IN_TRANSIT,
   TOOL_STATUS_PICKUP_REQUESTED,
-  type RequestStatus,
-} from "@/lib/bubble/enums"
+} from "@/lib/bubble/tool-enums"
 import type { Job } from "@/lib/bubble/reference-types"
 import { formatToolConditionUpdates } from "@/lib/bubble/tool-status-updates"
 import { formatToolsSummary, parseToolsSummary, type ToolLine } from "@/lib/bubble/tools-summary"
@@ -353,6 +356,50 @@ export async function listRequestsByStatus(status: RequestStatus, driver?: strin
   return withLines(rows.map((row: BubbleThing) => requestRow.parse(row)))
 }
 
+/**
+ * Just enough of a request to *name* it — no `requestedtools` or
+ * `requestedmaterials` read, which is the entire reason this exists beside
+ * `withLines`.
+ *
+ * `listRequestClaims` resolves one of these per open request holding a
+ * candidate tool, purely to render "already on <job>". Paying `withLines`'
+ * two extra paginated reads for a string the caller only prints would make a
+ * warning cost more than the screen it sits on.
+ */
+export type RequestBrief = {
+  id: string
+  job: string
+  status: RequestStatus
+  delivery: boolean
+  pickup: boolean
+}
+
+/**
+ * The still-open requests among these ids. Closed ones are dropped here rather
+ * than by the caller: a `Delivered` or `Returned` request holds nothing, and a
+ * tool it once carried is free.
+ */
+export async function listOpenRequestsByIds(ids: readonly string[]): Promise<RequestBrief[]> {
+  if (ids.length === 0) return []
+
+  const rows = await bubbleListAll(REQUEST, {
+    constraints: [{ key: "_id", constraint_type: "in", value: [...ids] }],
+  })
+
+  return rows
+    .map((raw: BubbleThing) => requestRow.parse(raw))
+    .map((row) => ({
+      id: row._id,
+      job: row.job?.trim() || NO_JOB,
+      // Same default as `toToolRequest`: the ~1,550 legacy rows carry no
+      // `status` at all and read as `New`, which is open.
+      status: row.status ?? DEFAULT_REQUEST_STATUS,
+      delivery: row.delivery ?? false,
+      pickup: row.pickup ?? false,
+    }))
+    .filter((request) => isOpenRequest(request.status))
+}
+
 /** The second half of both list calls: one `in` lookup each for tools and materials. */
 async function withLines(rows: z.infer<typeof requestRow>[]): Promise<ToolRequest[]> {
   const ids = rows.map((row) => row._id)
@@ -606,6 +653,23 @@ export async function createPickupToolRequest(
     // has no equivalent, since it never touches the `tools` table. The wire
     // param is still `toolStatusUpdates` — see that file's doc comment.
     toolStatusUpdates: formatToolConditionUpdates(values.toolConditionUpdates),
+    // Phase 3B. **The only parameter this slice added** — a plain list of
+    // texts, in keeping with everything else `new-pickup-request` takes.
+    //
+    // It drives two steps inside Bubble, both over
+    // `Search for tools (unique id is in toolIds)`. One fans the private
+    // `assign-request-tool` helper out across that search to write one
+    // `assignedtools` row per tool, taking `toolType` from `This tools's name`
+    // and `extra` from a literal `no` — so neither value has to be sent, and
+    // neither can arrive stale from a browser that loaded its copy minutes ago.
+    // The other flags the same tools `Pickup Requested`, which is what finally
+    // makes that status value mean something; nothing wrote it before 3B.
+    //
+    // The **private** helper, not the public `create-assigned-tool`: that one
+    // begins by deleting the request's existing rows, which is pointless on a
+    // request created three steps earlier, and calling one public endpoint from
+    // inside another workflow is a pattern this codebase avoids.
+    toolIds: values.toolIds,
   })
 
   const result = createRequestResult.parse(raw)
@@ -632,14 +696,24 @@ const updateStatusResult = z.looseObject({ requests: z.number(), tools: z.number
  * `leaveToolsBehind` below — a newly-assigned tool hasn't moved, so its
  * `location`/`currentUser` stay exactly what they were.
  *
- * `status` is required by the workflow and sent unchanged: `assignTools`
- * already set `request.status = "Assigned"` earlier in the same save, so step
- * 1 here is a no-op.
+ * `status` used to be hard-coded `Assigned`, on the reasoning that
+ * `create-assigned-tool` had just written that value itself so step 1 was a
+ * no-op. That stopped being true once assigning stayed open after dispatch: a
+ * request that went out short and later has its missing tool filled in is
+ * `In Transit` or `Partially Delivered`, and `create-assigned-tool` sets
+ * `Assigned` unconditionally (`docs/bubble-request-status-workflow.md` §5 step
+ * 3). So the caller passes the status the request should end up at and this
+ * call is what puts it back — step 1 is a genuine write now, not a no-op.
+ * `toolIds` may be empty, in which case it is *only* that status write.
  */
-export async function markToolsAssigned(requestId: string, toolIds: string[]): Promise<{ toolsUpdated: number }> {
+export async function markToolsAssigned(
+  requestId: string,
+  toolIds: string[],
+  status: RequestStatus = "Assigned"
+): Promise<{ toolsUpdated: number }> {
   const raw = await bubbleRunWorkflow(UPDATE_REQUEST_STATUS_WORKFLOW, {
     requestIds: [requestId],
-    status: "Assigned" satisfies RequestStatus,
+    status,
     toolIds,
     toolStatus: TOOL_STATUS_ASSIGNED,
   })
@@ -653,16 +727,24 @@ export async function markToolsAssigned(requestId: string, toolIds: string[]): P
 }
 
 /**
- * The reverse: a tool dropped from this request's assignment (before
- * dispatch) goes back to `Available`, freeing it for any other request's
- * picker. This is currently the **only** writer of `Available` anywhere in
- * this app — see the "no general reset path yet" limit in
- * `docs/phase-2-lifecycle.md`.
+ * The reverse: a tool dropped from this request's assignment — always one that
+ * never left, since `isLockedToTrip` refuses the rest — goes back to
+ * `Available`, freeing it for any other request's picker. This is currently the
+ * **only** writer of `Available` anywhere in this app — see the "no general
+ * reset path yet" limit in `docs/phase-2-lifecycle.md`.
+ *
+ * `status` carries for the same reason it does on `markToolsAssigned`: this is
+ * the last workflow call of a save, so whatever it sends is the status the
+ * request is left holding.
  */
-export async function releaseToolsToAvailable(requestId: string, toolIds: string[]): Promise<{ toolsUpdated: number }> {
+export async function releaseToolsToAvailable(
+  requestId: string,
+  toolIds: string[],
+  status: RequestStatus = "Assigned"
+): Promise<{ toolsUpdated: number }> {
   const raw = await bubbleRunWorkflow(UPDATE_REQUEST_STATUS_WORKFLOW, {
     requestIds: [requestId],
-    status: "Assigned" satisfies RequestStatus,
+    status,
     toolIds,
     toolStatus: TOOL_STATUS_AVAILABLE,
   })

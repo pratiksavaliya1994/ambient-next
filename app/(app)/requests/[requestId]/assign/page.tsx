@@ -9,11 +9,22 @@ import { RequestStatusBadge } from "@/components/request-status-badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { listAssignedTools, listCandidateTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
-import { buildSlots, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
+import {
+  listAssignedTools,
+  listCandidateTools,
+  listRequestClaims,
+  listToolsByIds,
+} from "@/lib/bubble/assigned-tools"
+import {
+  buildSlots,
+  type CandidateTool,
+  type ToolRequestClaim,
+  type ToolTripClaim,
+} from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
 import { listToolTypes } from "@/lib/bubble/reference"
 import { getRequest } from "@/lib/bubble/requests"
+import { listToolClaims } from "@/lib/bubble/trips-read"
 
 export const metadata: Metadata = { title: "Assign tools" }
 
@@ -65,12 +76,21 @@ async function AssignBody({ requestId }: { requestId: string }) {
     .filter((slot) => !slot.consumable && slot.typeId)
     .map((slot) => slot.typeId as string)
 
-  const [candidates, alreadyAssigned] = await Promise.all([
+  // Every tool currently on the request — what both lock checks are asked about.
+  const assignedIds = [...new Set([...extraToolIds, ...slots.flatMap((slot) => slot.toolIds)])]
+
+  const [candidates, alreadyAssigned, claims] = await Promise.all([
     listCandidateTools([...new Set(typeIds)]),
     // Extras, and slot fills whose tool the candidate query wouldn't return
     // (a renamed type, a blank `tools.type`) — resolved by id so every
     // assigned tool has a name on screen.
-    listToolsByIds([...new Set([...extraToolIds, ...slots.flatMap((slot) => slot.toolIds)])]),
+    listToolsByIds(assignedIds),
+    // Which of them a saved trip is already carrying. Not derivable from the
+    // `tools` rows above: a trip claims its tools the moment it is saved and
+    // `statusNew` doesn't say so until the driver collects them — see
+    // `ToolTripClaim`. Without this the picker offers to unassign a tool a
+    // driver is on their way to load.
+    listToolClaims(assignedIds),
   ])
 
   // One pool, keyed by id: the candidates for the requested types plus
@@ -79,7 +99,27 @@ async function AssignBody({ requestId }: { requestId: string }) {
   const pool = new Map<string, CandidateTool>()
   for (const tool of [...candidates, ...alreadyAssigned]) pool.set(tool.id, tool)
 
+  // Which of the offered tools another open request already holds. Sequential
+  // rather than folded into the `Promise.all` above, because it takes the pool
+  // as its input and the pool is what that call produces.
+  //
+  // Two reads for a warning is worth it: the alternative is a PM committing a
+  // tool that a pickup is already bringing home, discovering it only when the
+  // trip builder refuses to save, and having no idea which other request to go
+  // and fix. `request.id` is excluded — this request's own rows are not a
+  // conflict with itself.
+  const requestClaims = await listRequestClaims([...pool.keys()], request.id)
+
   const unresolved = slots.filter((slot) => !slot.consumable && !slot.typeId).length
+
+  const heldElsewhere: ToolRequestClaim[] = [...requestClaims.values()]
+
+  const tripClaims: ToolTripClaim[] = [...claims].map(([toolId, trip]) => ({
+    toolId,
+    tripId: trip.id,
+    driver: trip.driver,
+    started: trip.status === "In Transit",
+  }))
 
   return (
     <>
@@ -118,6 +158,8 @@ async function AssignBody({ requestId }: { requestId: string }) {
             slots={slots}
             extraToolIds={extraToolIds}
             pool={[...pool.values()]}
+            claims={tripClaims}
+            requestClaims={heldElsewhere}
             unresolvedSlots={unresolved}
           />
         </div>

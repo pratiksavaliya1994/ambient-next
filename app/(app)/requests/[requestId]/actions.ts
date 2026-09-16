@@ -2,11 +2,18 @@
 
 import { revalidatePath } from "next/cache"
 
+import { isPickupRequest } from "@/lib/bubble/enums"
+import { TOOL_STATUS_IN_TRANSIT } from "@/lib/bubble/tool-enums"
+import { setRequestStatuses } from "@/lib/bubble/request-status"
+import { closeRequestSchema } from "@/lib/schemas/trip"
+import type { CloseRequestState } from "@/app/(app)/requests/[requestId]/action-state"
+
 import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { clearRequestOrder } from "@/lib/bubble/request-order"
 import { getRequest, offloadRequest } from "@/lib/bubble/requests"
+import { listTripFlags } from "@/lib/bubble/triptool-read"
 import { requireSession } from "@/lib/auth/session"
-import { deriveTripStatus } from "@/lib/dispatch/summary"
+import { deriveTripStatus } from "@/lib/dispatch/tool-state"
 import { offloadSchema } from "@/lib/schemas/assignment"
 import type { OffloadState } from "@/app/(app)/requests/[requestId]/action-state"
 
@@ -46,8 +53,14 @@ export async function offloadAction(input: unknown): Promise<OffloadState> {
   // before the write, since a server action is reachable by direct POST. A
   // tool still sitting off-site hasn't reached the driver yet, so it can't
   // truthfully be marked `Delivered`.
-  const toolsById = new Map((await listToolsByIds(toolIds)).map((tool) => [tool.id, tool]))
-  const { pickupStops, leftBehind } = deriveTripStatus(request, assigned, toolsById)
+  const [tools, flagsByRequest] = await Promise.all([listToolsByIds(toolIds), listTripFlags(toolIds)])
+  const toolsById = new Map(tools.map((tool) => [tool.id, tool]))
+  const { pickupStops, undeliverable } = deriveTripStatus(
+    request,
+    assigned,
+    toolsById,
+    flagsByRequest.get(requestId)
+  )
   if (pickupStops.length > 0) {
     return {
       status: "error",
@@ -58,21 +71,23 @@ export async function offloadAction(input: unknown): Promise<OffloadState> {
     }
   }
 
-  // Only what's actually on the truck gets written `Delivered` at the job. A
-  // tool the driver marked "Not picked up" (`leaveBehindAction`) never reached
-  // them, so it keeps the `Pickup Requested` and job-site `location` Bubble
-  // already holds — the same reason the guard above exists, applied to a stop
-  // that was answered rather than one still outstanding.
-  const leftBehindIds = new Set(leftBehind)
-  const deliverableIds = toolIds.filter((toolId) => !leftBehindIds.has(toolId))
+  // Only what can truthfully land gets written `Delivered` at the job. A tool
+  // the driver marked "Not picked up" (`leaveBehindAction`) never reached them,
+  // so it keeps the `Pickup Requested` and job-site `location` Bubble already
+  // holds; a tool the site **refused** did reach them and was turned away, so it
+  // is riding back to the yard or already there. Either way the drop did not
+  // happen — the same reason the guard above exists, applied to a stop that was
+  // answered rather than one still outstanding.
+  const undeliverableIds = new Set(undeliverable)
+  const deliverableIds = toolIds.filter((toolId) => !undeliverableIds.has(toolId))
 
   // A request with no tools at all is legitimate (materials only); a request
-  // whose every tool was left behind has nothing to deliver, so completing it
-  // would record a drop that didn't happen.
+  // whose every tool was left behind or refused has nothing to deliver, so
+  // completing it would record a drop that didn't happen.
   if (toolIds.length > 0 && deliverableIds.length === 0) {
     return {
       status: "error",
-      message: "None of this request's tools were collected — there's nothing to deliver.",
+      message: "None of this request's tools reached the job — there's nothing to deliver.",
     }
   }
 
@@ -109,4 +124,63 @@ export async function offloadAction(input: unknown): Promise<OffloadState> {
       : undefined
 
   return { status: "delivered", warning }
+}
+
+/**
+ * Closes a request by hand — the escape hatch for requested slots nobody will
+ * ever fill.
+ *
+ * A request closes on its own only when every assigned tool has landed **and**
+ * every requested quantity is filled (`deriveRequestStatus`). A job that asked
+ * for four grinders, got three, and is finished with them would otherwise sit
+ * at `Partially Delivered` forever — real unmet demand nobody is going to meet.
+ *
+ * All this writes is the terminal status: it moves no tools, because there is
+ * nothing left to move. And nothing reopens the request afterwards —
+ * `deriveRequestStatus` treats the terminal values as a ratchet, which is
+ * exactly what makes this one write enough.
+ */
+export async function closeRequestAction(input: unknown): Promise<CloseRequestState> {
+  await requireSession()
+
+  const parsed = closeRequestSchema.safeParse(input)
+  if (!parsed.success) return { status: "error", message: "That isn't a valid request." }
+
+  const { requestId } = parsed.data
+  const request = await getRequest(requestId)
+  if (!request) return { status: "error", message: "That request no longer exists in Bubble." }
+  if (request.status === "Delivered" || request.status === "Returned") {
+    return { status: "error", message: `This request is already ${request.status}.` }
+  }
+
+  // Refuse while anything is still moving. Closing a request whose tools are on
+  // a truck would mark it finished while the driver is still carrying its load
+  // — and the ratchet means re-deriving could not walk that back.
+  const assigned = await listAssignedTools([requestId])
+  const inTransit = (await listToolsByIds(assigned.map((row) => row.toolId))).filter(
+    (tool) => tool.status === TOOL_STATUS_IN_TRANSIT
+  )
+  if (inTransit.length > 0) {
+    return {
+      status: "error",
+      message: `${inTransit.length} of this request's tools ${inTransit.length === 1 ? "is" : "are"} still on a trip. Finish the trip first.`,
+    }
+  }
+
+  const terminal = isPickupRequest(request) ? "Returned" : "Delivered"
+
+  try {
+    await setRequestStatuses([requestId], terminal)
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? `Bubble rejected the change: ${error.message}` : "Bubble rejected the change.",
+    }
+  }
+
+  revalidatePath("/requests")
+  revalidatePath(`/requests/${requestId}`)
+  revalidatePath("/trips/new")
+
+  return { status: "closed", requestStatus: terminal }
 }

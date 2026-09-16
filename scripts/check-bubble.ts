@@ -10,8 +10,10 @@
  * `server-only`, which throws under plain Node.
  */
 import { listRecentRequests, listRequestsByStatus } from "@/lib/bubble/requests"
-import { listAllTools, listToolsForJob } from "@/lib/bubble/pickup-tools"
+import { listAllTools, listToolLocations, listToolsForJob } from "@/lib/bubble/pickup-tools"
 import { listFieldPms, listJobs, listTimeSlots, listToolTypes, listUsers } from "@/lib/bubble/reference"
+import { listTripDetails } from "@/lib/bubble/trips-read"
+import { listOutstandingMovements } from "@/lib/trips/movements"
 
 async function main() {
   const [jobs, toolTypes, pms, slots, users] = await Promise.all([
@@ -45,6 +47,20 @@ async function main() {
     )
   }
 
+  // Phase 4: every distinct `tools.location` string, untrimmed, so a warehouse
+  // name can be hardcoded from what is actually there rather than from memory.
+  // `location` is matched against `jobs.name` with `equals` and nothing enforces
+  // referential integrity, so `"Warehouse "` and `"warehouse"` are real hazards
+  // — hence the delimiters and the `jobs` cross-check below.
+  const locations = await listToolLocations()
+  const jobNames = new Set(jobs.map((job) => job.name))
+  console.log(`\ndistinct tools.location  ${locations.length}`)
+  for (const { value, count } of locations) {
+    const label = value === "" ? "(blank)" : `«${value}»`
+    const known = value === "" || jobNames.has(value) ? "" : "   ⚠ no jobs row with this exact name"
+    console.log(`  ${String(count).padStart(4)}  ${label}${known}`)
+  }
+
   const requests = await listRecentRequests(5)
   console.log(`\nlast ${requests.length} requests:`)
   for (const request of requests) {
@@ -61,6 +77,30 @@ async function main() {
   ])
   console.log(`\nrequest.status = Assigned      ${assigned.length}`)
   console.log(`request.status = In Transit    ${inTransit.length}`)
+
+  // Phase 4. `listTripDetails` reads all three new types, so this is the whole
+  // trip read path in one call.
+  //
+  // **A zero here is ambiguous and that matters**: `bubbleListMaybeMissing`
+  // turns a 404 into an empty list, so "no trips" and "the type name is wrong"
+  // look identical from here. Confirm the types exist with a raw
+  // `GET /obj/trip` the first time — see `docs/bubble-trip-workflows-spec.md` §1.
+  const trips = await listTripDetails(["Planned", "In Transit"])
+  console.log(`\nopen trips                     ${trips.length}`)
+  for (const trip of trips) {
+    const route = trip.stops.map((stop) => stop.location).join(" → ") || "no stops"
+    console.log(`  ${trip.driver ?? "(no driver)"} · ${trip.status} · ${trip.items.length} tools`)
+    console.log(`    ${route}`)
+  }
+
+  // Phase 4's movement pool — what the trip builder offers. Reads open requests,
+  // their `assignedtools`, the live `tools`, and the claim check.
+  const groups = await listOutstandingMovements()
+  const waiting = groups.reduce((sum, group) => sum + group.movements.length, 0)
+  console.log(`\noutstanding movements          ${waiting} across ${groups.length} requests`)
+  for (const group of groups.slice(0, 5)) {
+    console.log(`  [${group.direction}] ${group.job} → ${group.destination}  (${group.movements.length} to move)`)
+  }
 }
 
 main().catch((error) => {

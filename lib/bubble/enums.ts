@@ -90,196 +90,149 @@ export function stopPosition(order: number): number {
 }
 
 /**
- * `request.status` — the phase 2 lifecycle. **Text in Bubble, not an option
- * set** (see `docs/phase-2-lifecycle.md`), so an unexpected value fails loudly
- * in Zod here rather than silently on a Bubble write. A row with no `status`
- * reads as `New`, which is what lets the ~1,550 existing rows stay untouched.
+ * `request.status` — the lifecycle. **Text in Bubble, not an option set** (see
+ * `docs/phase-2-lifecycle.md`), so an unexpected value fails loudly in Zod here
+ * rather than silently on a Bubble write. A row with no `status` reads as
+ * `New`, which is what lets the ~1,550 existing rows stay untouched, and is
+ * also why adding values in phase 4 cost nothing on the Bubble side.
+ *
+ * **Two terminal branches since phase 4**, which `docs/phase-3-pickup-lifecycle.md`
+ * anticipated: a delivery ends `Delivered`, a pickup ends `Returned`. Each has
+ * a partial twin, because a trip moves *tools*, not whole requests — a request
+ * whose tools went out on two trips is genuinely half-finished between them,
+ * and previously had nowhere to say so.
+ *
+ * The words shifted meaning in phase 4 and the new readings are the ones to
+ * trust:
+ *
+ * - `In Transit` — at least one of this request's tools is on a truck.
+ * - `Partially Delivered` / `Partially Returned` — at least one tool has landed
+ *   **and** at least one is still outstanding. Still open; still assignable.
+ * - `Delivered` / `Returned` — closed. `deriveRequestStatus` treats these as a
+ *   ratchet, so nothing reopens a request by accident.
  */
-export const REQUEST_STATUS = ["New", "Assigned", "In Transit", "Delivered"] as const
+export const REQUEST_STATUS = [
+  "New",
+  "Assigned",
+  "In Transit",
+  // Delivery branch.
+  "Partially Delivered",
+  "Delivered",
+  // Pickup branch.
+  "Partially Returned",
+  "Returned",
+] as const
 export type RequestStatus = (typeof REQUEST_STATUS)[number]
 
 export const DEFAULT_REQUEST_STATUS: RequestStatus = "New"
 
 /**
- * `tools.statusNew` — the `ToolStatusNew` option set, added for phase 2 rather
- * than renaming the original `status` field, which is still live and has a
- * second writer this app doesn't control (`/wf/Set Status` in the old Bubble
- * UI); a rename would have moved that writer's rows too.
+ * What the detail page's stepper walks — **not** `REQUEST_STATUS`.
  *
- * Every live row's `statusNew` was backfilled from `status` in a one-time
- * Bubble migration, so the field is populated everywhere and can be read on
- * its own. `Discharged` has no counterpart here — no live row held it.
- *
- * This app now reads and writes `statusNew` exclusively — the Tools
- * dashboard reads it, and the Pickup picker both reads it and writes changes
- * back through `update-tool-status`. The old `status` field is only ever
- * touched by the old Bubble UI now, so the two will drift over time.
- *
- * The list mixes *where a tool is in the flow* (Available, In Transit,
- * Delivered, Pickup Requested) with *what condition it is in* (the rest).
- * Condition wins for assignment — see `UNASSIGNABLE_TOOL_STATUS`.
- *
- * **`Assigned` is back, reversing the original phase 2A call.** That call
- * (dropping the value because writing it at assign time could clobber a
- * tool's true state if it were busy elsewhere) assumed availability stayed
- * date-driven. It wasn't safe in practice — a job running long left a
- * genuinely-busy tool bookable once its planned end date passed, and a job
- * finishing early left a genuinely-free tool blocked until its planned end
- * date arrived. Availability is now `statusNew === "Available"`, full stop,
- * so `Assigned` is what a tool reads the instant it's committed to a request
- * (`assignToolsAction`) — see `TOOL_STATUS_ASSIGNED` below — and it reverts to
- * `Available` on Unassign. The tradeoff: a tool can no longer be pre-booked
- * for a future request while busy on a different one; see
- * `docs/phase-2-lifecycle.md` for the fuller writeup.
- *
- * **Phase 3A split condition off this field** into `tools.condition` /
- * `ToolCondition` below. The five condition values (`Maintenance Required`
- * through `Missing`) stay in this option set — an old-Bubble-UI edit could
- * still write one — but this app no longer writes them here; it writes
- * `condition` instead. `isAssignable` checks both fields for exactly that
- * reason.
+ * The two were the same array until phase 4, and `statusIndex` was literally
+ * `REQUEST_STATUS.indexOf(status)`. That stopped working the moment the union
+ * grew: a partial is a *variant* of In Transit, not a step of its own, and the
+ * two terminal values are alternatives rather than a sequence. Rendering the
+ * union flat would show every request four steps it never passes through.
  */
-export const TOOL_STATUS_NEW = [
-  "Available",
-  "Assigned",
-  "In Transit",
-  "Delivered",
-  "Pickup Requested",
-  "Maintenance Required",
-  "Repair Required",
-  "Under Repair",
-  "Inspection Required",
-  "Missing",
-] as const
-export type ToolStatusNew = (typeof TOOL_STATUS_NEW)[number]
+export const DELIVERY_STEPS = ["New", "Assigned", "In Transit", "Delivered"] as const
+export const PICKUP_STEPS = ["New", "Assigned", "In Transit", "Returned"] as const
 
-/**
- * The `tools.statusNew` values the lifecycle *writes*, named rather than typed
- * as literals at each call site so no transition can drift.
- *
- * `TOOL_STATUS_AVAILABLE` is the ordinary "free" state — the candidate queries
- * (`listCandidateTools`/`searchTools`) filter to it, alongside
- * `TOOL_STATUS_PICKUP_REQUESTED` — see `isFreeToAssign` below for why both
- * count. Also read by `isReadyForDispatch`, and kept for phase 3D (pickup
- * return-to-warehouse). `TOOL_STATUS_ASSIGNED` is written the moment a tool is
- * committed to a request (`assignToolsAction`) and reverted to `Available` on
- * Unassign — see the reversal note on `TOOL_STATUS_NEW` above.
- * `TOOL_STATUS_IN_TRANSIT` / `TOOL_STATUS_DELIVERED` back dispatch (2B) and
- * offload (2C).
- *
- * `TOOL_STATUS_PICKUP_REQUESTED` is written when a driver reaches a site-to-site
- * pickup stop and *can't* take the tool (`leaveBehindAction`): it stays where it
- * is, flagged as still wanted. Dispatch never writes it pre-emptively — only an
- * actual failed pickup does, which is what keeps it meaning one specific thing.
- * It is deliberately absent from `UNASSIGNABLE_TOOL_STATUS` — nothing is wrong
- * with the tool — and deliberately *not* silently reverted to `Available`
- * either, so it stays visibly distinguishable while remaining just as
- * offerable for a future request; see `isFreeToAssign`.
- */
-export const TOOL_STATUS_AVAILABLE: ToolStatusNew = "Available"
-export const TOOL_STATUS_ASSIGNED: ToolStatusNew = "Assigned"
-export const TOOL_STATUS_IN_TRANSIT: ToolStatusNew = "In Transit"
-export const TOOL_STATUS_DELIVERED: ToolStatusNew = "Delivered"
-export const TOOL_STATUS_PICKUP_REQUESTED: ToolStatusNew = "Pickup Requested"
+/** Both partials share slot 2 with `In Transit`; both terminals share slot 3. */
+const STEP_INDEX: Record<RequestStatus, number> = {
+  New: 0,
+  Assigned: 1,
+  "In Transit": 2,
+  "Partially Delivered": 2,
+  Delivered: 3,
+  "Partially Returned": 2,
+  Returned: 3,
+}
 
-/**
- * A tool whose `statusNew` reads one of these is never offered for assignment,
- * regardless of `isFreeToAssign` — this is the condition-based exclusion,
- * orthogonal to the flow-state one.
- *
- * **This is read from `statusNew` only**, and that field is now backfilled on
- * every live row, so the filter really does hide broken tools — a row whose
- * old `status` said `To be Repaired` reads `Repair Required` here and drops
- * out of the candidate lists.
- */
-export const UNASSIGNABLE_TOOL_STATUS: readonly string[] = [
-  "Maintenance Required",
-  "Repair Required",
-  "Under Repair",
-  "Inspection Required",
-  "Missing",
-]
-
-/**
- * `tools.condition` — split off `statusNew` in phase 3A so a PM's condition
- * pick in the Pickup picker survives the pickup lifecycle overwriting
- * `statusNew` with flow values (`In Transit`, `Delivered`, …). Five of the six
- * display texts are shared with `TOOL_STATUS_NEW` on purpose — same words, so
- * the Bubble backfill is a copy rather than a translation, and nothing in the
- * UI changes vocabulary on the user. `Ok` is new: its `statusNew` counterpart
- * was `Available`, which is a *flow* state, not a condition.
- */
-export const TOOL_CONDITION = [
-  "Ok",
-  "Maintenance Required",
-  "Repair Required",
-  "Under Repair",
-  "Inspection Required",
-  "Missing",
-] as const
-export type ToolCondition = (typeof TOOL_CONDITION)[number]
-
-export const DEFAULT_TOOL_CONDITION: ToolCondition = "Ok"
-
-/** Every `ToolCondition` except `Ok`. A tool in any of these is never offered. */
-export const UNASSIGNABLE_CONDITION: readonly string[] = TOOL_CONDITION.filter((value) => value !== "Ok")
-
-/**
- * `statusNew`, not `status`. An empty value stays assignable — but after the
- * backfill it means the row was missed by the migration, so it is worth
- * flagging rather than assuming.
- *
- * Checks **both** `condition` and `statusNew` so the filter stays correct at
- * every point in 3A's backfill: before it, `condition` is empty and
- * `statusNew` still carries the five condition values; after it, the reverse.
- * This is the permanent defence, not a transition measure — see
- * `TOOL_STATUS_NEW`'s doc comment.
- */
-export function isAssignable(condition: string, statusNew: string): boolean {
-  return !UNASSIGNABLE_CONDITION.includes(condition) && !UNASSIGNABLE_TOOL_STATUS.includes(statusNew)
+export function statusStepIndex(status: RequestStatus): number {
+  return STEP_INDEX[status]
 }
 
 /**
- * Whether a tool is genuinely free to be picked for a *new* request right now
- * — the flow-state half of "offerable," alongside `isAssignable`'s
- * condition-state half; a caller populating a picker checks both.
+ * Which branch a request is on.
  *
- * `Available` is the ordinary case. `Pickup Requested` also counts:
- * `leaveBehindAction` deliberately doesn't revert it to `Available` (see
- * `TOOL_STATUS_NEW`'s doc comment), so treating it as *not* free here would
- * silently make every left-behind tool unassignable — the opposite of what
- * that feature decided. Blank stays lenient, same reasoning as
- * `isAssignable`/`isReadyForDispatch`. `Assigned`, `In Transit` and
- * `Delivered` are the only true holds: some request already has a live claim.
+ * A row with **both** `delivery` and `pickup` true has two lifecycles and one
+ * status field — a known limit carried since phase 3. The forms never create
+ * one, so it stays latent; it reads as a delivery here rather than being
+ * special-cased into a third branch.
  */
-export function isFreeToAssign(statusNew: string): boolean {
-  return statusNew === "" || statusNew === TOOL_STATUS_AVAILABLE || statusNew === TOOL_STATUS_PICKUP_REQUESTED
+export function isPickupRequest(request: { delivery: boolean; pickup: boolean }): boolean {
+  return request.pickup && !request.delivery
+}
+
+export function requestSteps(request: { delivery: boolean; pickup: boolean }): readonly RequestStatus[] {
+  return isPickupRequest(request) ? PICKUP_STEPS : DELIVERY_STEPS
 }
 
 /**
- * Whether an already-*assigned* tool is actually fit to leave the building on
- * *this* dispatch. `Assigned` is the expected value here — every tool that
- * made it through the picker was `Available` and got flipped to `Assigned` by
- * this same request's own assign step, so it must pass. `Available` is also
- * accepted for tools backfilled or edited outside the app. Anything else
- * (`In Transit`, `Delivered`, `Pickup Requested`, or a condition value) means
- * the tool is genuinely elsewhere or flagged, so dispatch refuses it.
- *
- * Blank stays ready, same leniency as `isAssignable`: after the backfill an
- * empty `statusNew` is a migration gap, not a signal the tool is unavailable.
+ * Whether a request still has work outstanding — the test the trip builder's
+ * movement pool filters on. Everything but the two terminal values is open,
+ * including both partials: that is the entire point of them existing.
  */
-export function isReadyForDispatch(statusNew: string): boolean {
-  return statusNew === "" || statusNew === TOOL_STATUS_AVAILABLE || statusNew === TOOL_STATUS_ASSIGNED
+export function isOpenRequest(status: RequestStatus): boolean {
+  return status !== "Delivered" && status !== "Returned"
 }
 
 /**
- * `jobs` rows that function as warehouse stand-ins rather than real job
- * sites — a tool sitting at any of these needs no site-to-site pickup stop
- * before a delivery. This is the same constant `docs/phase-3d-warehouse-offload.md`
- * anticipated as `WAREHOUSE_JOB_NAMES` for the (still unbuilt) return-to-warehouse
- * slice; reuse this one there instead of inventing a second list.
+ * The `tools` lifecycle vocabulary moved to `lib/bubble/tool-enums.ts` in phase
+ * 4 — `TOOL_STATUS_NEW`, `TOOL_CONDITION`, `isAssignable`, `isFreeToAssign`,
+ * `isReadyForDispatch` and the named write constants all live there now.
+ * Import from that module directly; this file deliberately does not re-export
+ * them, so there is one place to look rather than two.
+ *
+ * `WAREHOUSE_LOCATIONS`/`isWarehouseLocation` and `WAREHOUSE_JOB_NAMES` stayed
+ * here: a `tools.location` value is matched against `jobs.name`, which makes it
+ * request/job vocabulary rather than tool vocabulary.
+ */
+
+/**
+ * `jobs` rows that function as warehouse stand-ins rather than real job sites —
+ * a tool sitting at any of these needs no collect stop before a delivery.
+ *
+ * This is the **origin** question, and it is deliberately broader than
+ * `WAREHOUSE_JOB_NAMES` below. `docs/phase-3d-warehouse-offload.md` suspected
+ * the two lists would differ and asked for the call to be made from live data
+ * rather than by accident; it does differ, and this is the wider one. "Other -
+ * Not a Job Site" is plainly not a warehouse, but a tool sitting at one still
+ * needs no special collect stop.
  */
 export const WAREHOUSE_LOCATIONS = ["Warehouse", "1407 Locker", "Other - Not a Job Site"] as const
+
+/**
+ * Where a pickup can actually be **returned to** — the destinations the trip
+ * builder offers, and the values that make a `tripstop` `Warehouse`-kind (which
+ * is what decides a drop writes `Available` rather than `Delivered`).
+ *
+ * **Read off live rows on 2026-09-15**, the same provenance `WE_ARE` and
+ * `TO_DO` carry, via `listToolLocations()` / `npm run check-bubble`: of 70
+ * distinct `tools.location` values across 532 tools, exactly one is a
+ * warehouse — `"Warehouse"`, on 229 of them. Neither `"1407 Locker"` nor
+ * `"Other - Not a Job Site"` appears on a single tool, and there are **no
+ * casing or trailing-whitespace variants** to defend against.
+ *
+ * The strings must match `jobs.name` byte for byte: `tools.location` is
+ * compared with `equals` and nothing enforces referential integrity, so a
+ * near-miss silently splits the Tools dashboard into two warehouse cards that
+ * cannot find each other. `check-bubble` flags any value with no matching
+ * `jobs` row, which is the standing guard against that drift.
+ *
+ * One entry is fine. A `Select` with a single option is still the right
+ * control, because the next warehouse is a one-line change with no schema work.
+ */
+export const WAREHOUSE_JOB_NAMES = ["Warehouse"] as const
+export type WarehouseName = (typeof WAREHOUSE_JOB_NAMES)[number]
+
+export const DEFAULT_WAREHOUSE: WarehouseName = "Warehouse"
+
+/** Whether a drop here returns a tool to circulation (`Available`) or lands it on a job (`Delivered`). */
+export function isWarehouseDestination(location: string): boolean {
+  return (WAREHOUSE_JOB_NAMES as readonly string[]).includes(location.trim())
+}
 
 /**
  * Whether a tool's current `location` counts as "at the warehouse" rather

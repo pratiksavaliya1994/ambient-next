@@ -11,6 +11,7 @@ import { INITIAL_CREATE_STATE, type CreateRequestState } from "@/app/(app)/reque
 import { DatePicker } from "@/components/date-picker"
 import { MaterialDialog } from "@/components/material-dialog"
 import {
+  toolIdsOfPickup,
   changedConditionLines,
   PickupToolPicker,
   selectionOfTools,
@@ -98,6 +99,7 @@ export function PickupRequestForm({
       tentative: false,
       cleanup: false,
       tools: [],
+      toolIds: [],
       toolConditionUpdates: [],
     },
   })
@@ -119,6 +121,7 @@ export function PickupRequestForm({
     // job's picks and fetched list can't carry over.
     setSelectedTools(new Map())
     setValue("tools", [])
+    setValue("toolIds", [])
     setValue("toolConditionUpdates", [])
     setValue("cleanup", false)
     setToolsForJob([])
@@ -135,6 +138,10 @@ export function PickupRequestForm({
   function updateSelected(next: Map<string, PickupSelection>) {
     setSelectedTools(next)
     setValue("tools", toolLinesOfPickup(next), { shouldValidate: true })
+    // Three projections of one selection, all set together so they can't drift:
+    // names for the summary, ids for the `assignedtools` rows (3B — this is what
+    // lets a trip collect them later), and the condition diff.
+    setValue("toolIds", toolIdsOfPickup(next))
     setValue("toolConditionUpdates", changedConditionLines(next))
   }
 

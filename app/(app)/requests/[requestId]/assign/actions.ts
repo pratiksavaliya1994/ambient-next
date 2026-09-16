@@ -2,13 +2,26 @@
 
 import { revalidatePath } from "next/cache"
 
-import { assignTools, listAssignedTools, listToolsByIds, searchTools } from "@/lib/bubble/assigned-tools"
-import type { CandidateTool } from "@/lib/bubble/assigned-tools-types"
-import { isFreeToAssign } from "@/lib/bubble/enums"
+import {
+  assignTools,
+  listAssignedTools,
+  listRequestClaims,
+  listToolsByIds,
+  searchTools,
+} from "@/lib/bubble/assigned-tools"
+import type { CandidateTool, ToolRequestClaim } from "@/lib/bubble/assigned-tools-types"
+import { isFreeToAssign, isLockedToTrip, TOOL_STATUS_ASSIGNED } from "@/lib/bubble/tool-enums"
+import type { RequestStatus } from "@/lib/bubble/enums"
 import { getRequest, markToolsAssigned, releaseToolsToAvailable } from "@/lib/bubble/requests"
+import { listToolClaims } from "@/lib/bubble/trips-read"
 import { requireSession } from "@/lib/auth/session"
 import { assignToolsSchema } from "@/lib/schemas/assignment"
 import type { CreateRequestState } from "@/app/(app)/requests/action-state"
+
+/** The inverse of `isLockedToTrip`, and narrower: only an untouched commitment goes back to `Available`. */
+function isReleasable(tool: CandidateTool): boolean {
+  return tool.status === TOOL_STATUS_ASSIGNED
+}
 
 /**
  * The extras pool, fetched only when the "Add extra tool" dialog asks for it.
@@ -20,10 +33,25 @@ import type { CreateRequestState } from "@/app/(app)/requests/action-state"
  *
  * Read-only, but still behind `requireSession()`: a server action is reachable
  * by direct POST no matter what the page around it does.
+ *
+ * Returns the "already on another request" warnings alongside the rows. The
+ * page resolves those for the *preloaded* candidates, but these are fetched
+ * after it rendered, so they would otherwise be the one route into the picker
+ * with no warning on it — and the extras dialog searches the whole `tools`
+ * table, which is exactly where an unexpected claim is most likely.
  */
-export async function searchToolsAction(query: string): Promise<CandidateTool[]> {
+export async function searchToolsAction(
+  query: string,
+  requestId: string
+): Promise<{ tools: CandidateTool[]; claims: ToolRequestClaim[] }> {
   await requireSession()
-  return searchTools(query)
+
+  const tools = await searchTools(query)
+  const claims = await listRequestClaims(
+    tools.map((tool) => tool.id),
+    requestId
+  )
+  return { tools, claims: [...claims.values()] }
 }
 
 /**
@@ -39,6 +67,13 @@ export async function searchToolsAction(query: string): Promise<CandidateTool[]>
  * this save: newly-added ids are freshly committed (`markToolsAssigned`),
  * dropped ids are freed (`releaseToolsToAvailable`). Ids present both before
  * and after need no write — they're already `Assigned`.
+ *
+ * The *request's* own status is put back by the same pair. Assigning stays open
+ * for the whole life of a request — a load that went out short gets its missing
+ * tools filled in days later, which was the whole point of the partial statuses
+ * — but `create-assigned-tool` writes `request.status = "Assigned"`
+ * unconditionally, which would march an `In Transit` or `Partially Delivered`
+ * request backwards to a step it has already passed. See `statusAfterSave`.
  */
 export async function assignToolsAction(input: unknown): Promise<CreateRequestState> {
   await requireSession()
@@ -68,6 +103,53 @@ export async function assignToolsAction(input: unknown): Promise<CreateRequestSt
   const submittedToolIds = new Set(assignments.map((entry) => entry.toolId))
   const added = [...submittedToolIds].filter((id) => !previousToolIds.has(id))
   const removed = [...previousToolIds].filter((id) => !submittedToolIds.has(id))
+
+  // A tool that has already left on a trip is not this screen's to give back.
+  //
+  // `create-assigned-tool` is a **wholesale replace**, so a save that omits an
+  // already-dispatched tool doesn't just fail to release it — it deletes the
+  // `assignedtools` row that was the only record of what went out. One stale
+  // render is enough to do it. Refuse the whole save rather than silently
+  // dropping the row, and name the tool so the fix is obvious.
+  //
+  // Server-side because a server action is reachable by direct POST; the assign
+  // panel hides the remove control too, so this should be unreachable in the UI.
+  const removedTools = removed.length > 0 ? await listToolsByIds(removed) : []
+  const lockedTools = removedTools.filter((tool) => isLockedToTrip(tool.status))
+  if (lockedTools.length > 0) {
+    const [first] = lockedTools
+    return {
+      status: "error",
+      message:
+        lockedTools.length === 1
+          ? `${first.name} is already ${first.status.toLowerCase()} and can't be removed here. Reload the page.`
+          : `${lockedTools.length} of these tools are already out on a trip and can't be removed here. Reload the page.`,
+    }
+  }
+
+  // The same refusal, for the tools a trip is only *about* to take — and
+  // `statusNew` cannot answer this one. `start-trip` moves nothing, so a tool
+  // planned onto a saved trip still reads `Assigned` until the driver records
+  // the collect, and `isLockedToTrip` above lets it straight through. The
+  // `triptool` row is the only thing that knows.
+  //
+  // Letting it through deletes the `assignedtools` row and flips the tool back
+  // to `Available` while the trip still lists it: the driver turns up for a tool
+  // the request no longer has, the run sheet names a tool nobody assigned, and
+  // the claim keeps that tool off every other trip with nothing on screen
+  // explaining why. Same claim query the trip builder and `startTripAction` run.
+  const claims = removed.length > 0 ? await listToolClaims(removed) : null
+  if (claims && claims.size > 0) {
+    const [toolId, trip] = [...claims][0]
+    const name = removedTools.find((tool) => tool.id === toolId)?.name ?? "A tool"
+    return {
+      status: "error",
+      message:
+        claims.size === 1
+          ? `${name} is on ${trip.driver ?? "another"}'s trip and can't be removed here. Take it off that trip first.`
+          : `${claims.size} of these tools are on a saved trip and can't be removed here. Take them off that trip first.`,
+    }
+  }
 
   // The screen's candidate list is however old the page render is. Re-check
   // every genuinely *new* pick's live status immediately before the write —
@@ -101,21 +183,46 @@ export async function assignToolsAction(input: unknown): Promise<CreateRequestSt
     }
   }
 
+  // Where the request should be left standing. `create-assigned-tool` has just
+  // stamped `Assigned` over whatever it held, so this is a repair, not a
+  // transition: a request already out on the road stays where it was, and only
+  // a `New` one actually advances. Both terminal values are included
+  // deliberately — a tool added to a closed request must not reopen it, the
+  // same ratchet `deriveRequestStatus` holds.
+  const statusAfterSave: RequestStatus = request.status === "New" ? "Assigned" : request.status
+  const restoresStatus = statusAfterSave !== "Assigned"
+
   // The `assignedtools` rows are committed from here on regardless of what
   // follows — a problem below is a tool-status write to retry, not a failed
   // assignment, so it becomes a warning rather than an error.
   const warnings: string[] = []
   try {
-    if (added.length > 0) {
-      const { toolsUpdated } = await markToolsAssigned(requestId, added)
+    // `toolIds` may be empty: with nothing added to a request that needs its
+    // status put back, this call is the status write and nothing else.
+    if (added.length > 0 || restoresStatus) {
+      const { toolsUpdated } = await markToolsAssigned(requestId, added, statusAfterSave)
       if (toolsUpdated !== added.length) {
         warnings.push(`${toolsUpdated} of ${added.length} newly assigned tools updated`)
       }
     }
-    if (removed.length > 0) {
-      const { toolsUpdated } = await releaseToolsToAvailable(requestId, removed)
-      if (toolsUpdated !== removed.length) {
-        warnings.push(`${toolsUpdated} of ${removed.length} released tools updated`)
+    // Belt and braces against the guard above: only a tool still reading
+    // `Assigned` is ever written back to `Available`. Anything else — a
+    // condition value, or a state the guard somehow let through — is left
+    // exactly as it is. Writing `Available` over a tool that is physically
+    // sitting on a job site is the failure mode this whole pair exists to stop.
+    //
+    // Reuses the guard's own read rather than re-fetching: nothing between here
+    // and there writes a *removed* tool's `statusNew` — `markToolsAssigned`
+    // touches only `added` — so a second read would return the same rows.
+    const releasable = removedTools.filter(isReleasable)
+    if (releasable.length > 0) {
+      const { toolsUpdated } = await releaseToolsToAvailable(
+        requestId,
+        releasable.map((tool) => tool.id),
+        statusAfterSave
+      )
+      if (toolsUpdated !== releasable.length) {
+        warnings.push(`${toolsUpdated} of ${releasable.length} released tools updated`)
       }
     }
   } catch (error) {

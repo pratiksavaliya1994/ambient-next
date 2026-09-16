@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache"
 
 import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
-import { isReadyForDispatch, isWarehouseLocation } from "@/lib/bubble/enums"
+import { isWarehouseLocation } from "@/lib/bubble/enums"
+import { isReadyForDispatch } from "@/lib/bubble/tool-enums"
 import { setRequestOrder } from "@/lib/bubble/request-order"
 import { dispatchRequests, getRequest, leaveToolsBehind, listRequestsByStatus } from "@/lib/bubble/requests"
 import { requireSession } from "@/lib/auth/session"

@@ -4,7 +4,7 @@ import * as React from "react"
 import { useMemo, useState } from "react"
 import { SearchIcon } from "lucide-react"
 
-import { TOOL_CONDITION, type ToolCondition } from "@/lib/bubble/enums"
+import { TOOL_CONDITION, type ToolCondition } from "@/lib/bubble/tool-enums"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
 import type { ToolConditionUpdate } from "@/lib/bubble/tool-status-updates"
 import type { ToolLine } from "@/lib/bubble/tools-summary"
@@ -256,6 +256,37 @@ export function toolLinesOfPickup(selected: Map<string, PickupSelection>): ToolL
   return [...selected.values()]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((entry) => ({ name: entry.name, quantity: 1 }))
+}
+
+/**
+ * The selected tools' **ids** — what makes a pickup request's physical tools
+ * survive the submit (phase 3B).
+ *
+ * Until this existed, a pickup persisted tool **names** only, via
+ * `toolLinesOfPickup` → `requestedtools.toolsSummary`, and the ids were
+ * consumed once by the condition fan-out and thrown away. Nothing downstream
+ * could say which physical units a pickup named, so nothing could put them on
+ * a trip.
+ *
+ * **Ids only, deliberately — no `{ toolId, extra, toolType }` objects.**
+ * `new-pickup-request` fans `assign-request-tool` out over
+ * `Search for tools (unique id is in toolIds)`, so each `assignedtools` row
+ * takes its `toolType` from `This tools's name` **inside Bubble**, and `extra`
+ * from a literal `no`. Both of the values an object would have carried are
+ * therefore derived at write time from the row itself rather than trusted from
+ * a browser that may have loaded its copy minutes ago — a rename between page
+ * load and submit can't write a stale name, and neither can a forged POST.
+ *
+ * That `toolType` holds the physical tool's **name** is the field's documented
+ * meaning, not a stretch of it: `toolType` is "the `toolsSummary` name from
+ * this request this row fills", and for a pickup the summary entries *are*
+ * physical tool names (`toolLinesOfPickup` maps `tool.name`). It is what lets
+ * `buildSlots` line up for pickup with no new logic, so "3 of 5 collected"
+ * falls out of the comparison delivery already renders. Do not "fix" the
+ * Bubble side to a type name.
+ */
+export function toolIdsOfPickup(selected: Map<string, PickupSelection>): string[] {
+  return [...selected.values()].sort((a, b) => a.name.localeCompare(b.name)).map((entry) => entry.id)
 }
 
 /** Only the tools whose condition was actually changed from what Bubble had on fetch. */

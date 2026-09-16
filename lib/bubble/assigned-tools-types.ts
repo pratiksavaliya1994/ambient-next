@@ -65,6 +65,60 @@ export type CandidateTool = {
 }
 
 /**
+ * A tool on this request that an open trip is already carrying — one entry per
+ * claimed tool, shaped from `listToolClaims` for the browser.
+ *
+ * The assign screen needs this because **`tools.statusNew` does not say a tool
+ * is on a trip until it is physically collected**: `start-trip` moves nothing,
+ * so a tool planned onto a saved trip — even one already out on the road —
+ * still reads `Assigned` right up until the driver records the stop.
+ * `isLockedToTrip` therefore cannot see these at all, and without the claim the
+ * remove control is offered on a tool a live `triptool` row is counting on.
+ * Saving that removal deletes the `assignedtools` row and frees the tool while
+ * the trip still lists it.
+ */
+export type ToolTripClaim = {
+  toolId: string
+  tripId: string
+  driver: string | null
+  /** `trip.status === "In Transit"`. A `Planned` trip can still be edited to drop the tool; this one can't. */
+  started: boolean
+}
+
+/**
+ * A tool that a **different open request** already holds — one entry per
+ * claimed tool, shaped from `listRequestClaims` for the browser.
+ *
+ * This is a *warning*, never a block, and the distinction is the whole point.
+ * `isFreeToAssign` deliberately counts `Pickup Requested` as free — a tool
+ * somebody has asked to collect is still one you can commit to next week's job,
+ * and treating it otherwise would make every awaiting-collection tool
+ * unassignable. So booking a tool that is already spoken for stays legal, and
+ * is sometimes exactly right: it comes back Tuesday, the job needs it
+ * Wednesday.
+ *
+ * What is not fine is doing it **by accident**. A tool on two open requests
+ * produces an outstanding movement under each, and because the trip builder
+ * keys selection by tool id — one tool goes on a trip at most once — the two
+ * rows share a checkbox and the trip would try to drop one physical object in
+ * two places. `validatePlan`'s `duplicate-tool` check refuses that write; this
+ * is the same fact said earlier, on the screen that creates it, while avoiding
+ * it is still one click.
+ *
+ * Separate from `ToolTripClaim` because the two answer different questions and
+ * have different remedies: that one is a trip already carrying the tool, and it
+ * *blocks*; this one is a request merely holding it, and it informs.
+ */
+export type ToolRequestClaim = {
+  toolId: string
+  requestId: string
+  /** The other request's `job`, so the warning names somewhere the PM recognises. */
+  job: string
+  /** `isPickupRequest` — "wants it back" reads very differently from "is taking it out". */
+  pickup: boolean
+}
+
+/**
  * One requested tool type on the assign screen: how many were asked for, which
  * physical tools currently fill it, and the `toolstype` its candidates come
  * from — `null` when the name doesn't resolve to one, in which case the slot

@@ -3,12 +3,21 @@
 **Start here.** This is the master design for phase 3. Each slice has its own
 doc with the file list and checklist:
 
+> **Partly superseded by [`phase-4-trips.md`](./phase-4-trips.md) (2026-09-15).**
+> Phase 4 made a trip a real, ordered list of stops, and a pickup turned out to
+> be the same movement as a delivery pointed the other way — which this doc had
+> already noticed (*"The middle hop is byte-identical"*). So 3B was absorbed and
+> built as part of phase 4, and **3C and 3D are cancelled**: collecting is a
+> collect at a stop, returning is a drop at a `Warehouse`-kind stop. Every
+> decision below still holds; only the slices that would have implemented them
+> separately are gone.
+
 | Slice | Doc | State |
 | --- | --- | --- |
 | **3A — Condition split** | [`phase-3a-condition-split.md`](./phase-3a-condition-split.md) | done (optional history step left out) |
-| **3B — Pickup assignments** | [`phase-3b-pickup-assignments.md`](./phase-3b-pickup-assignments.md) | not started |
-| **3C — Actual pickup** | [`phase-3c-actual-pickup.md`](./phase-3c-actual-pickup.md) | not started |
-| **3D — Warehouse offload** | [`phase-3d-warehouse-offload.md`](./phase-3d-warehouse-offload.md) | not started |
+| **3B — Pickup assignments** | [`phase-3b-pickup-assignments.md`](./phase-3b-pickup-assignments.md) | **built as part of phase 4** — Next.js half done, Studio half in [`bubble-trip-workflows-spec.md`](./bubble-trip-workflows-spec.md) §10 |
+| **3C — Actual pickup** | [`phase-3c-actual-pickup.md`](./phase-3c-actual-pickup.md) | **cancelled** — absorbed by phase 4 |
+| **3D — Warehouse offload** | [`phase-3d-warehouse-offload.md`](./phase-3d-warehouse-offload.md) | **cancelled** — absorbed by phase 4 |
 
 Read [`phase-2-lifecycle.md`](./phase-2-lifecycle.md) first — phase 3 rides on
 the schema, the workflows and the conventions it established, and this doc
@@ -182,7 +191,7 @@ Call shapes per transition:
 
 | Transition | Workflow | Key params | Slice |
 | --- | --- | --- | --- |
-| Create | `new-pickup-request` | `assignments`, `toolIds` → `statusNew = "Pickup Requested"`, `status = "Assigned"` | 3B |
+| Create | `new-pickup-request` | `toolIds` → one `assignedtools` row per tool, `statusNew = "Pickup Requested"`, `status = "Assigned"` | 3B |
 | Pickup (taken) | `update-request-status` via **`dispatchRequests`** | `status: "In Transit"`, `driver`, `toolStatus: "In Transit"`, `toolLocation: driver`, `toolUser: driver` | 3C |
 | Pickup (left behind) | `update-request-status` | `toolStatus: "Pickup Requested"`, **no `toolLocation`** | 3C |
 | Return | `update-request-status` via **`returnRequest`** | `status: "Returned"`, `toolStatus: "Available"`, `toolLocation: warehouse` | 3D |

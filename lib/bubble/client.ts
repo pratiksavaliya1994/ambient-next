@@ -145,6 +145,37 @@ export async function bubbleListAll(
   }
 }
 
+/**
+ * A `bubbleListAll` that treats "no such type" as "no rows".
+ *
+ * Only 404 is swallowed, and only with a warning — a type that exists and
+ * errors for any other reason still throws, because a read that silently
+ * reports "nothing is here" is worse than a broken page.
+ *
+ * Written when the assign UI shipped ahead of its Bubble schema, and kept
+ * because a missing type should degrade to an empty screen rather than a crash.
+ * Lives here rather than in one domain module now that the trip reads need it
+ * for the same reason — three new types that don't exist until someone creates
+ * them in Studio.
+ *
+ * **It also hides a typo'd type name indefinitely**, so a new type is worth
+ * confirming once with a real `GET /obj/{type}` before trusting an empty list.
+ */
+export async function bubbleListMaybeMissing(
+  type: string,
+  options: Omit<ListOptions, "cursor" | "limit"> = {}
+): Promise<BubbleThing[]> {
+  try {
+    return await bubbleListAll(type, options)
+  } catch (error) {
+    if (error instanceof BubbleError && error.status === 404) {
+      console.warn(`[bubble] type "${type}" does not exist yet — treating as empty.`)
+      return []
+    }
+    throw error
+  }
+}
+
 export async function bubbleGet(type: string, id: string): Promise<BubbleThing | null> {
   try {
     const res = await request(`/obj/${type}/${id}`)

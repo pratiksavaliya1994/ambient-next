@@ -118,6 +118,43 @@ export function newYorkToday(): string {
 }
 
 /**
+ * A stored instant back to the `yyyy-mm-dd` a date input speaks — the inverse
+ * of `newYorkInstant`, for seeding a form from a saved row.
+ *
+ * Read through the New York calendar rather than `iso.slice(0, 10)`: a value
+ * stored as NY midnight is `05:00Z` (or `04:00Z` in summer), so slicing the ISO
+ * string happens to be right, while anything stored with a *time* — or written
+ * from a different zone — would silently come back a day out.
+ */
+export function newYorkDayValue(iso: string | null | undefined): string {
+  if (!iso) return newYorkToday()
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return newYorkToday()
+
+  const p = partsOf(PARTS, at)
+  return `${p.year}-${p.month}-${p.day}`
+}
+
+/**
+ * A stored instant back to the `"HH:mm"` a time picker speaks — the clock half
+ * of `newYorkDayValue`, read through the same New York calendar and for the
+ * same reason: the value is a New York wall-clock time, and `iso.slice(11, 16)`
+ * would hand back UTC.
+ *
+ * Null rather than a default for a missing or unparseable value, so each caller
+ * decides for itself what "no time at all" should mean.
+ */
+export function newYorkTimeValue(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return null
+
+  const p = partsOf(PARTS, at)
+  // `hour12: false` renders midnight as 24 in some ICU versions — same guard as `offsetMs`.
+  return `${String(Number(p.hour) % 24).padStart(2, "0")}:${p.minute}`
+}
+
+/**
  * `days` days before today in New York, as `yyyy-mm-dd`.
  *
  * Plain calendar arithmetic on a UTC date rather than subtracting 24h from an
