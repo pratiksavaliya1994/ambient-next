@@ -48,16 +48,27 @@ import { signOutAction } from "@/lib/auth/actions"
  * (`app/(app)/tools/all/page.tsx`). They're separate routes rather than tabs
  * of one screen so each gets its own nav entry and its own back-button history.
  */
-const NAV_ITEMS = [
+const REQUEST_NAV_ITEMS = [
   { title: "Requests", href: "/requests", icon: ClipboardListIcon },
-  { title: "Trips", href: "/trips", icon: NavigationIcon },
-  { title: "New trip", href: "/trips/new", icon: RouteIcon },
   { title: "New delivery request", href: "/requests/new", icon: TruckIcon },
   { title: "New pickup request", href: "/requests/new/pickup", icon: ShoppingCartIcon },
+] as const
+
+const TRIP_NAV_ITEMS = [
+  { title: "Trips", href: "/trips", icon: NavigationIcon },
+  { title: "New trip", href: "/trips/new", icon: RouteIcon },
+] as const
+
+const TOOL_NAV_ITEMS = [
   { title: "Job Dashboard", href: "/tools", icon: MapPinIcon },
   { title: "All Tools", href: "/tools/all", icon: ListIcon },
 ] as const
 
+const NAV_GROUPS = [
+  { label: "Requests", items: REQUEST_NAV_ITEMS },
+  { label: "Trips", items: TRIP_NAV_ITEMS },
+  { label: "Tools", items: TOOL_NAV_ITEMS },
+] as const
 /**
  * The signed-in navigation. A client component only because the active item
  * comes from `usePathname` — the shell around it stays on the server.
@@ -94,27 +105,29 @@ export function AppSidebar({ userName }: { userName: string }) {
         </SidebarHeader>
 
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Workflow</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {NAV_ITEMS.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      // Exact match: `/requests/new` is its own item, so
-                      // prefix matching would light both rows up at once.
-                      isActive={pathname === item.href}
-                      tooltip={item.title}
-                      render={<Link href={item.href} onClick={closeOnMobile} />}
-                    >
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          {NAV_GROUPS.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        // Exact match: `/requests/new` is its own item, so
+                        // prefix matching would light both rows up at once.
+                        isActive={pathname === item.href}
+                        tooltip={item.title}
+                        render={<Link href={item.href} onClick={closeOnMobile} />}
+                      >
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
         </SidebarContent>
 
         <SidebarFooter>
