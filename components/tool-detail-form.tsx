@@ -1,13 +1,13 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { SaveIcon } from "lucide-react"
+import { ArrowLeftIcon, SaveIcon } from "lucide-react"
 import * as React from "react"
 import { useForm, useWatch } from "react-hook-form"
 
 import { ToolCatalogueFields } from "@/components/tool-catalogue-fields"
 import { ToolMovementFields, ToolReleaseField } from "@/components/tool-movement-fields"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Field, FieldError, FieldGroup, FieldSeparator } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
@@ -17,6 +17,7 @@ import { toolEditSchema, type ToolEditFormValues } from "@/lib/schemas/tool"
 import type { ToolDetail, ToolEditability } from "@/lib/tools/tool-edit"
 import { updateToolAction } from "@/app/(app)/tools/[toolId]/actions"
 import { INITIAL_TOOL_EDIT_STATE, type ToolEditState } from "@/app/(app)/tools/action-state"
+import Link from "next/link"
 
 /**
  * Editing one tool. `name` is absent on purpose — it is what a driver reads off
@@ -92,10 +93,10 @@ export function ToolDetailForm({
 
   return (
     <form onSubmit={onSubmit} noValidate>
-      <FieldGroup className="sm:grid sm:grid-cols-2 sm:gap-x-6">
+      <FieldGroup className="gap-y-4 sm:grid sm:grid-cols-2 sm:gap-x-6">
         <ToolCatalogueFields control={control} toolTypes={toolTypes} currentCondition={tool.condition} />
 
-        <FieldSeparator className="sm:col-span-2" />
+        {/* <FieldSeparator className="sm:col-span-2" /> */}
 
         <ToolMovementFields
           control={control}
@@ -109,7 +110,11 @@ export function ToolDetailForm({
 
         {state.status === "error" && <FieldError className="sm:col-span-2">{state.message}</FieldError>}
 
-        <Field orientation="horizontal" className="justify-end sm:col-span-2">
+        <Field orientation="horizontal" className="justify-end gap-2 sm:col-span-2">
+          <Link href="/tools/all" className={buttonVariants({ variant: "outline" })}>
+            <ArrowLeftIcon />
+            Back
+          </Link>
           <Button type="submit" disabled={pending || !isDirty}>
             {pending ? <Spinner /> : <SaveIcon />}
             Save changes

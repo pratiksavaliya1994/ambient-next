@@ -86,7 +86,7 @@ export function TripStopItemLine({
             {item.toolName}
           </PopoverTrigger>
           <PopoverContent align="start" className="w-64 gap-2">
-            <RequestPopoverBody request={request} />
+            <RequestPopoverBody request={request} toolId={item.toolId} />
           </PopoverContent>
         </Popover>
       ) : (
@@ -126,7 +126,7 @@ export function TripStopItemLine({
 }
 
 /** Who to ask for on site, and a way to the request itself for the rest. */
-function RequestPopoverBody({ request }: { request: RequestStopInfo }) {
+function RequestPopoverBody({ request, toolId }: { request: RequestStopInfo; toolId: string }) {
   return (
     <>
       <p className="truncate text-sm font-medium" title={request.job}>
@@ -151,6 +151,9 @@ function RequestPopoverBody({ request }: { request: RequestStopInfo }) {
       </div>
       <Link href={`/requests/${request.id}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
         View request
+      </Link>
+      <Link href={`/tools/${toolId}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+        View Tool
       </Link>
     </>
   )

@@ -6,8 +6,38 @@ import { ToolsDashboardFilters } from "@/components/tools-dashboard-filters"
 import { LocationCard } from "@/components/tools-location-card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { NO_LOCATION, type DashboardTool } from "@/lib/bubble/pickup-tools-types"
+import { Button } from "./ui/button"
+import { Maximize2, Minimize2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 const STORAGE_KEY = "tools-dashboard:locations"
+
+export function useFullscreen<T extends HTMLElement>() {
+  const ref = React.useRef<T>(null)
+  const [isFullscreen, setIsFullscreen] = React.useState(false)
+
+  React.useEffect(() => {
+    function onChange() {
+      setIsFullscreen(document.fullscreenElement === ref.current)
+    }
+    document.addEventListener("fullscreenchange", onChange)
+    return () => document.removeEventListener("fullscreenchange", onChange)
+  }, [])
+
+  const toggle = React.useCallback(() => {
+    const node = ref.current
+    if (!node) return
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    } else {
+      node.requestFullscreen().catch(() => {
+        // Request can be denied, or unsupported (e.g. iOS Safari on non-video elements).
+      })
+    }
+  }, [])
+
+  return { ref, isFullscreen, toggle } as const
+}
 
 function readStoredLocations(): string[] {
   try {
@@ -37,6 +67,7 @@ export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
 
   const [selected, setSelected] = React.useState<string[]>([])
   const [committedSearch, setCommittedSearch] = React.useState("")
+  const { ref: fsRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen<HTMLDivElement>()
 
   // Reading the saved selection needs `localStorage`, which doesn't exist
   // during server rendering — there's no way to know it while rendering, so
@@ -82,14 +113,31 @@ export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
   }, [tools, selectedSet, locations, committedSearch])
 
   return (
-    <div className="flex flex-col gap-3">
-      <ToolsDashboardFilters
-        locations={locations}
-        selected={selected}
-        onSelectedChange={updateSelected}
-        onSearch={setCommittedSearch}
-        hasSearch={committedSearch.length > 0}
-      />
+    <div
+      className={
+        isFullscreen ? "flex h-full w-full flex-col gap-3 overflow-auto bg-background p-4" : "flex flex-col gap-3"
+      }
+    >
+      <div className="flex items-start gap-2">
+        <div className="flex-1">
+          <ToolsDashboardFilters
+            locations={locations}
+            selected={selected}
+            onSelectedChange={updateSelected}
+            onSearch={setCommittedSearch}
+            hasSearch={committedSearch.length > 0}
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          className="shrink-0"
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        >
+          {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        </Button>
+      </div>
 
       {grouped.length === 0 ? (
         <Empty className="border py-8">
@@ -103,21 +151,14 @@ export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        /* Multi-column, not grid: a grid row reserves the tallest card's
-           height, so a 3-tool card beside a 30-tool one left a dead band
-           beneath it. Columns pack cards vertically with no such gap. Two
-           consequences to know about — reading order is column-major (fine
-           here, since locations are alphabetical), and `gap` only supplies
-           `column-gap` in multicol, so the vertical rhythm has to come from
-           `mb-3` on each card. `Card`'s own `overflow-hidden` already makes it
-           monolithic to the fragmentation algorithm, so it can't be split
-           across a column break; `break-inside-avoid` states the intent. */
-        <div className="columns-3xs gap-1.5">
-          {grouped.map((group) => (
-            <div key={group.location} className="mb-1.5 break-inside-avoid">
-              <LocationCard location={group.location} tools={group.tools} isExtra={group.isExtra} />
-            </div>
-          ))}
+        <div ref={fsRef} className={isFullscreen ? "h-full w-full overflow-y-auto bg-background pt-8" : undefined}>
+          <div className="columns-3xs gap-1.5">
+            {grouped.map((group) => (
+              <div key={group.location} className="mb-1.5 break-inside-avoid">
+                <LocationCard location={group.location} tools={group.tools} isExtra={group.isExtra} />
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
