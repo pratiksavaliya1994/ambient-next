@@ -87,16 +87,24 @@ export function validatePlan(stops: readonly PlannedStop[], items: readonly Plan
 
   // **One tool, one journey.** A tool double-booked across two open requests —
   // which `isFreeToAssign` permits, since it counts `Pickup Requested` as free
-  // — yields a movement under *each* of them, and `selectMovements` emits both
-  // because selection is keyed by tool id and the two rows share one checkbox.
-  // Nothing above catches it: both movements are individually well-formed, and
-  // they route to different stops, so the order and orphan checks pass.
+  // — yields a movement under *each* of them, and selection is keyed by tool id,
+  // so the two rows share one checkbox. Nothing above catches the result: both
+  // movements are individually well-formed, and they route to different stops,
+  // so the order and orphan checks pass.
   //
   // The write it would produce is the thing worth refusing: two `triptool` rows
   // for one physical object, a run sheet telling the driver to drop the same
-  // tool in two places, and a collect that can only satisfy one of them. The
-  // fix is not on this screen — the dispatcher has to unassign the tool from one
-  // request — so the message says which two places are fighting over it.
+  // tool in two places, and a collect that can only satisfy one of them.
+  //
+  // `oneJourney` now reconciles the cases that *have* an answer before a plan
+  // is ever built — a pickup leg superseded by a delivery from the same site is
+  // one drive, not a conflict — so what reaches here is the case with none: two
+  // deliveries pulling one tool towards two different jobs. That has no route,
+  // and the fix is not on this screen; the dispatcher has to unassign the tool
+  // from one request. So the message says which two places are fighting over it.
+  // The check stays whole rather than being narrowed to that case: it is the
+  // last thing between a selection and the write, and it is reachable by direct
+  // POST, where nothing guarantees `selectMovements` ran at all.
   const itemsByTool = new Map<string, PlannedItem[]>()
   for (const item of items) {
     itemsByTool.set(item.toolId, [...(itemsByTool.get(item.toolId) ?? []), item])

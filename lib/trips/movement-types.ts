@@ -57,20 +57,34 @@ export type RequestMovements = {
   unfilledSlots: number
 }
 
+/** One request's claim on a ticked tool, before the tool's legs are reconciled into a journey. */
+type Leg = { movement: Movement; pickup: boolean }
+
 /**
- * Turns ticked tool ids back into `Movement`s.
+ * Turns ticked tool ids back into `Movement`s — **at most one per tool**.
  *
  * Blocked tools are returned separately rather than silently skipped: the
  * action needs to *refuse* with a reason, and quietly planning a trip without a
  * tool the manager ticked would be worse than failing.
+ *
+ * The per-tool collapse is what makes a **site-to-site transfer** work. Raising
+ * a pickup is how a tool standing on a job site becomes assignable at all
+ * (`isFreeToAssign` counts `Pickup Requested` as free), so the ordinary way to
+ * move a tool from one job to the next leaves it on two open requests: the
+ * pickup that freed it and the delivery that wants it. Two requests, two legs,
+ * one physical object — and one checkbox, since selection is keyed by tool id.
+ * Emitting both legs asked the driver to drop the same tool at a warehouse
+ * *and* at a job, which `validatePlan` rightly refused; the dispatcher's only
+ * way out was to unassign the tool from the request they had just assigned it
+ * to. See `oneJourney` for which leg wins.
  */
 export function selectMovements(
   groups: readonly RequestMovements[],
   toolIds: ReadonlySet<string>,
   destinationByRequest: ReadonlyMap<string, string>
 ): { movements: Movement[]; blocked: OutstandingMovement[] } {
-  const movements: Movement[] = []
   const blocked: OutstandingMovement[] = []
+  const legsByTool = new Map<string, Leg[]>()
 
   for (const group of groups) {
     const destination = destinationByRequest.get(group.requestId) ?? group.destination
@@ -80,18 +94,58 @@ export function selectMovements(
         blocked.push(movement)
         continue
       }
-      movements.push({
-        toolId: movement.toolId,
-        toolName: movement.toolName,
-        toolType: movement.toolType,
-        requestId: movement.requestId,
-        from: movement.from,
-        to: group.destinationIsChoosable ? destination : movement.to,
-      })
+      const leg: Leg = {
+        pickup: group.direction === "pickup",
+        movement: {
+          toolId: movement.toolId,
+          toolName: movement.toolName,
+          toolType: movement.toolType,
+          requestId: movement.requestId,
+          from: movement.from,
+          to: group.destinationIsChoosable ? destination : movement.to,
+        },
+      }
+      legsByTool.set(movement.toolId, [...(legsByTool.get(movement.toolId) ?? []), leg])
     }
   }
 
+  const movements: Movement[] = []
+  for (const legs of legsByTool.values()) movements.push(...oneJourney(legs))
+
   return { movements, blocked }
+}
+
+/**
+ * One tool's legs, reduced to the journey the driver actually drives.
+ *
+ * **Origins never disagree**, so there is nothing to choose there: a leg's
+ * `from` is `originOf(the live tools row)`, which is one string per tool
+ * however many requests name it. Only the destinations can differ, and the
+ * rule for them is:
+ *
+ * - **A delivery beats a pickup.** A pickup says *get it off this site*; a
+ *   delivery says *and put it here*. Driving the tool straight to the job
+ *   satisfies both, and the warehouse leg it replaces was a detour nobody
+ *   wanted — which is why `hasLanded` counts a pickup's tool as collected once
+ *   it is standing on a site that isn't the one it was being collected from.
+ *   The surviving leg carries the **delivery's** `requestId`, so the drop lands
+ *   at a `Job`-kind stop and writes `Delivered`, and the run sheet files the
+ *   tool under the request that actually wanted it there.
+ * - **Same destination, either direction, collapses too** — two requests
+ *   pointed at one place is one drop, not a conflict.
+ * - **Two genuine destinations survive as two legs**, deliberately. Two
+ *   deliveries to different jobs is a real double-booking that no route can
+ *   satisfy, and `validatePlan`'s `duplicate-tool` check is what says so by
+ *   name. Nothing here papers over it by guessing.
+ */
+function oneJourney(legs: readonly Leg[]): Movement[] {
+  if (legs.length === 1) return [legs[0].movement]
+
+  const deliveries = legs.filter((leg) => !leg.pickup)
+  const kept = deliveries.length > 0 ? deliveries : legs
+
+  const destinations = new Set(kept.map((leg) => leg.movement.to))
+  return destinations.size === 1 ? [kept[0].movement] : kept.map((leg) => leg.movement)
 }
 
 /**

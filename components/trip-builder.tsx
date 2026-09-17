@@ -112,11 +112,24 @@ export function TripBuilder({
     return deriveInitialSplitPreference(movements, draft.splitLocations)
   })
 
+  const selection = useMemo(
+    () => selectMovements(groups, selectedIds, destinations),
+    [groups, selectedIds, destinations]
+  )
+
   const plan = useMemo(() => {
-    const { movements } = selectMovements(groups, selectedIds, destinations)
-    if (movements.length === 0) return { stops: [], items: [], noop: [], splitChoices: [] }
-    return planTrip(movements, { splitPreference })
-  }, [groups, selectedIds, destinations, splitPreference])
+    if (selection.movements.length === 0) return { stops: [], items: [], noop: [], splitChoices: [] }
+    return planTrip(selection.movements, { splitPreference })
+  }, [selection, splitPreference])
+
+  // Where each ticked tool is *really* going. Usually its own group's
+  // destination, but a tool that a pickup and a delivery both name travels once
+  // — see `oneJourney` — and the pickup row has to say so rather than promising
+  // a warehouse this trip will never visit.
+  const journeys = useMemo(
+    () => new Map(selection.movements.map((movement) => [movement.toolId, movement.to])),
+    [selection]
+  )
 
   // The dispatcher's arrangement, applied over the freshly-planned stops. A
   // stop they never saw sorts to the end rather than being dropped, where the
@@ -226,6 +239,7 @@ export function TripBuilder({
             groups={groups}
             selectedIds={selectedIds}
             destinations={destinations}
+            journeys={journeys}
             onToggle={toggle}
             onToggleGroup={toggleGroup}
             onDestinationChange={(requestId, warehouse) =>

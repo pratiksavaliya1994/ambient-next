@@ -153,6 +153,42 @@ export async function listRequestClaims(
   return byTool
 }
 
+/**
+ * Every **open** request holding any of these tools — `listAssignedTools` read
+ * backwards, tools to requests.
+ *
+ * Written for the trip lifecycle's status sync, which otherwise only knows the
+ * requests its own `triptool` rows name. A `triptool` row carries exactly one
+ * `requestId`, and a site-to-site transfer collapses a tool's pickup leg and
+ * delivery leg into one row (see `oneJourney`), so the pickup request that
+ * freed the tool is *not* named anywhere on the trip that satisfies it. Moving
+ * the tool would leave that request reading its old status until something
+ * else happened to touch it.
+ *
+ * Closed requests are filtered out by `listOpenRequestsByIds`: recomputing one
+ * is a wasted round trip, since `deriveRequestStatus` ratchets and would return
+ * the terminal value unchanged.
+ */
+export async function listOpenRequestIdsForTools(toolIds: readonly string[]): Promise<string[]> {
+  if (toolIds.length === 0) return []
+
+  const rows = await bubbleListMaybeMissing(ASSIGNED_TOOLS, {
+    constraints: [{ key: "toolID", constraint_type: "in", value: [...toolIds] }],
+  })
+
+  const wanted = new Set(toolIds)
+  const requestIds = [
+    ...new Set(
+      rows
+        .map((raw) => assignedToolRow.parse(raw))
+        .filter((row) => row.requestID && row.toolID && wanted.has(row.toolID))
+        .map((row) => row.requestID!)
+    ),
+  ]
+
+  return (await listOpenRequestsByIds(requestIds)).map((request) => request.id)
+}
+
 function toCandidate(row: z.infer<typeof toolRow>, typeNameById: Map<string, string>): CandidateTool {
   return {
     id: row._id,

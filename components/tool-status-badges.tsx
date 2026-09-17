@@ -77,9 +77,13 @@ function statusStyle(status: string): StatusStyle {
 }
 
 /**
- * `tools.condition` — the same five non-`Ok` display texts `TOOL_STATUS_NEW`
+ * `tools.condition` — most of the non-`Ok` display texts `TOOL_STATUS_NEW`
  * used to carry, reusing the same colour ramp so the vocabulary and severity
- * read identically to before the phase 3A split.
+ * read identically to before the phase 3A split. `Repair Required` stays
+ * mapped for old rows still holding it even though `TOOL_CONDITION` no longer
+ * offers it (see `lib/bubble/tool-enums.ts`). `Retired` has no entry and falls
+ * back to `NEUTRAL` — permanently out of service isn't a severity, so it gets
+ * no warning colour.
  */
 const CONDITION_STYLE: Record<string, Pick<StatusStyle, "badge" | "text">> = {
   "Maintenance Required": {

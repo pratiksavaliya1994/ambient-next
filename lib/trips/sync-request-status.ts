@@ -1,6 +1,6 @@
 import "server-only"
 
-import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
+import { listAssignedTools, listOpenRequestIdsForTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { buildSlots } from "@/lib/bubble/assigned-tools-types"
 import type { RequestStatus } from "@/lib/bubble/enums"
 import { listToolTypes } from "@/lib/bubble/reference"
@@ -26,15 +26,30 @@ import { deriveRequestStatus, requestProgress } from "@/lib/trips/request-progre
  * so a failure here is a status to re-derive, not a movement to undo. Callers
  * surface it as a warning and let the action succeed — the same call
  * `assignToolsAction` makes about its own follow-up write.
+ *
+ * `touchedToolIds` widens the set beyond the requests the caller named, and a
+ * trip always passes it. The reason is the **site-to-site transfer**: one
+ * `triptool` row carries one `requestId`, and a tool moving straight from the
+ * site that wanted it collected to the job that wanted it delivered has both
+ * legs collapsed into a single row under the *delivery* (see `oneJourney` in
+ * `lib/trips/movement-types.ts`). The pickup request is satisfied by that same
+ * drive — `hasLanded` says so — but it is named nowhere on the trip, so
+ * without this it would keep reading `Assigned` until something unrelated
+ * happened to recompute it. One extra `assignedtools` query answers it from
+ * live data, which beats persisting a second request id the schema has no
+ * field for.
  */
 export async function syncRequestStatuses(
   requestIds: readonly string[],
-  driver?: string
+  driver?: string,
+  touchedToolIds: readonly string[] = []
 ): Promise<{ updated: number; warning?: string }> {
-  const ids = [...new Set(requestIds.filter(Boolean))]
-  if (ids.length === 0) return { updated: 0 }
-
   try {
+    const ids = [
+      ...new Set([...requestIds, ...(await listOpenRequestIdsForTools([...new Set(touchedToolIds)]))].filter(Boolean)),
+    ]
+    if (ids.length === 0) return { updated: 0 }
+
     const [requests, assignedRows, toolTypes] = await Promise.all([
       Promise.all(ids.map((id) => getRequest(id))),
       listAssignedTools(ids),

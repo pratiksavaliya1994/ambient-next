@@ -78,11 +78,34 @@ const LANDED_DELIVERY_STATUS: readonly string[] = [TOOL_STATUS_DELIVERED, TOOL_S
  *   pickup request flags every one of its tools `Pickup Requested` on a job
  *   site at creation (3B), so `Available` at the yard can only mean it came
  *   back.
+ *
+ * A pickup has a **second** way to land, and it is the site-to-site transfer:
+ * a tool standing on some *other* site. What a pickup request asks for is that
+ * the tool stop being on **this** site, and the ordinary way that happens
+ * without a warehouse detour is that the same trip carries it straight to the
+ * job that had already been assigned it — see `oneJourney` in
+ * `lib/trips/movement-types.ts`, which collapses the two legs into one. The
+ * tool ends `Delivered` somewhere else, the pickup is satisfied in the only
+ * sense it ever meant, and without this the request could never close: its
+ * tool would sit outstanding forever waiting for a yard it was never going to
+ * see.
+ *
+ * Both parts are needed here too. `LANDED_DELIVERY_STATUS` rather than
+ * `Delivered` alone, for exactly the reason that list exists — a pickup raised
+ * at the *new* site must not un-land the tool and resurrect this request. A
+ * known location rather than any, because a blank one is a data gap, and
+ * reading a gap as "somewhere else" would close a request on no evidence.
  */
 export function hasLanded(request: ProgressRequest, tool: CandidateTool): boolean {
-  return isPickupRequest(request)
-    ? tool.status === TOOL_STATUS_AVAILABLE && isWarehouseLocation(tool.location)
-    : LANDED_DELIVERY_STATUS.includes(tool.status) && tool.location === request.job
+  if (!isPickupRequest(request)) {
+    return LANDED_DELIVERY_STATUS.includes(tool.status) && tool.location === request.job
+  }
+  if (tool.status === TOOL_STATUS_AVAILABLE && isWarehouseLocation(tool.location)) return true
+  return (
+    LANDED_DELIVERY_STATUS.includes(tool.status) &&
+    tool.location.trim() !== "" &&
+    tool.location !== request.job
+  )
 }
 
 export function requestProgress(

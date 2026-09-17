@@ -23,6 +23,7 @@ export function TripMovementPool({
   groups,
   selectedIds,
   destinations,
+  journeys,
   onToggle,
   onToggleGroup,
   onDestinationChange,
@@ -30,6 +31,8 @@ export function TripMovementPool({
   groups: RequestMovements[]
   selectedIds: ReadonlySet<string>
   destinations: ReadonlyMap<string, string>
+  /** `toolId → where the current selection really sends it`. See `TripMovementRow`. */
+  journeys: ReadonlyMap<string, string>
   onToggle: (toolId: string, checked: boolean) => void
   onToggleGroup: (group: RequestMovements, checked: boolean) => void
   onDestinationChange: (requestId: string, warehouse: string) => void
@@ -90,6 +93,7 @@ export function TripMovementPool({
             group={group}
             selectedIds={selectedIds}
             destination={destinations.get(group.requestId) ?? group.destination}
+            journeys={journeys}
             onToggle={onToggle}
             onToggleAll={(checked) => onToggleGroup(group, checked)}
             onDestinationChange={(warehouse) => onDestinationChange(group.requestId, warehouse)}

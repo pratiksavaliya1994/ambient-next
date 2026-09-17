@@ -121,11 +121,15 @@ export const UNASSIGNABLE_TOOL_STATUS: readonly string[] = [
 /**
  * `tools.condition` — split off `statusNew` in phase 3A so a PM's condition
  * pick in the Pickup picker survives the pickup lifecycle overwriting
- * `statusNew` with flow values (`In Transit`, `Delivered`, …). Five of the six
- * display texts are shared with `TOOL_STATUS_NEW` on purpose — same words, so
- * the Bubble backfill is a copy rather than a translation, and nothing in the
- * UI changes vocabulary on the user. `Ok` is new: its `statusNew` counterpart
- * was `Available`, which is a *flow* state, not a condition.
+ * `statusNew` with flow values (`In Transit`, `Delivered`, …). Most display
+ * texts are shared with `TOOL_STATUS_NEW` on purpose — same words, so the
+ * Bubble backfill is a copy rather than a translation, and nothing in the UI
+ * changes vocabulary on the user. `Ok` is new: its `statusNew` counterpart was
+ * `Available`, which is a *flow* state, not a condition. `Retired` has no
+ * `statusNew` counterpart at all — it's a condition-only value added later.
+ * `Repair Required` was dropped as a duplicate of `Maintenance Required`;
+ * `TOOL_STATUS_NEW`/`UNASSIGNABLE_TOOL_STATUS` still carry it as a legacy
+ * value an old-Bubble-UI edit could still write.
  *
  * **Nothing in the trip flow writes this field**, which is the whole payoff of
  * the 3A split: a tool collected on a pickup and dropped at the warehouse
@@ -134,10 +138,10 @@ export const UNASSIGNABLE_TOOL_STATUS: readonly string[] = [
 export const TOOL_CONDITION = [
   "Ok",
   "Maintenance Required",
-  "Repair Required",
   "Under Repair",
   "Inspection Required",
   "Missing",
+  "Retired",
 ] as const
 export type ToolCondition = (typeof TOOL_CONDITION)[number]
 

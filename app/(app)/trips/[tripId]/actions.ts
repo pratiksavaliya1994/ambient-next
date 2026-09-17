@@ -101,7 +101,8 @@ export async function startTripAction(input: unknown): Promise<TripRunState> {
 
   const { warning } = await syncRequestStatuses(
     trip.items.map((item) => item.requestId),
-    trip.driver
+    trip.driver,
+    trip.items.map((item) => item.toolId)
   )
 
   revalidateTrip(trip)
@@ -211,7 +212,8 @@ export async function completeStopAction(input: unknown): Promise<TripRunState> 
   const touched = [...dropToolIds, ...loadToolIds, ...skipToolIds, ...refuseToolIds]
   const { warning } = await syncRequestStatuses(
     trip.items.filter((item) => touched.includes(item.toolId)).map((item) => item.requestId),
-    trip.driver
+    trip.driver,
+    touched
   )
 
   revalidateTrip(trip)
@@ -260,7 +262,8 @@ export async function completeTripAction(input: unknown): Promise<TripRunState> 
 
   const { warning } = await syncRequestStatuses(
     trip.items.map((item) => item.requestId),
-    trip.driver ?? undefined
+    trip.driver ?? undefined,
+    trip.items.map((item) => item.toolId)
   )
 
   revalidateTrip(trip)

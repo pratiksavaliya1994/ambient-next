@@ -23,6 +23,14 @@ import { cn } from "@/lib/utils"
  * screen-reader users get the control they expect. Same shape as the pickup
  * picker's clickable `ItemContent`.
  *
+ * `journey` is where the trip is **actually** taking this tool, which is not
+ * always where this row's own request was sending it: ticking a tool that a
+ * pickup and a delivery both name collapses the two legs into one drive to the
+ * job (`oneJourney`), and the warehouse this pickup group is pointed at never
+ * gets visited. The row says so rather than leaving the route panel to
+ * contradict it — a dispatcher reading "→ Warehouse" here and a job stop over
+ * there has no way to tell which one the save will believe.
+ *
  * A tool blocked by its **condition** is shown disabled rather than hidden,
  * with the reason — "Broken" is something the warehouse manager can act on from
  * here, the same call `DispatchRequestRow` made about unavailable requests. A
@@ -35,16 +43,21 @@ import { cn } from "@/lib/utils"
 export function TripMovementRow({
   movement,
   destination,
+  journey,
   checked,
   onCheckedChange,
 }: {
   movement: OutstandingMovement
   /** The group's destination — a pickup's is chooseable, so it can differ from `movement.to`. */
   destination: string
+  /** Where the current selection actually sends this tool, when it is ticked. */
+  journey?: string
   checked: boolean
   onCheckedChange: (checked: boolean) => void
 }) {
   const blocked = movement.block !== null
+  const goingTo = journey ?? destination
+  const diverted = journey !== undefined && journey !== destination
 
   return (
     <li
@@ -90,11 +103,13 @@ export function TripMovementRow({
           <ArrowRightIcon className="size-3.5 shrink-0 text-foreground/60" />
           <span
             className="max-w-full truncate rounded bg-primary/10 px-1.5 py-0.5 font-medium text-primary"
-            title={destination}
+            title={goingTo}
           >
-            {destination}
+            {goingTo}
           </span>
         </p>
+
+        {diverted && <p className="mt-1 text-[11px] text-muted-foreground">Direct transfer — skips {destination}.</p>}
 
         {blocked && <BlockReason movement={movement} />}
       </div>

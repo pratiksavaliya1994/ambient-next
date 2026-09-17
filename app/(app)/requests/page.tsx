@@ -223,7 +223,7 @@ const NEXT_ACTIONS: Record<
       "border-status-active/40 bg-status-active/20 text-status-active-foreground hover:bg-status-active/35 dark:bg-status-active/25",
   },
   Assigned: {
-    label: "Dispatch",
+    label: "Add to a trip",
     icon: TruckIcon,
     href: (id) => `/dispatch?requestId=${id}`,
     className:
