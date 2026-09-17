@@ -3,6 +3,7 @@ import "server-only"
 import { z } from "zod"
 
 import { bubbleGet, bubbleListMaybeMissing, type BubbleThing, type Constraint } from "@/lib/bubble/client"
+import { newYorkDayAfter, newYorkInstant } from "@/lib/bubble/dates"
 import { listToolTripRows, toItem, TRIP_TOOL, tripToolRow } from "@/lib/bubble/triptool-read"
 import type { Trip, TripDetail, TripStop, TripToolRow } from "@/lib/bubble/trips-types"
 import {
@@ -88,22 +89,46 @@ function toStop(row: z.infer<typeof tripStopRow>): TripStop | null {
   }
 }
 
-/** Trip headers at any of these statuses, newest first. */
-export async function listTrips(statuses: readonly TripStatus[]): Promise<Trip[]> {
+/** A `tripDate` window, the same half-open New York day range `searchRequests` builds for `requestDateStart`. */
+export type TripDateRange = { from?: string; to?: string }
+
+function tripDateConstraints(range?: TripDateRange): Constraint[] {
+  const constraints: Constraint[] = []
+  if (range?.from) {
+    constraints.push({
+      key: "tripDate",
+      constraint_type: "greater than",
+      value: new Date(newYorkInstant(range.from).getTime() - 1).toISOString(),
+    })
+  }
+  if (range?.to) {
+    constraints.push({
+      key: "tripDate",
+      constraint_type: "less than",
+      value: newYorkInstant(newYorkDayAfter(range.to)).toISOString(),
+    })
+  }
+  return constraints
+}
+
+/** Trip headers at any of these statuses, newest first, optionally narrowed to a `tripDate` window. */
+export async function listTrips(statuses: readonly TripStatus[], range?: TripDateRange): Promise<Trip[]> {
   if (statuses.length === 0) return []
 
   const rows = await bubbleListMaybeMissing(TRIP, {
-    constraints: [{ key: "status", constraint_type: "in", value: [...statuses] }],
+    constraints: [{ key: "status", constraint_type: "in", value: [...statuses] }, ...tripDateConstraints(range)],
     sortField: "Created Date",
     descending: true,
   })
 
-  return rows
-    .map((row: BubbleThing) => toTrip(tripRow.parse(row)))
-    // Re-filtered in JS: `in` is only proven against plain text elsewhere in
-    // this repo, and a constraint Bubble misreads would otherwise hand back
-    // every trip ever run.
-    .filter((trip) => statuses.includes(trip.status))
+  return (
+    rows
+      .map((row: BubbleThing) => toTrip(tripRow.parse(row)))
+      // Re-filtered in JS: `in` is only proven against plain text elsewhere in
+      // this repo, and a constraint Bubble misreads would otherwise hand back
+      // every trip ever run.
+      .filter((trip) => statuses.includes(trip.status))
+  )
 }
 
 /** Every trip's stops and items in two queries, not two per trip. */
@@ -141,8 +166,8 @@ export async function attachTripRows(trips: Trip[]): Promise<TripDetail[]> {
   }))
 }
 
-export async function listTripDetails(statuses: readonly TripStatus[]): Promise<TripDetail[]> {
-  return attachTripRows(await listTrips(statuses))
+export async function listTripDetails(statuses: readonly TripStatus[], range?: TripDateRange): Promise<TripDetail[]> {
+  return attachTripRows(await listTrips(statuses, range))
 }
 
 export async function getTrip(tripId: string): Promise<TripDetail | null> {
@@ -177,10 +202,7 @@ export async function getTrip(tripId: string): Promise<TripDetail | null> {
  * the trip being edited reads as blocked, the selection plans no movements, and
  * the route panel comes up empty.
  */
-export async function listToolClaims(
-  toolIds: readonly string[],
-  excludeTripId?: string
-): Promise<Map<string, Trip>> {
+export async function listToolClaims(toolIds: readonly string[], excludeTripId?: string): Promise<Map<string, Trip>> {
   const claims = (await listToolTripRows(toolIds)).filter(
     (item) => item.tripId !== excludeTripId && isLiveClaim(item.state)
   )

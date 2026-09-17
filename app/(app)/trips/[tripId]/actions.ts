@@ -37,8 +37,15 @@ function revalidateTrip(trip: TripDetail): void {
   revalidatePath(`/trips/${trip.id}`)
   revalidatePath("/requests")
   revalidatePath("/tools")
+  // Every trip action moves tools, and `/tools/all` reads the same rows as
+  // `/tools` — it was simply missed here until it became the way into the tool
+  // detail page.
+  revalidatePath("/tools/all")
   for (const requestId of new Set(trip.items.map((item) => item.requestId).filter(Boolean))) {
     revalidatePath(`/requests/${requestId}`)
+  }
+  for (const toolId of new Set(trip.items.map((item) => item.toolId).filter(Boolean))) {
+    revalidatePath(`/tools/${toolId}`)
   }
 }
 

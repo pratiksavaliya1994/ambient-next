@@ -3,7 +3,16 @@
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardListIcon, LogOutIcon, MapPinIcon, NavigationIcon, RouteIcon, ShoppingCartIcon, TruckIcon } from "lucide-react"
+import {
+  ClipboardListIcon,
+  ListIcon,
+  LogOutIcon,
+  MapPinIcon,
+  NavigationIcon,
+  RouteIcon,
+  ShoppingCartIcon,
+  TruckIcon,
+} from "lucide-react"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import {
@@ -32,6 +41,12 @@ import { signOutAction } from "@/lib/auth/actions"
  * screen from a request's detail page instead of a top-level item of its own;
  * Dispatch is a board like Requests, so it gets one. Active trips is the same
  * call now that it's split off `/dispatch` onto its own route.
+ *
+ * "Job Dashboard" and "All Tools" are two different views of the same `tools`
+ * table, not two features — the former groups by job/location
+ * (`app/(app)/tools/page.tsx`), the latter is a flat searchable/paginated grid
+ * (`app/(app)/tools/all/page.tsx`). They're separate routes rather than tabs
+ * of one screen so each gets its own nav entry and its own back-button history.
  */
 const NAV_ITEMS = [
   { title: "Requests", href: "/requests", icon: ClipboardListIcon },
@@ -39,7 +54,8 @@ const NAV_ITEMS = [
   { title: "New trip", href: "/trips/new", icon: RouteIcon },
   { title: "New delivery request", href: "/requests/new", icon: TruckIcon },
   { title: "New pickup request", href: "/requests/new/pickup", icon: ShoppingCartIcon },
-  { title: "Tools", href: "/tools", icon: MapPinIcon },
+  { title: "Job Dashboard", href: "/tools", icon: MapPinIcon },
+  { title: "All Tools", href: "/tools/all", icon: ListIcon },
 ] as const
 
 /**

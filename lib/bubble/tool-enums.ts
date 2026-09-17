@@ -86,6 +86,21 @@ export const TOOL_STATUS_DELIVERED: ToolStatusNew = "Delivered"
 export const TOOL_STATUS_PICKUP_REQUESTED: ToolStatusNew = "Pickup Requested"
 
 /**
+ * The `statusNew` values worth filtering the Tools dashboard by — the actual
+ * lifecycle states, excluding `Available` (the default/idle state, not
+ * interesting to filter to) and the five condition-flavoured values
+ * (`Maintenance Required` … `Missing`), which moved to `tools.condition` in
+ * phase 3A and stay in `TOOL_STATUS_NEW` only for backward compatibility with
+ * rows an old-Bubble-UI edit could still write there.
+ */
+export const TOOL_STATUS_LIFECYCLE_FILTER: readonly ToolStatusNew[] = [
+  TOOL_STATUS_ASSIGNED,
+  TOOL_STATUS_IN_TRANSIT,
+  TOOL_STATUS_DELIVERED,
+  TOOL_STATUS_PICKUP_REQUESTED,
+]
+
+/**
  * A tool whose `statusNew` reads one of these is never offered for assignment,
  * regardless of `isFreeToAssign` — this is the condition-based exclusion,
  * orthogonal to the flow-state one.

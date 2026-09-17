@@ -1,3 +1,4 @@
+import Link from "next/link"
 import * as React from "react"
 
 import { ToolStatusDots } from "@/components/tool-status-badges"
@@ -179,7 +180,9 @@ function ToolLine({ tool, showType = false }: { tool: DashboardTool; showType?: 
       className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-xs hover:bg-muted/60"
       title={toolTooltip(tool)}
     >
-      <span className="min-w-0 flex-1 truncate">{tool.name}</span>
+      <Link href={`/tools/${tool.id}`} className="min-w-0 flex-1 truncate hover:text-primary hover:underline">
+        {tool.name}
+      </Link>
       {showType && tool.typeName && (
         <span className="max-w-[45%] shrink-0 truncate text-[10px] text-muted-foreground">{tool.typeName}</span>
       )}

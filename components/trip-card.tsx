@@ -26,7 +26,7 @@ export function TripCard({ trip }: { trip: TripDetail }) {
   const route = work.map((entry) => entry.stop.location)
 
   return (
-    <Card size="sm" className="transition-colors hover:border-primary/40">
+    <Card size="sm" className="relative transition-colors hover:border-primary/40">
       <CardHeader>
         <div className="flex items-center gap-3">
           <Avatar>
