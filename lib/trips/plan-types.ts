@@ -174,9 +174,27 @@ export type PlannedItem = Movement & {
   toLocation: string
 }
 
+/**
+ * A record of one cycle `planTrip` had to break by splitting a node into a
+ * collect half and a drop half — and which other locations could have been
+ * split instead.
+ *
+ * `key` identifies the cycle itself (every candidate location, sorted and
+ * joined), not the choice made, so it stays stable across replans of the same
+ * selection regardless of which side gets picked. That is what lets a
+ * dispatcher's "split here instead" choice survive a fresh `planTrip` call.
+ */
+export type SplitChoice = {
+  key: string
+  candidates: string[]
+  chosen: string
+}
+
 export type TripPlan = {
   stops: PlannedStop[]
   items: PlannedItem[]
   /** Movements whose origin already equals their destination — the tool is already there, so there is nothing to drive. */
   noop: Movement[]
+  /** Every cycle this plan resolved by splitting a node, and what else it could have split instead. */
+  splitChoices: SplitChoice[]
 }

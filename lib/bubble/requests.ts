@@ -400,6 +400,37 @@ export async function listOpenRequestsByIds(ids: readonly string[]): Promise<Req
     .filter((request) => isOpenRequest(request.status))
 }
 
+/** Just enough of a request to say *whose* it is, and who to ask for on site. */
+export type RequestStopInfo = {
+  id: string
+  job: string
+  contact: string | null
+  contactPhone: string | null
+  floor: string | null
+}
+
+/**
+ * The same shallow read as `listOpenRequestsByIds` — no `requestedtools` or
+ * `requestedmaterials` — but nothing is dropped by status: a run sheet still
+ * wants to say which request a tool belonged to after that request has
+ * closed.
+ */
+export async function listRequestStopInfo(ids: readonly string[]): Promise<RequestStopInfo[]> {
+  if (ids.length === 0) return []
+
+  const rows = await bubbleListAll(REQUEST, {
+    constraints: [{ key: "_id", constraint_type: "in", value: [...ids] }],
+  })
+
+  return rows.map((raw: BubbleThing) => requestRow.parse(raw)).map((row) => ({
+    id: row._id,
+    job: row.job?.trim() || NO_JOB,
+    contact: row.contact?.trim() || null,
+    contactPhone: row.contactPhone?.trim() || null,
+    floor: row.floor?.trim() || null,
+  }))
+}
+
 /** The second half of both list calls: one `in` lookup each for tools and materials. */
 async function withLines(rows: z.infer<typeof requestRow>[]): Promise<ToolRequest[]> {
   const ids = rows.map((row) => row._id)

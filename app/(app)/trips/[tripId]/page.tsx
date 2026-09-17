@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
+import { listRequestStopInfo } from "@/lib/bubble/requests"
 import { getTrip } from "@/lib/bubble/trips-read"
 import { stopWork } from "@/lib/bubble/trips-types"
 import { formatClock, minutesOfTime, tripFinishMinutes, tripStartTime } from "@/lib/trips/schedule"
@@ -50,6 +51,13 @@ async function TripBody({ tripId }: { tripId: string }) {
   const startTime = tripStartTime(trip.tripDate)
   const finish = tripFinishMinutes(startTime, stops)
   const span = `${formatClock(minutesOfTime(startTime))} – ${formatClock(finish)}`
+
+  // Every request any of this trip's tools names — a leg with no request
+  // (a site-to-site collect) contributes nothing here, and `TripStopItems`
+  // simply shows no popover for it.
+  const requestIds = [...new Set(trip.items.map((item) => item.requestId).filter((id): id is string => id !== ""))]
+  const requestInfo = await listRequestStopInfo(requestIds)
+  const requests = new Map(requestInfo.map((request) => [request.id, request]))
 
   return (
     <>
@@ -94,7 +102,7 @@ async function TripBody({ tripId }: { tripId: string }) {
 
       {trip.notes && <p className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">{trip.notes}</p>}
 
-      <TripRunSheet trip={trip} />
+      <TripRunSheet trip={trip} requests={requests} />
     </>
   )
 }

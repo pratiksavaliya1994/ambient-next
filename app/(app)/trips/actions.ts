@@ -53,6 +53,8 @@ async function buildPlan(
   toolIds: readonly string[],
   destinations: readonly { requestId: string; warehouse: string }[],
   clientStops: readonly PlannedStop[],
+  /** The dispatcher's "split here instead" choices — see `splitChoiceSchema`. */
+  splitPreference: readonly { key: string; chosen: string }[],
   /** The trip being saved, when editing — its own claims aren't a block on itself. */
   excludeTripId?: string
 ): Promise<{ stops: PlannedStop[]; items: PlannedItem[] } | { error: string }> {
@@ -84,7 +86,9 @@ async function buildPlan(
     }
   }
 
-  const plan = planTrip(movements)
+  const plan = planTrip(movements, {
+    splitPreference: new Map(splitPreference.map((choice) => [choice.key, choice.chosen])),
+  })
 
   // Reconcile the dispatcher's order onto the freshly-planned stops, matching on
   // `stopKey`. A stop the re-plan no longer produces is dropped; one it produced
@@ -125,9 +129,9 @@ export async function createTripAction(input: unknown): Promise<TripDraftState> 
     return { status: "invalid", message: "That trip isn't valid.", fieldErrors: fieldErrorsOf(parsed.error) }
   }
 
-  const { idempotencyKey, toolIds, destinations, stops: clientStops } = parsed.data
+  const { idempotencyKey, toolIds, destinations, stops: clientStops, splitPreference } = parsed.data
 
-  const plan = await buildPlan(toolIds, destinations, clientStops)
+  const plan = await buildPlan(toolIds, destinations, clientStops, splitPreference)
   if ("error" in plan) return { status: "error", message: plan.error }
 
   let tripId: string
@@ -165,7 +169,7 @@ export async function saveTripAction(input: unknown): Promise<TripDraftState> {
     return { status: "invalid", message: "That trip isn't valid.", fieldErrors: fieldErrorsOf(parsed.error) }
   }
 
-  const { tripId, toolIds, destinations, stops: clientStops } = parsed.data
+  const { tripId, toolIds, destinations, stops: clientStops, splitPreference } = parsed.data
 
   // `save-trip` refuses a started trip on the Bubble side too — that guard is
   // the real one, since `/wf/` endpoints are reachable directly. This check
@@ -192,7 +196,7 @@ export async function saveTripAction(input: unknown): Promise<TripDraftState> {
     }
   }
 
-  const plan = await buildPlan(toolIds, destinations, clientStops, tripId)
+  const plan = await buildPlan(toolIds, destinations, clientStops, splitPreference, tripId)
   if ("error" in plan) return { status: "error", message: plan.error }
 
   try {

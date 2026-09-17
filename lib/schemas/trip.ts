@@ -53,6 +53,18 @@ export const destinationSchema = z.object({
   warehouse: z.enum(WAREHOUSE_JOB_NAMES),
 })
 
+/**
+ * Which side of a circular pickup/drop cycle the dispatcher chose to visit
+ * twice — a choice, same as `stops`' drag order, not a derivation. `key`
+ * identifies the cycle (see `SplitChoice` in `plan-types.ts`); the server
+ * re-plans from a fresh read and needs this to land on the same split rather
+ * than silently falling back to the default tie-break.
+ */
+export const splitChoiceSchema = z.object({
+  key: z.string().min(1),
+  chosen: z.string().min(1),
+})
+
 const tripHeaderShape = {
   driver: z.string().trim().min(1, "Pick a driver."),
   /** `yyyy-mm-dd`, read as a New York calendar date — same convention as the request forms. */
@@ -72,6 +84,7 @@ const tripHeaderShape = {
   destinations: z.array(destinationSchema),
   stops: z.array(plannedStopSchema).min(1),
   items: z.array(plannedItemSchema).min(1),
+  splitPreference: z.array(splitChoiceSchema).default([]),
 }
 
 /**

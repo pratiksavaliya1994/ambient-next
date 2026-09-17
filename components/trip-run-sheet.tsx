@@ -7,11 +7,12 @@ import { FlagIcon, TruckIcon, XIcon } from "lucide-react"
 import { cancelTripAction } from "@/app/(app)/trips/actions"
 import { completeTripAction, startTripAction } from "@/app/(app)/trips/[tripId]/actions"
 import { INITIAL_TRIP_RUN_STATE, type TripRunState } from "@/app/(app)/trips/action-state"
+import { TripActionConfirm } from "@/components/trip-action-confirm"
 import { TripStopCard } from "@/components/trip-stop-card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import type { RequestStopInfo } from "@/lib/bubble/requests"
 import { isStopDone, stillLoaded, stopWork, type TripDetail } from "@/lib/bubble/trips-types"
 import { tripStartTime } from "@/lib/trips/schedule"
 
@@ -26,10 +27,20 @@ import { tripStartTime } from "@/lib/trips/schedule"
  * Start and Complete live here rather than on each stop because they bracket
  * the whole run; per-stop recording is inside `TripStopCard`.
  */
-export function TripRunSheet({ trip }: { trip: TripDetail }) {
+export function TripRunSheet({
+  trip,
+  requests,
+}: {
+  trip: TripDetail
+  /** Which request each stop item's `requestId` names — fetched once, up front, by the page. */
+  requests: ReadonlyMap<string, RequestStopInfo>
+}) {
   const router = useRouter()
   const [state, setState] = useState<TripRunState>(INITIAL_TRIP_RUN_STATE)
   const [pending, startTransition] = useTransition()
+  const [startOpen, setStartOpen] = useState(false)
+  const [finishOpen, setFinishOpen] = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
 
   const work = stopWork(trip)
   const [first] = work
@@ -40,10 +51,15 @@ export function TripRunSheet({ trip }: { trip: TripDetail }) {
   // `-1` on a trip that isn't running, so a plan highlights nothing.
   const currentIndex = live ? work.findIndex((entry) => !isStopDone(entry)) : -1
 
-  function run(action: () => Promise<TripRunState>, onDone: (result: TripRunState) => void) {
+  function run(
+    action: () => Promise<TripRunState>,
+    onDone: (result: TripRunState) => void,
+    closeDialog: () => void
+  ) {
     startTransition(async () => {
       const result = await action()
       setState(result)
+      closeDialog()
       onDone(result)
     })
   }
@@ -58,7 +74,8 @@ export function TripRunSheet({ trip }: { trip: TripDetail }) {
           description: first ? `First stop: ${first.stop.location}.` : `${trip.driver} is on the road.`,
         })
         if (result.warning) toast.add({ title: "Check the requests", description: result.warning })
-      }
+      },
+      () => setStartOpen(false)
     )
   }
 
@@ -69,7 +86,8 @@ export function TripRunSheet({ trip }: { trip: TripDetail }) {
         if (result.status !== "completed") return
         toast.add({ title: "Trip completed", description: `${trip.driver}'s route is done.` })
         if (result.warning) toast.add({ title: "Check the requests", description: result.warning })
-      }
+      },
+      () => setFinishOpen(false)
     )
   }
 
@@ -80,7 +98,8 @@ export function TripRunSheet({ trip }: { trip: TripDetail }) {
         if (result.status !== "cancelled") return
         toast.add({ title: "Trip cancelled", description: "Nothing had moved, so nothing was undone." })
         router.push("/trips")
-      }
+      },
+      () => setCancelOpen(false)
     )
   }
 
@@ -97,6 +116,7 @@ export function TripRunSheet({ trip }: { trip: TripDetail }) {
             last={index === work.length - 1}
             current={index === currentIndex}
             live={live && !pending}
+            requests={requests}
           />
         ))}
       </ol>
@@ -114,14 +134,40 @@ export function TripRunSheet({ trip }: { trip: TripDetail }) {
             {first ? first.stop.location : "the first stop"} — tools move as each stop is recorded.
           </p>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={cancel} disabled={pending}>
-              <XIcon />
-              Cancel trip
-            </Button>
-            <Button onClick={start} disabled={pending || !trip.driver}>
-              {pending ? <Spinner /> : <TruckIcon />}
-              Start trip
-            </Button>
+            <TripActionConfirm
+              open={cancelOpen}
+              onOpenChange={setCancelOpen}
+              trigger={
+                <Button variant="ghost" size="sm" disabled={pending}>
+                  <XIcon />
+                  Cancel trip
+                </Button>
+              }
+              title="Cancel this trip?"
+              description="Nothing has moved yet, so there's nothing to undo — this just removes the plan. The requests it was carrying stay open to reschedule."
+              confirmLabel="Cancel trip"
+              confirmIcon={<XIcon />}
+              pending={pending}
+              onConfirm={cancel}
+            />
+            <TripActionConfirm
+              open={startOpen}
+              onOpenChange={setStartOpen}
+              trigger={
+                <Button disabled={pending || !trip.driver}>
+                  <TruckIcon />
+                  Start trip
+                </Button>
+              }
+              title="Start this trip?"
+              description={`This sends ${trip.driver ?? "the driver"} to ${
+                first ? first.stop.location : "the first stop"
+              }. Tools begin moving as each stop is recorded.`}
+              confirmLabel="Start trip"
+              confirmIcon={<TruckIcon />}
+              pending={pending}
+              onConfirm={start}
+            />
           </div>
         </div>
       )}
@@ -133,10 +179,22 @@ export function TripRunSheet({ trip }: { trip: TripDetail }) {
               ? "Every tool has been dealt with."
               : `${onboard.length} ${onboard.length === 1 ? "tool is" : "tools are"} still on the truck.`}
           </p>
-          <Button onClick={finish} disabled={pending || onboard.length > 0}>
-            {pending ? <Spinner /> : <FlagIcon />}
-            Finish trip
-          </Button>
+          <TripActionConfirm
+            open={finishOpen}
+            onOpenChange={setFinishOpen}
+            trigger={
+              <Button disabled={pending || onboard.length > 0}>
+                <FlagIcon />
+                Finish trip
+              </Button>
+            }
+            title="Finish this trip?"
+            description="This marks the trip complete. There's no undo from here — only do this once every stop is recorded."
+            confirmLabel="Finish trip"
+            confirmIcon={<FlagIcon />}
+            pending={pending}
+            onConfirm={finish}
+          />
         </div>
       )}
     </div>

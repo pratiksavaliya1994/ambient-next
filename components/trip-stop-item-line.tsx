@@ -1,4 +1,10 @@
+import { PhoneIcon, UserIcon } from "lucide-react"
+import Link from "next/link"
+
+import type { RequestStopInfo } from "@/lib/bubble/requests"
 import type { TripToolState } from "@/lib/trips/plan-types"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 /**
@@ -17,6 +23,8 @@ export type StopItem = {
   fromLocation?: string
   toLocation?: string
   state?: TripToolState
+  /** May be empty — a leg that belongs to no request. See `TripToolRow.requestId`. */
+  requestId?: string
 }
 
 /**
@@ -38,7 +46,16 @@ export type StopItemTone = "collect" | "drop" | "refused"
  * rather than wrapping the row — on a phone the name and the state are what
  * still has to fit.
  */
-export function TripStopItemLine({ item, tone }: { item: StopItem; tone: StopItemTone }) {
+export function TripStopItemLine({
+  item,
+  tone,
+  request,
+}: {
+  item: StopItem
+  tone: StopItemTone
+  /** Resolved from `item.requestId` by the caller — absent for a leg that belongs to no request. */
+  request?: RequestStopInfo
+}) {
   // Settled-and-unhappy: struck through because there is nothing left to do
   // about it *here*. A refused tool sitting in the yard's drop list is live work
   // and deliberately reads as ordinary.
@@ -52,12 +69,34 @@ export function TripStopItemLine({ item, tone }: { item: StopItem; tone: StopIte
 
   return (
     <li className={cn("flex items-center gap-2 px-2 py-1.5", spent && "bg-status-attention/5")}>
-      <span
-        className={cn("min-w-0 truncate text-xs font-medium", spent && "text-muted-foreground line-through")}
-        title={item.toolName}
-      >
-        {item.toolName}
-      </span>
+      {request ? (
+        <Popover>
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                className={cn(
+                  "min-w-0 truncate text-left text-xs font-medium underline decoration-dotted underline-offset-2",
+                  spent && "text-muted-foreground line-through"
+                )}
+                title={`${item.toolName} — ${request.job}`}
+              />
+            }
+          >
+            {item.toolName}
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-64 gap-2">
+            <RequestPopoverBody request={request} />
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <span
+          className={cn("min-w-0 truncate text-xs font-medium", spent && "text-muted-foreground line-through")}
+          title={item.toolName}
+        >
+          {item.toolName}
+        </span>
+      )}
 
       {item.toolType && item.toolType !== item.toolName && (
         <span
@@ -83,6 +122,37 @@ export function TripStopItemLine({ item, tone }: { item: StopItem; tone: StopIte
           is display-none on a phone. */}
       <StateChip state={item.state} />
     </li>
+  )
+}
+
+/** Who to ask for on site, and a way to the request itself for the rest. */
+function RequestPopoverBody({ request }: { request: RequestStopInfo }) {
+  return (
+    <>
+      <p className="truncate text-sm font-medium" title={request.job}>
+        {request.job}
+      </p>
+      <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+        {request.contact ? (
+          <span className="flex items-center gap-1.5">
+            <UserIcon className="size-3.5 shrink-0" />
+            {request.contact}
+          </span>
+        ) : (
+          <span>No contact on file</span>
+        )}
+        {request.contactPhone && (
+          <span className="flex items-center gap-1.5">
+            <PhoneIcon className="size-3.5 shrink-0" />
+            {request.contactPhone}
+          </span>
+        )}
+        {request.floor && <span>Floor {request.floor}</span>}
+      </div>
+      <Link href={`/requests/${request.id}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+        View request
+      </Link>
+    </>
   )
 }
 

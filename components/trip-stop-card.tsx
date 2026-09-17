@@ -3,6 +3,7 @@ import { CheckIcon, MapPinIcon, WarehouseIcon } from "lucide-react"
 import { StopTimeRail } from "@/components/stop-time"
 import { TripStopActions } from "@/components/trip-stop-actions"
 import { TripStopItems } from "@/components/trip-stop-items"
+import type { RequestStopInfo } from "@/lib/bubble/requests"
 import { isStopDone, type StopWork } from "@/lib/bubble/trips-types"
 import type { StopKind } from "@/lib/trips/plan-types"
 import { cn } from "@/lib/utils"
@@ -36,6 +37,7 @@ export function TripStopCard({
   last,
   current,
   live,
+  requests,
 }: {
   tripId: string
   work: StopWork
@@ -51,6 +53,8 @@ export function TripStopCard({
   current: boolean
   /** The trip is `In Transit`, so this stop can actually be recorded. */
   live: boolean
+  /** Which request each item's `requestId` names — see `TripStopItems`. */
+  requests: ReadonlyMap<string, RequestStopInfo>
 }) {
   const done = isStopDone(work)
   const Icon = work.stop.kind === "Warehouse" ? WarehouseIcon : MapPinIcon
@@ -90,6 +94,7 @@ export function TripStopCard({
             drop={work.drop}
             refused={work.refused}
             kind={work.stop.kind}
+            requests={requests}
           />
           {live && !done && <TripStopActions tripId={tripId} work={work} />}
         </div>

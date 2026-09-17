@@ -10,15 +10,47 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ChevronDownIcon, ChevronUpIcon, GripVerticalIcon, MapPinIcon, WarehouseIcon } from "lucide-react"
+import {
+  ArrowLeftRightIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  GripVerticalIcon,
+  MapPinIcon,
+  WarehouseIcon,
+} from "lucide-react"
 
 import { StopTimeBadge } from "@/components/stop-time"
 import { TripStopItems } from "@/components/trip-stop-items"
 import { StopNumber } from "@/components/stop-number"
 import { Button } from "@/components/ui/button"
-import type { PlannedItem, PlannedStop } from "@/lib/trips/plan-types"
+import type { PlannedItem, PlannedStop, SplitChoice } from "@/lib/trips/plan-types"
 import { violatingStopKeys } from "@/lib/trips/validate"
 import { cn } from "@/lib/utils"
+
+/**
+ * For each cycle `planTrip` resolved by splitting a node, the *other*
+ * candidate locations it could have split instead — but only while that
+ * location is still merged into a single stop. Once it *is* the split one,
+ * the flip control moves to whichever location is merged now, which is what
+ * makes this a two-way toggle rather than a one-shot action.
+ */
+function flipTargetsByLocation(
+  stops: readonly PlannedStop[],
+  splitChoices: readonly SplitChoice[]
+): Map<string, { key: string; location: string }> {
+  const occurrences = new Map<string, number>()
+  for (const stop of stops) occurrences.set(stop.location, (occurrences.get(stop.location) ?? 0) + 1)
+
+  const targets = new Map<string, { key: string; location: string }>()
+  for (const choice of splitChoices) {
+    for (const location of choice.candidates) {
+      if (location === choice.chosen) continue
+      if (occurrences.get(location) !== 1) continue
+      targets.set(location, { key: choice.key, location })
+    }
+  }
+  return targets
+}
 
 /**
  * The route being built: stops in order, each showing what is collected and
@@ -44,14 +76,20 @@ export function TripPlanPreview({
   stops,
   items,
   startTime,
+  splitChoices,
   onReorder,
+  onFlipSplit,
   disabled = false,
 }: {
   stops: PlannedStop[]
   items: PlannedItem[]
   /** The trip's `"HH:mm"` departure — every stop's time counts forward from it. */
   startTime: string
+  /** Every circular pickup/drop `planTrip` had to resolve by splitting a stop, and what else it could have split. */
+  splitChoices: SplitChoice[]
   onReorder: (stops: PlannedStop[]) => void
+  /** The dispatcher chose to split `location` instead, for the cycle identified by `key`. */
+  onFlipSplit: (key: string, location: string) => void
   disabled?: boolean
 }) {
   // The distance threshold is what stops a vertical scroll gesture being
@@ -62,6 +100,7 @@ export function TripPlanPreview({
   )
 
   const flagged = violatingStopKeys(stops, items)
+  const flipTargets = flipTargetsByLocation(stops, splitChoices)
 
   function move(from: number, to: number) {
     if (to < 0 || to >= stops.length) return
@@ -98,6 +137,8 @@ export function TripPlanPreview({
               disabled={disabled}
               onMoveUp={() => move(index, index - 1)}
               onMoveDown={() => move(index, index + 1)}
+              flipTarget={flipTargets.get(stop.location)}
+              onFlip={onFlipSplit}
             />
           ))}
         </ol>
@@ -127,6 +168,8 @@ function SortableStop({
   disabled,
   onMoveUp,
   onMoveDown,
+  flipTarget,
+  onFlip,
 }: {
   stop: PlannedStop
   position: number
@@ -137,6 +180,9 @@ function SortableStop({
   disabled: boolean
   onMoveUp: () => void
   onMoveDown: () => void
+  /** Present when this stop is one half of a cycle that could be split the other way instead. */
+  flipTarget: { key: string; location: string } | undefined
+  onFlip: (key: string, location: string) => void
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: stop.stopKey,
@@ -190,6 +236,19 @@ function SortableStop({
         </div>
 
         <div className="flex shrink-0 items-center">
+          {flipTarget && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
+              aria-label={`Split the route at ${flipTarget.location} instead`}
+              title={`Split the route at ${flipTarget.location} instead`}
+              disabled={disabled}
+              onClick={() => onFlip(flipTarget.key, flipTarget.location)}
+            >
+              <ArrowLeftRightIcon />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon-sm"

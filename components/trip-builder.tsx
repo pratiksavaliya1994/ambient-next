@@ -14,7 +14,7 @@ import { toast } from "@/components/ui/toast"
 import type { RequestMovements } from "@/lib/trips/movement-types"
 import { selectMovements } from "@/lib/trips/movement-types"
 import { planTrip } from "@/lib/trips/plan"
-import type { PlannedStop } from "@/lib/trips/plan-types"
+import type { Movement, PlannedStop } from "@/lib/trips/plan-types"
 import { DEFAULT_START_TIME, formatClock, minutesOfTime } from "@/lib/trips/schedule"
 import { validatePlan } from "@/lib/trips/validate"
 
@@ -27,6 +27,31 @@ export type TripDraft = {
   notes: string
   toolIds: string[]
   stopOrder: string[]
+  /** Locations that appeared twice among the saved trip's stops — i.e. the side of a cycle it split. */
+  splitLocations: string[]
+}
+
+/**
+ * Reconstructs which side of each circular pickup/drop the saved trip split,
+ * purely from its stop locations — there is no Bubble field for this, so a
+ * location that was visited twice at save time is the only evidence left.
+ *
+ * Runs once, against a plan seeded with no preference: `SplitChoice.key` only
+ * depends on the movement graph, not on which side got picked, so the default
+ * plan's `splitChoices` already names every cycle this trip could have split,
+ * and `draft.splitLocations` says which one it actually did.
+ */
+function deriveInitialSplitPreference(movements: readonly Movement[], splitLocations: readonly string[]) {
+  const preference = new Map<string, string>()
+  if (movements.length === 0 || splitLocations.length === 0) return preference
+
+  const saved = new Set(splitLocations)
+  for (const choice of planTrip(movements).splitChoices) {
+    if (saved.has(choice.chosen)) continue
+    const actual = choice.candidates.find((location) => location !== choice.chosen && saved.has(location))
+    if (actual) preference.set(choice.key, actual)
+  }
+  return preference
 }
 
 /**
@@ -81,12 +106,17 @@ export function TripBuilder({
   const [startTime, setStartTime] = useState(draft?.startTime ?? DEFAULT_START_TIME)
   const [notes, setNotes] = useState(draft?.notes ?? "")
   const [stopOrder, setStopOrder] = useState<string[]>(draft?.stopOrder ?? [])
+  const [splitPreference, setSplitPreference] = useState<Map<string, string>>(() => {
+    if (!draft) return new Map()
+    const { movements } = selectMovements(groups, selectedIds, destinations)
+    return deriveInitialSplitPreference(movements, draft.splitLocations)
+  })
 
   const plan = useMemo(() => {
     const { movements } = selectMovements(groups, selectedIds, destinations)
-    if (movements.length === 0) return { stops: [], items: [], noop: [] }
-    return planTrip(movements)
-  }, [groups, selectedIds, destinations])
+    if (movements.length === 0) return { stops: [], items: [], noop: [], splitChoices: [] }
+    return planTrip(movements, { splitPreference })
+  }, [groups, selectedIds, destinations, splitPreference])
 
   // The dispatcher's arrangement, applied over the freshly-planned stops. A
   // stop they never saw sorts to the end rather than being dropped, where the
@@ -133,6 +163,10 @@ export function TripBuilder({
     setStopOrder(next.map((stop) => stop.stopKey))
   }
 
+  function flipSplit(key: string, location: string) {
+    setSplitPreference((current) => new Map(current).set(key, location))
+  }
+
   function save() {
     startTransition(async () => {
       const payload = {
@@ -149,6 +183,7 @@ export function TripBuilder({
           })),
         stops,
         items: plan.items,
+        splitPreference: plan.splitChoices.map((choice) => ({ key: choice.key, chosen: choice.chosen })),
       }
 
       const result = draft
@@ -225,7 +260,9 @@ export function TripBuilder({
                 stops={stops}
                 items={plan.items}
                 startTime={startTime}
+                splitChoices={plan.splitChoices}
                 onReorder={reorder}
+                onFlipSplit={flipSplit}
                 disabled={pending}
               />
             )}

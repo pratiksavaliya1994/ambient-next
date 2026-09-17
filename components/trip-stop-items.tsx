@@ -1,6 +1,7 @@
 import { ArrowDownToLineIcon, ArrowUpFromLineIcon, UndoIcon } from "lucide-react"
 
 import { TripStopItemLine, type StopItem, type StopItemTone } from "@/components/trip-stop-item-line"
+import type { RequestStopInfo } from "@/lib/bubble/requests"
 import { dropOutcome } from "@/lib/bubble/trips-types"
 import type { StopKind } from "@/lib/trips/plan-types"
 import { cn } from "@/lib/utils"
@@ -23,6 +24,7 @@ export function TripStopItems({
   drop,
   refused = [],
   kind,
+  requests,
   className,
 }: {
   collect: readonly StopItem[]
@@ -33,6 +35,12 @@ export function TripStopItems({
    */
   refused?: readonly StopItem[]
   kind: StopKind
+  /**
+   * Which request each `requestId` names — optional because the builder's
+   * preview has no server-fetched contact info to look one up in, and a tool
+   * with no request (a site-to-site leg) never has one anyway.
+   */
+  requests?: ReadonlyMap<string, RequestStopInfo>
   className?: string
 }) {
   if (collect.length === 0 && drop.length === 0 && refused.length === 0) {
@@ -41,14 +49,22 @@ export function TripStopItems({
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      {collect.length > 0 && <ItemBlock label="Pick up" Icon={ArrowUpFromLineIcon} tone="collect" items={collect} />}
+      {collect.length > 0 && (
+        <ItemBlock label="Pick up" Icon={ArrowUpFromLineIcon} tone="collect" items={collect} requests={requests} />
+      )}
       {drop.length > 0 && (
-        <ItemBlock label={dropOutcome(kind).verb} Icon={ArrowDownToLineIcon} tone="drop" items={drop} />
+        <ItemBlock
+          label={dropOutcome(kind).verb}
+          Icon={ArrowDownToLineIcon}
+          tone="drop"
+          items={drop}
+          requests={requests}
+        />
       )}
       {/* Last, and after the drop it failed to be: the stop's work reads in the
           order it happened, ending with what didn't. */}
       {refused.length > 0 && (
-        <ItemBlock label="Refused here" Icon={UndoIcon} tone="refused" items={refused} />
+        <ItemBlock label="Refused here" Icon={UndoIcon} tone="refused" items={refused} requests={requests} />
       )}
     </div>
   )
@@ -60,11 +76,13 @@ function ItemBlock({
   Icon,
   tone,
   items,
+  requests,
 }: {
   label: string
   Icon: typeof ArrowUpFromLineIcon
   tone: StopItemTone
   items: readonly StopItem[]
+  requests?: ReadonlyMap<string, RequestStopInfo>
 }) {
   return (
     <section className="overflow-hidden rounded-md border">
@@ -82,7 +100,12 @@ function ItemBlock({
       </header>
       <ul className="divide-y">
         {items.map((item) => (
-          <TripStopItemLine key={item.toolId} item={item} tone={tone} />
+          <TripStopItemLine
+            key={item.toolId}
+            item={item}
+            tone={tone}
+            request={item.requestId ? requests?.get(item.requestId) : undefined}
+          />
         ))}
       </ul>
     </section>

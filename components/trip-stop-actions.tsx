@@ -6,6 +6,7 @@ import { CheckIcon, PackageXIcon, UndoIcon } from "lucide-react"
 import { completeStopAction } from "@/app/(app)/trips/[tripId]/actions"
 import { INITIAL_TRIP_RUN_STATE, type TripRunState } from "@/app/(app)/trips/action-state"
 import { TripStopChecklist } from "@/components/trip-stop-checklist"
+import { TripStopConfirmDialog } from "@/components/trip-stop-confirm-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -39,24 +40,41 @@ export function TripStopActions({ tripId, work }: { tripId: string; work: StopWo
   const toDrop = outstandingDrop(work)
   const canRefuse = refusable(work)
 
-  const [taken, setTaken] = useState<Set<string>>(() => new Set(toCollect.map((item) => item.toolId)))
-  const [delivered, setDelivered] = useState<Set<string>>(() => new Set(toDrop.map((item) => item.toolId)))
+  // The **exceptions**, not the checked set itself — a toolId lands here only
+  // once the driver unticks it. Everything else defaults to checked, which
+  // matters because this component doesn't remount between stops: it stays
+  // mounted across every live, not-yet-done stop as `work` is refetched after
+  // each action, and a tool can join `toDrop` only after it's actually been
+  // collected upstream. A `useState` seeded from `toDrop` at first mount would
+  // freeze out any tool that joined the list later; deriving off `toCollect`
+  // and `toDrop` fresh each render instead means a newly-outstanding tool is
+  // checked the moment it shows up, with no effect needed to resync it.
+  const [skipped, setSkipped] = useState<Set<string>>(() => new Set())
+  const [refused, setRefused] = useState<Set<string>>(() => new Set())
   const [state, setState] = useState<TripRunState>(INITIAL_TRIP_RUN_STATE)
+  const [confirming, setConfirming] = useState(false)
   const [pending, startTransition] = useTransition()
 
   if (toCollect.length === 0 && toDrop.length === 0) return null
 
   const verb = dropOutcome(work.stop.kind).verb
-  const skipped = toCollect.filter((item) => !taken.has(item.toolId))
-  // Only a tool the stop is allowed to refuse can end up unticked — the others
-  // never render a checkbox, so they stay in `delivered` untouched.
-  const refused = canRefuse.filter((item) => !delivered.has(item.toolId))
+  const taken = new Set(toCollect.filter((item) => !skipped.has(item.toolId)).map((item) => item.toolId))
+  // `toDrop` can hold tools `canRefuse` doesn't (a warehouse stop refuses
+  // nothing, or a tool already `Refused` upstream) — those never render a
+  // checkbox, so they stay delivered untouched, same as before.
+  const delivered = new Set(toDrop.filter((item) => !refused.has(item.toolId)).map((item) => item.toolId))
+  const collectedItems = toCollect.filter((item) => taken.has(item.toolId))
+  const deliveredItems = toDrop.filter((item) => delivered.has(item.toolId))
+  const skippedItems = toCollect.filter((item) => skipped.has(item.toolId))
+  const refusedItems = canRefuse.filter((item) => refused.has(item.toolId))
 
   function toggle(set: (update: (current: Set<string>) => Set<string>) => void, toolId: string, on: boolean) {
     set((current) => {
       const next = new Set(current)
-      if (on) next.add(toolId)
-      else next.delete(toolId)
+      // "on" means checked (delivered/collected), so being ticked back on
+      // clears the exception rather than recording one.
+      if (on) next.delete(toolId)
+      else next.add(toolId)
       return next
     })
   }
@@ -66,10 +84,10 @@ export function TripStopActions({ tripId, work }: { tripId: string; work: StopWo
       const result = await completeStopAction({
         tripId,
         stopKey: work.stop.stopKey,
-        dropToolIds: toDrop.filter((item) => delivered.has(item.toolId)).map((item) => item.toolId),
-        loadToolIds: toCollect.filter((item) => taken.has(item.toolId)).map((item) => item.toolId),
-        skipToolIds: skipped.map((item) => item.toolId),
-        refuseToolIds: refused.map((item) => item.toolId),
+        dropToolIds: [...delivered],
+        loadToolIds: [...taken],
+        skipToolIds: skippedItems.map((item) => item.toolId),
+        refuseToolIds: refusedItems.map((item) => item.toolId),
       })
       setState(result)
 
@@ -86,7 +104,7 @@ export function TripStopActions({ tripId, work }: { tripId: string; work: StopWo
         <TripStopChecklist
           items={toCollect}
           checked={taken}
-          onToggle={(toolId, on) => toggle(setTaken, toolId, on)}
+          onToggle={(toolId, on) => toggle(setSkipped, toolId, on)}
           disabled={pending}
           verb="Collected"
           flag={{ Icon: PackageXIcon, label: "Leaving behind" }}
@@ -97,10 +115,10 @@ export function TripStopActions({ tripId, work }: { tripId: string; work: StopWo
         <TripStopChecklist
           items={canRefuse}
           checked={delivered}
-          onToggle={(toolId, on) => toggle(setDelivered, toolId, on)}
+          onToggle={(toolId, on) => toggle(setRefused, toolId, on)}
           disabled={pending}
           verb="Delivered"
-          flag={{ Icon: UndoIcon, label: "Site refused — back to the yard" }}
+          flag={{ Icon: UndoIcon, label: "Site refused — back to the warehouse" }}
         />
       )}
 
@@ -110,13 +128,25 @@ export function TripStopActions({ tripId, work }: { tripId: string; work: StopWo
         </Alert>
       )}
 
-      <Button size="sm" onClick={submit} disabled={pending}>
+      <Button size="sm" onClick={() => setConfirming(true)} disabled={pending}>
         {pending ? <Spinner /> : <CheckIcon />}
-        {stopButtonLabel(
-          { collect: toCollect.length - skipped.length, drop: toDrop.length - refused.length },
-          verb
-        )}
+        {stopButtonLabel({ collect: taken.size, drop: delivered.size }, verb)}
       </Button>
+
+      <TripStopConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        collect={collectedItems}
+        skip={skippedItems}
+        drop={deliveredItems}
+        refuse={refusedItems}
+        verb={verb}
+        pending={pending}
+        onConfirm={() => {
+          setConfirming(false)
+          submit()
+        }}
+      />
     </div>
   )
 }

@@ -52,6 +52,18 @@ export default async function EditTripPage({ params }: { params: Promise<{ tripI
   )
 }
 
+/**
+ * Locations that appear more than once among a saved trip's stops — the side
+ * of a circular pickup/drop it split, the only trace of that choice left once
+ * it's in Bubble. Reconstructed from this, not stored: there's no `trip` field
+ * for it, and stop `location`s are already read off `tripstop` rows.
+ */
+function splitLocationsOf(stops: readonly { location: string }[]): string[] {
+  const counts = new Map<string, number>()
+  for (const stop of stops) counts.set(stop.location, (counts.get(stop.location) ?? 0) + 1)
+  return [...counts].filter(([, count]) => count > 1).map(([location]) => location)
+}
+
 async function EditTripBody({ tripId }: { tripId: string }) {
   const trip = await getTrip(tripId)
   if (!trip) notFound()
@@ -81,6 +93,7 @@ async function EditTripBody({ tripId }: { tripId: string }) {
         notes: trip.notes ?? "",
         toolIds: trip.items.map((item) => item.toolId),
         stopOrder: trip.stops.map((stop) => stop.stopKey),
+        splitLocations: splitLocationsOf(trip.stops),
       }}
     />
   )
