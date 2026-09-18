@@ -35,16 +35,21 @@ export function TripStopChecklist({
   flag: { Icon: LucideIcon; label: string }
 }) {
   return (
-    <ul className="flex flex-col gap-1">
+    <ul className="flex flex-col gap-3 lg:gap-2">
       {items.map((item) => (
-        <li key={item.toolId} className="flex items-center gap-2">
+        <li key={item.toolId} className="flex cursor-pointer items-center gap-2 rounded border bg-muted px-2">
           <Checkbox
             checked={checked.has(item.toolId)}
             onCheckedChange={(next) => onToggle(item.toolId, next === true)}
             aria-label={`${verb} ${item.toolName}`}
             disabled={disabled}
           />
-          <span className="min-w-0 flex-1 truncate text-xs">{item.toolName}</span>
+          <span
+            className="min-w-0 flex-1 cursor-pointer truncate py-1 text-sm select-none"
+            onClick={() => !disabled && onToggle(item.toolId, !checked.has(item.toolId))}
+          >
+            {item.toolName}
+          </span>
           {!checked.has(item.toolId) && (
             <span className="flex shrink-0 items-center gap-1 text-[11px] text-status-attention-foreground">
               <flag.Icon className="size-3" />
