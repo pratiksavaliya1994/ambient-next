@@ -94,6 +94,7 @@ export const TOOL_STATUS_PICKUP_REQUESTED: ToolStatusNew = "Pickup Requested"
  * rows an old-Bubble-UI edit could still write there.
  */
 export const TOOL_STATUS_LIFECYCLE_FILTER: readonly ToolStatusNew[] = [
+  TOOL_STATUS_AVAILABLE,
   TOOL_STATUS_ASSIGNED,
   TOOL_STATUS_IN_TRANSIT,
   TOOL_STATUS_DELIVERED,

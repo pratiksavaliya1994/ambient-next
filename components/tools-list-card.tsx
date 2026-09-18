@@ -29,9 +29,12 @@ export function ToolsListCard({ tool }: { tool: DashboardTool }) {
             below the title and left-aligned, rather than crowding the title's
             column or leaving that row empty when there's nothing to show. */}
         <CardAction>
-          <StatusBadge status={tool.status} />
+          {tool.condition === "Ok" ? (
+            <StatusBadge status={tool.status} />
+          ) : (
+            <ConditionBadge condition={tool.condition} />
+          )}
         </CardAction>
-        <ConditionBadge condition={tool.condition} />
       </CardHeader>
       <CardContent className="gap-1.5 text-xs text-muted-foreground">
         {tool.typeName && (
