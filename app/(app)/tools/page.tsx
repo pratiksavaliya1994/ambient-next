@@ -6,6 +6,7 @@ import { ToolsDashboardSkeleton } from "@/components/tools-skeletons"
 import { listAllTools } from "@/lib/bubble/pickup-tools"
 
 export const metadata: Metadata = { title: "Job Dashboard" }
+export const revalidate = 60
 
 /**
  * Every tool grouped by its current job/location — the original "Tools"
