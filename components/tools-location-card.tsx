@@ -130,13 +130,15 @@ export function LocationCard({
 
       {/* `overflow-y-auto` makes the used `overflow-x` compute to `auto` too, so
           a pathological name could raise a horizontal scrollbar — pin it shut.
-          `overscroll-contain` stops scroll chaining to the page, which matters
-          when the screen holds dozens of these scrollers. */}
+          No `overscroll-contain` here: most cards hold too few tools to ever
+          overflow `max-h-80`, and on a non-scrollable `overflow-y-auto` box
+          some mobile browsers let `overscroll-behavior: contain` swallow the
+          touch gesture instead of handing it to the page — a swipe starting
+          on the card then scrolls nothing at all. Leaving it at the default
+          `auto` lets the gesture chain up to the page once this box has
+          nowhere left to scroll. */}
       <CardContent
-        className={cn(
-          TOOL_LIST_MAX_HEIGHT,
-          "scrollbar-slim gap-0 overflow-x-hidden overflow-y-auto overscroll-contain px-1"
-        )}
+        className={cn(TOOL_LIST_MAX_HEIGHT, "scrollbar-slim gap-0 overflow-x-hidden overflow-y-auto px-1")}
       >
         {groups.map((group) => (
           <React.Fragment key={group.typeName}>
