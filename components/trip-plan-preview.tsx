@@ -1,6 +1,14 @@
 "use client"
 
-import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core"
 import type { DragEndEvent, Modifier } from "@dnd-kit/core"
 import {
   arrayMove,
@@ -96,7 +104,8 @@ export function TripPlanPreview({
   // swallowed as a drag; dnd-kit only sets `touch-action: none` on the grip.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 8 } })
   )
 
   const flagged = violatingStopKeys(stops, items)
@@ -211,8 +220,9 @@ function SortableStop({
           ref={setActivatorNodeRef}
           variant="ghost"
           size="icon-sm"
-          className="-ml-1 shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing"
+          className="-ml-1 shrink-0 cursor-grab touch-none text-muted-foreground select-none [-webkit-touch-callout:none] active:cursor-grabbing"
           aria-label={`Reorder ${stop.location}`}
+          style={{ touchAction: "none" }}
           disabled={disabled}
           {...attributes}
           {...listeners}
