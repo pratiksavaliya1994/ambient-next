@@ -6,7 +6,7 @@ import { notFound } from "next/navigation"
 import { ToolDetailForm } from "@/components/tool-detail-form"
 import { ToolHoldNotice, ToolOrphanNotice, ToolTripFlagNotice } from "@/components/tool-hold-notice"
 import { ToolHistoryTimeline } from "@/components/tool-history-timeline"
-import { ConditionBadge, StatusBadge } from "@/components/tool-status-badges"
+import { ToolStateBadges } from "@/components/tool-status-badges"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -75,8 +75,7 @@ export default async function ToolDetailPage({ params }: { params: Promise<{ too
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <StatusBadge status={tool.status} />
-          <ConditionBadge condition={tool.condition} />
+          <ToolStateBadges status={tool.status} condition={tool.condition} />
           {tool.typeName && (
             <Badge variant="secondary">
               <WrenchIcon className="size-3.5" />

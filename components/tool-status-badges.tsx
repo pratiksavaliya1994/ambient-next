@@ -1,6 +1,7 @@
 import { TriangleAlertIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { TOOL_STATUS_AVAILABLE } from "@/lib/bubble/tool-enums"
 import { cn } from "@/lib/utils"
 
 /**
@@ -9,10 +10,12 @@ import { cn } from "@/lib/utils"
  * hit its 300-line ceiling (`CLAUDE.md`'s size rules require the split before
  * finishing the change, not after).
  *
- * Two renderings, one vocabulary. `StatusBadge`/`ConditionBadge` are the
- * roomy pills for detail screens; `ToolStatusDots` is the dense form the
- * Tools dashboard packs onto a single-line tool row. Both read from the same
- * maps so the colour and wording can't drift apart.
+ * Two renderings, one vocabulary. `ToolStateBadges` is the roomy pill form for
+ * detail and card screens; `ToolStatusDots` is the dense form the Tools
+ * dashboard packs onto a single-line tool row. Both read from the same maps
+ * *and* apply the same precedence between the two fields (see
+ * `showsStatusBeside`), so the colour, the wording and what they add up to
+ * can't drift apart.
  *
  * Status colour is a severity gradient, not a rainbow: green/blue read as
  * "fine" or "in flow", amber as "needs attention", orange/red as "broken" or
@@ -117,20 +120,67 @@ function isNotable(condition: string): boolean {
   return Boolean(condition) && condition !== "Ok"
 }
 
-/** `tools.statusNew`. Renders nothing for a blank status. */
+/**
+ * Whether the flow status should be shown *beside* a notable condition — the
+ * whole of the fix, in one predicate.
+ *
+ * `statusNew = "Available"` next to `condition = "Missing"` reads as a flat
+ * contradiction, because the two words answer different questions and only one
+ * of them is the question the reader is asking. `Available` is a *claim* state
+ * — "no request or trip is holding this row" — not a statement that the tool
+ * can be used. Every picker in the app already knows that: `isAssignable`
+ * vetoes a notable condition before `isFreeToAssign` ever gets a say
+ * (`lib/bubble/assigned-tools.ts`, `lib/trips/movements.ts`), so a `Missing`
+ * tool is offered nowhere no matter what `statusNew` says. The badge row was
+ * the one place in the app asserting the opposite.
+ *
+ * So when the condition is notable, `Available` — the only status word that
+ * claims the tool is usable — is dropped and the condition answers alone. A
+ * blank status goes with it: it means the phase 2 backfill missed the row,
+ * which isn't worth a pill here. Every other value (`Assigned`, `In Transit`,
+ * `Delivered`, `Pickup Requested`) says *where the tool is*, which stays true
+ * and useful alongside a bad condition, so it renders — in `NEUTRAL`, so
+ * severity has exactly one source on the row.
+ */
+function showsStatusBeside(status: string): boolean {
+  return Boolean(status) && status !== TOOL_STATUS_AVAILABLE
+}
+
+/** `tools.statusNew` on its own, with no condition to weigh it against.
+ *  Renders nothing for a blank status. Prefer `ToolStateBadges` wherever a
+ *  whole tool is in hand; this is for the history timeline's prev → new
+ *  transition, where `condition` isn't part of the record. */
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
   if (!status) return null
   return <Badge className={cn(statusStyle(status).badge, className)}>{status}</Badge>
 }
 
 /**
- * `tools.condition`. Renders nothing for a blank condition or `Ok` — a
- * healthy tool needs no second badge, only an unhealthy one calls for
- * attention alongside its flow status.
+ * A tool's flow status and condition as one statement of state — the pair,
+ * never either alone, so `showsStatusBeside`'s precedence is applied in
+ * exactly one place.
+ *
+ * Healthy (`Ok` or blank condition) is the common case and renders just the
+ * status, unchanged. A notable condition leads, in its own severity colour,
+ * and the status follows only when it still adds something.
  */
-export function ConditionBadge({ condition, className }: { condition: string; className?: string }) {
-  if (!isNotable(condition)) return null
-  return <Badge className={cn(conditionStyle(condition).badge, className)}>{condition}</Badge>
+export function ToolStateBadges({
+  status,
+  condition,
+  className,
+}: {
+  status: string
+  condition: string
+  className?: string
+}) {
+  if (!isNotable(condition)) return <StatusBadge status={status} className={className} />
+
+  return (
+    <>
+      <Badge className={cn(conditionStyle(condition).badge, className)}>{condition}</Badge>
+      {showsStatusBeside(status) && <Badge className={cn(NEUTRAL.badge, className)}>{status}</Badge>}
+    </>
+  )
 }
 
 /**
@@ -140,26 +190,35 @@ export function ConditionBadge({ condition, className }: { condition: string; cl
  * at a glance, and costs almost no width; hovering the row reveals the full
  * text of both.
  *
+ * Same precedence as `ToolStateBadges`: a notable condition owns the colour,
+ * so the dot drops to `NEUTRAL` rather than showing a green all-clear beside a
+ * red warning, and an `Available` (or blank) status disappears entirely,
+ * leaving the glyph to answer on its own. The raw status stays in the row's
+ * `title` either way — see `toolTooltip` in `tools-location-card.tsx`.
+ *
  * `status` is `tools.statusNew`, backfilled on every row — a blank one is a
  * row the migration missed, and an empty dot would read as a style bug rather
  * than as missing data, so it renders nothing at all.
  */
 export function ToolStatusDots({ status, condition }: { status: string; condition: string }) {
-  const style = status ? statusStyle(status) : null
+  const notable = isNotable(condition)
+  const style = (notable ? showsStatusBeside(status) : Boolean(status)) ? statusStyle(status) : null
 
   return (
     <>
       {style && (
-        <span className={cn("inline-flex shrink-0 items-center gap-1 text-[11px] leading-none font-medium", style.text)}>
-          <span className={cn("size-1.5 shrink-0 rounded-full", style.dot)} />
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 text-[11px] leading-none font-medium",
+            notable ? NEUTRAL.text : style.text
+          )}
+        >
+          <span className={cn("size-1.5 shrink-0 rounded-full", notable ? NEUTRAL.dot : style.dot)} />
           {style.short}
         </span>
       )}
-      {isNotable(condition) && (
-        <TriangleAlertIcon
-          aria-label={condition}
-          className={cn("size-3 shrink-0", conditionStyle(condition).text)}
-        />
+      {notable && (
+        <TriangleAlertIcon aria-label={condition} className={cn("size-3 shrink-0", conditionStyle(condition).text)} />
       )}
     </>
   )

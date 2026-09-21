@@ -1,7 +1,7 @@
 import { MapPinIcon, UserIcon, WrenchIcon } from "lucide-react"
 import Link from "next/link"
 
-import { ConditionBadge, StatusBadge } from "@/components/tool-status-badges"
+import { ToolStateBadges } from "@/components/tool-status-badges"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { DashboardTool } from "@/lib/bubble/pickup-tools-types"
 
@@ -24,16 +24,14 @@ export function ToolsListCard({ tool }: { tool: DashboardTool }) {
             {tool.name}
           </Link>
         </CardTitle>
-        {/* Status stays pinned top-right beside the title. Condition — only
-            rendered when notable — falls into the header's second grid row,
-            below the title and left-aligned, rather than crowding the title's
-            column or leaving that row empty when there's nothing to show. */}
-        <CardAction>
-          {tool.condition === "Ok" ? (
-            <StatusBadge status={tool.status} />
-          ) : (
-            <ConditionBadge condition={tool.condition} />
-          )}
+        {/* State stays pinned top-right beside the title. `ToolStateBadges`
+            owns which of the two fields shows and in what order — this card
+            used to decide that inline, which is exactly the rule that has to
+            live in one place. It renders one badge in the ordinary case and
+            two only when a bad condition coexists with a live claim, so the
+            wrapper wraps rather than crowding the title's column. */}
+        <CardAction className="flex flex-wrap justify-end gap-1">
+          <ToolStateBadges status={tool.status} condition={tool.condition} />
         </CardAction>
       </CardHeader>
       <CardContent className="gap-1.5 text-xs text-muted-foreground">
