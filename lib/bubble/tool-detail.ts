@@ -42,6 +42,8 @@ const toolRow = z.looseObject({
   condition: z.string().optional(),
   floor: z.string().optional(),
   currentUser: z.string().optional(),
+  /** A Bubble *list of images* — file-manager URLs. Absent, not `[]`, when empty. */
+  photos: z.array(z.string()).nullish(),
 })
 
 /**
@@ -69,6 +71,10 @@ export async function getTool(id: string): Promise<ToolDetail | null> {
     status: row.statusNew ?? "",
     condition: row.condition ?? "",
     currentUser: row.currentUser?.trim() ?? "",
+    // Kept **protocol-relative**, exactly as Bubble stores and returns them:
+    // the list is written straight back on the next add or remove, and a URL
+    // that round-trips unchanged can't accumulate a rewritten form.
+    photos: (row.photos ?? []).filter((url) => url.trim() !== ""),
   }
 }
 
@@ -146,4 +152,26 @@ export type ToolPatch = {
 
 export async function updateTool(id: string, patch: ToolPatch): Promise<void> {
   await bubblePatch(TOOLS, id, patch)
+}
+
+/**
+ * Replaces the whole `photos` list. Deliberately not part of `ToolPatch` —
+ * photos save on their own, outside the form's all-or-nothing write and
+ * outside its hold gate.
+ *
+ * **Bubble's Data API sets a list, it cannot add to one**, so both adding and
+ * removing a photo are read-modify-write and two people editing the same tool
+ * in the same second would lose one. Atomic "add item to list" is the one
+ * thing a `/wf/` workflow would buy here, and it does not earn one: the
+ * callers re-read immediately before writing, which is the same window-
+ * narrowing posture `updateToolAction` already takes against the same race on
+ * the same row, and this is a single-warehouse admin screen.
+ *
+ * Every write here fires `DB - Tools Change Log` like any other `tools` save.
+ * The row it produces records no status or location change, so
+ * `ToolHistoryTimeline`'s `isMeaningful` already filters it out of the
+ * timeline — photo edits cost an audit row but add no noise to the screen.
+ */
+export async function setToolPhotos(id: string, photos: string[]): Promise<void> {
+  await bubblePatch(TOOLS, id, { photos })
 }

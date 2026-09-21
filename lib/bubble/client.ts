@@ -64,11 +64,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
  * are retried with exponential backoff. 4xx other than 429 fail immediately —
  * retrying a bad request just burns quota.
  */
-async function request(path: string, init: RequestInit = {}): Promise<Response> {
+async function request(path: string, init: RequestInit = {}, origin?: string): Promise<Response> {
   const { base, token } = config()
 
   for (let attempt = 1; ; attempt++) {
-    const res = await fetch(`${base}${path}`, {
+    const res = await fetch(`${origin ?? base}${path}`, {
       ...init,
       cache: "no-store",
       headers: {
@@ -217,6 +217,51 @@ export async function bubbleRunWorkflow(name: string, data: Record<string, unkno
   })
   const json = (await res.json()) as { response?: unknown }
   return json.response ?? json
+}
+
+/**
+ * Uploads a file to Bubble's **file manager** and returns the URL it landed on.
+ *
+ * Not a Data API call, and the one place in this app that isn't. `/fileupload`
+ * sits at the *app root* — one level above `/api/1.1` — so the origin is
+ * derived by stripping that suffix from `BUBBLE_API_BASE` rather than
+ * configured as a second environment variable that could drift out of sync
+ * with the first. It still goes through `request`, so it inherits the same
+ * bearer token, retry and backoff as everything else.
+ *
+ * The body is `{ name, private, contents }`, `contents` being base64 with **no
+ * `data:` prefix**. The response is a bare JSON string — not the `{ response }`
+ * envelope the Data API uses — holding a **protocol-relative** URL
+ * (`//<hash>.cdn.bubble.io/f…/name.jpg`). That is exactly the shape the legacy
+ * `tools.photo` values already carry, so it is stored verbatim and given a
+ * scheme only at render time (`photoSrc`).
+ *
+ * `private: false` leaves the file attached to no thing, matching every file
+ * already in this app's manager. A private file would need Bubble to mint a
+ * signed URL per view, which nothing rendering an `<img>` here could use.
+ *
+ * **Nothing deletes these.** The Data API has no file endpoint, so dropping a
+ * URL from a `photos` list orphans the file rather than removing it; clearing
+ * orphans out is a File manager job inside Bubble.
+ */
+export async function bubbleUploadFile(name: string, contentsBase64: string): Promise<string> {
+  const { base } = config()
+  const origin = base.replace(/\/api\/1\.1$/, "")
+  if (origin === base) {
+    throw new BubbleError("BUBBLE_API_BASE must end in /api/1.1 to locate the file upload endpoint", 500)
+  }
+
+  const res = await request(
+    "/fileupload",
+    { method: "POST", body: JSON.stringify({ name, private: false, contents: contentsBase64 }) },
+    origin
+  )
+
+  const url: unknown = await res.json()
+  if (typeof url !== "string" || url === "") {
+    throw new BubbleError("Bubble file upload returned no URL", 502)
+  }
+  return url
 }
 
 export async function bubblePatch(type: string, id: string, data: Record<string, unknown>): Promise<void> {

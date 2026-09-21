@@ -41,6 +41,12 @@ export type ToolDetail = {
   status: string
   condition: string
   currentUser: string
+  /**
+   * `tools.photos` — file-manager URLs, **protocol-relative** as Bubble stores
+   * them. Not part of `ToolEditability` below: a photo identifies the tool, so
+   * it stays editable whatever is holding it. See `lib/tools/tool-photos.ts`.
+   */
+  photos: string[]
 }
 
 /**

@@ -6,6 +6,7 @@ import { notFound } from "next/navigation"
 import { ToolDetailForm } from "@/components/tool-detail-form"
 import { ToolHoldNotice, ToolOrphanNotice, ToolTripFlagNotice } from "@/components/tool-hold-notice"
 import { ToolHistoryTimeline } from "@/components/tool-history-timeline"
+import { ToolPhotos } from "@/components/tool-photos"
 import { ToolStateBadges } from "@/components/tool-status-badges"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -103,23 +104,42 @@ export default async function ToolDetailPage({ params }: { params: Promise<{ too
       {tripFlag && <ToolTripFlagNotice flag={tripFlag} />}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <Card data-size="sm">
-          <CardHeader>
-            <CardTitle className="text-base">Edit</CardTitle>
-            {!editability.movable && (
-              <span className="text-sm text-muted-foreground">Only Type and Condition can be changed right now.</span>
-            )}
-          </CardHeader>
-          <CardContent>
-            <ToolDetailForm tool={tool} editability={editability} toolTypes={toolTypes} locations={locations} />
-          </CardContent>
-        </Card>
+        {/* Edit and Photos share the left column so photos stay reachable
+            without scrolling past a long History timeline — History scrolls
+            internally instead of stretching the whole page. */}
+        <div className="flex flex-col gap-6">
+          <Card data-size="sm">
+            <CardHeader>
+              <CardTitle className="text-base">Edit</CardTitle>
+              {!editability.movable && (
+                <span className="text-sm text-muted-foreground">
+                  Only Type and Condition can be changed right now.
+                </span>
+              )}
+            </CardHeader>
+            <CardContent>
+              <ToolDetailForm tool={tool} editability={editability} toolTypes={toolTypes} locations={locations} />
+            </CardContent>
+          </Card>
 
-        <Card data-size="sm">
+          <Card data-size="sm">
+            <CardHeader>
+              <CardTitle className="text-base">Photos</CardTitle>
+              <span className="text-sm text-muted-foreground">
+                So whoever picks this tool up knows they have the right one.
+              </span>
+            </CardHeader>
+            <CardContent>
+              <ToolPhotos toolId={tool.id} photos={tool.photos} />
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card data-size="sm" className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)]">
           <CardHeader>
             <CardTitle className="text-base">History</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-h-0 flex-1 overflow-y-auto">
             <ToolHistoryTimeline entries={history} />
           </CardContent>
         </Card>

@@ -4,6 +4,7 @@ import { z } from "zod"
 
 import { bubbleListAll } from "@/lib/bubble/client"
 import { listUsers } from "@/lib/bubble/reference"
+import { photoSrc } from "@/lib/tools/tool-photos"
 
 /**
  * `toolshistory` — the audit trail `DB - Tools Change Log` writes automatically
@@ -98,6 +99,6 @@ export async function listToolHistory(toolId: string): Promise<ToolHistoryEntry[
       prevStatus: orNull(row.prevStatusNew) ?? orNull(row.prevStatus),
       newStatus: orNull(row.newStatusNew) ?? orNull(row.newStatus),
       notes: orNull(row.notes),
-      pictureUrl: row.picture ? (row.picture.startsWith("//") ? `https:${row.picture}` : row.picture) : null,
+      pictureUrl: row.picture ? photoSrc(row.picture) : null,
     }))
 }
