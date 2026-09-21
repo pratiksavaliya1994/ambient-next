@@ -5,6 +5,7 @@ import { notFound } from "next/navigation"
 
 import { ToolDetailForm } from "@/components/tool-detail-form"
 import { ToolHoldNotice, ToolOrphanNotice, ToolTripFlagNotice } from "@/components/tool-hold-notice"
+import { ToolHistoryTimeline } from "@/components/tool-history-timeline"
 import { ConditionBadge, StatusBadge } from "@/components/tool-status-badges"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -13,6 +14,7 @@ import { WAREHOUSE_JOB_NAMES } from "@/lib/bubble/enums"
 import { NO_LOCATION } from "@/lib/bubble/pickup-tools-types"
 import { listJobs, listToolTypes } from "@/lib/bubble/reference"
 import { getTool, readToolHold, readToolTripFlag } from "@/lib/bubble/tool-detail"
+import { listToolHistory } from "@/lib/bubble/tool-history"
 import { editabilityOf } from "@/lib/tools/tool-edit"
 
 export const metadata: Metadata = { title: "Tool" }
@@ -28,9 +30,12 @@ export const metadata: Metadata = { title: "Tool" }
  * is that repair, and `lib/tools/tool-edit.ts` carries the reasoning for when
  * it will and won't let you.
  *
- * Five reads, three of them the five-minute-memoised reference lists. The two
- * that aren't — the claim lookups behind `readToolHold` — are the same ones
- * `assignToolsAction` runs, and they are the whole point of the screen.
+ * Six reads, three of them the five-minute-memoised reference lists. The claim
+ * lookups behind `readToolHold` are the same ones `assignToolsAction` runs,
+ * and they are the whole point of the screen; `listToolHistory` is the
+ * right-hand timeline's one read, off `toolshistory` — the audit trail
+ * `DB - Tools Change Log` writes automatically on every `tools` save, from any
+ * writer.
  */
 export default async function ToolDetailPage({ params }: { params: Promise<{ toolId: string }> }) {
   const { toolId } = await params
@@ -38,11 +43,12 @@ export default async function ToolDetailPage({ params }: { params: Promise<{ too
   const tool = await getTool(toolId)
   if (!tool) notFound()
 
-  const [hold, tripFlag, toolTypes, jobs] = await Promise.all([
+  const [hold, tripFlag, toolTypes, jobs, history] = await Promise.all([
     readToolHold(tool.id),
     readToolTripFlag(tool.id),
     listToolTypes(),
     listJobs(),
+    listToolHistory(tool.id),
   ])
 
   const editability = editabilityOf(tool, hold)
@@ -55,7 +61,7 @@ export default async function ToolDetailPage({ params }: { params: Promise<{ too
     .sort((a, b) => a.localeCompare(b))
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h1 className="text-xl font-medium wrap-anywhere">{tool.name || "Unnamed tool"}</h1>
@@ -97,17 +103,28 @@ export default async function ToolDetailPage({ params }: { params: Promise<{ too
       {editability.orphaned && <ToolOrphanNotice status={tool.status} />}
       {tripFlag && <ToolTripFlagNotice flag={tripFlag} />}
 
-      <Card data-size="sm">
-        <CardHeader>
-          <CardTitle className="text-base">Edit</CardTitle>
-          {!editability.movable && (
-            <span className="text-sm text-muted-foreground">Only Type and Condition can be changed right now.</span>
-          )}
-        </CardHeader>
-        <CardContent>
-          <ToolDetailForm tool={tool} editability={editability} toolTypes={toolTypes} locations={locations} />
-        </CardContent>
-      </Card>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Card data-size="sm">
+          <CardHeader>
+            <CardTitle className="text-base">Edit</CardTitle>
+            {!editability.movable && (
+              <span className="text-sm text-muted-foreground">Only Type and Condition can be changed right now.</span>
+            )}
+          </CardHeader>
+          <CardContent>
+            <ToolDetailForm tool={tool} editability={editability} toolTypes={toolTypes} locations={locations} />
+          </CardContent>
+        </Card>
+
+        <Card data-size="sm">
+          <CardHeader>
+            <CardTitle className="text-base">History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ToolHistoryTimeline entries={history} />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

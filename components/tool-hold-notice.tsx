@@ -65,7 +65,7 @@ export function ToolOrphanNotice({ status }: { status: string }) {
   return (
     <Alert>
       <UnlockIcon />
-      <AlertTitle>Marked &quot;{status || "blank"}&quot;, but nothing is using it</AlertTitle>
+      <AlertTitle>Marked &quot;{status || "blank"}&quot;</AlertTitle>
       <AlertDescription>Use the switch below to make it available again.</AlertDescription>
     </Alert>
   )

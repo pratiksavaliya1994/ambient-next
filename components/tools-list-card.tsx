@@ -50,12 +50,12 @@ export function ToolsListCard({ tool }: { tool: DashboardTool }) {
             {tool.floor && ` · Floor ${tool.floor}`}
           </span>
         </p>
-        {tool.currentUser && (
+        {/* {tool.currentUser && (
           <p className="flex items-center gap-1.5 truncate">
             <UserIcon className="size-3.5 shrink-0" />
             <span className="truncate">{tool.currentUser}</span>
           </p>
-        )}
+        )} */}
       </CardContent>
     </Card>
   )
