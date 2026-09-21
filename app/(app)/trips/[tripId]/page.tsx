@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { Suspense } from "react"
-import { ArrowLeftIcon, PencilIcon } from "lucide-react"
+import { ArrowLeftIcon, FileDownIcon, PencilIcon } from "lucide-react"
 
 import { TripRunSheet } from "@/components/trip-run-sheet"
 import { TripStatusBadge } from "@/components/trip-status-badge"
@@ -90,6 +90,10 @@ async function TripBody({ tripId }: { tripId: string }) {
               Edit
             </Link>
           )}
+          <a href={`/trips/${trip.id}/pdf`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <FileDownIcon />
+            Download PDF
+          </a>
           <Link
             href="/trips"
             className={buttonVariants({ variant: "ghost", size: "sm", className: "text-muted-foreground" })}
