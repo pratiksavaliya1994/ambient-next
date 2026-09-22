@@ -3,7 +3,7 @@ import "server-only"
 import { z } from "zod"
 
 import { bubbleListAll } from "@/lib/bubble/client"
-import { TO_DO, type ToDo } from "@/lib/bubble/enums"
+import { TO_DO, WAREHOUSE_JOB_NAMES, type ToDo } from "@/lib/bubble/enums"
 import type { AppUser, FieldPm, Job, MaterialDefault, TimeSlot, ToolType } from "@/lib/bubble/reference-types"
 
 export type { AppUser, FieldPm, Job, MaterialDefault, TimeSlot, ToolType }
@@ -225,4 +225,30 @@ export function listTimeSlots(): Promise<TimeSlot[]> {
       })
       .sort((a, b) => a.order - b.order)
   })
+}
+
+/**
+ * Whether a `tools.location` string names somewhere that exists — a real
+ * `jobs.name` or one of the warehouse stand-ins.
+ *
+ * **Byte-for-byte**, because that is how `tools.location` is queried: it is
+ * free text compared with `equals`, nothing enforces referential integrity,
+ * and a trimmed or case-folded match here would wave through exactly the
+ * near-misses this is for. A tool parked at `"warehouse"` or `"Warehouse "`
+ * doesn't error — it forks the Tools dashboard into two cards that can't find
+ * each other, and `listToolsForJob` finds neither from the other.
+ *
+ * Empty passes: live rows exist with no location at all and must stay
+ * saveable, and the tool-create form defaults the field rather than requiring
+ * it.
+ *
+ * Shared rather than local to one action because both `tools` writers in this
+ * app — the detail page's edit and the create form — have to apply the same
+ * rule, and two copies of a byte-for-byte comparison is exactly the kind of
+ * thing that drifts.
+ */
+export async function isKnownToolLocation(location: string): Promise<boolean> {
+  if (location === "") return true
+  if ((WAREHOUSE_JOB_NAMES as readonly string[]).includes(location)) return true
+  return (await listJobs()).some((job) => job.name === location)
 }

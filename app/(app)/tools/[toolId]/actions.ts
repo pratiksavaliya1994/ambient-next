@@ -3,8 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { requireSession } from "@/lib/auth/session"
-import { WAREHOUSE_JOB_NAMES } from "@/lib/bubble/enums"
-import { listJobs } from "@/lib/bubble/reference"
+import { isKnownToolLocation } from "@/lib/bubble/reference"
 import { getTool, readToolHold, updateTool, type ToolPatch } from "@/lib/bubble/tool-detail"
 import { TOOL_STATUS_AVAILABLE } from "@/lib/bubble/tool-enums"
 import { toolEditSchema } from "@/lib/schemas/tool"
@@ -20,18 +19,6 @@ const LANDS_IN: Record<keyof ToolPatch, (tool: ToolDetail) => string> = {
   floor: (tool) => tool.floor,
   currentUser: (tool) => tool.currentUser,
   statusNew: (tool) => tool.status,
-}
-
-/**
- * Whether a location string names somewhere that exists. Byte-for-byte against
- * `jobs.name`, because that is how `tools.location` is queried — a trimmed or
- * case-folded match here would wave through exactly the near-misses this is
- * for. `listJobs` is the same five-minute-memoised read the request form uses.
- */
-async function isKnownLocation(location: string): Promise<boolean> {
-  if (location === "") return true
-  if ((WAREHOUSE_JOB_NAMES as readonly string[]).includes(location)) return true
-  return (await listJobs()).some((job) => job.name === location)
 }
 
 function holdRefusal(hold: ToolHold): string {
@@ -104,7 +91,7 @@ export async function updateToolAction(input: unknown): Promise<ToolEditState> {
   // dashboard into two cards that can't find each other. Only a *changed*
   // location is checked, so the rows already holding an unknown string stay
   // saveable for their other fields.
-  if (values.location !== tool.location && !(await isKnownLocation(values.location))) {
+  if (values.location !== tool.location && !(await isKnownToolLocation(values.location))) {
     return {
       status: "invalid",
       message: "That location isn't a job or a warehouse.",

@@ -222,3 +222,21 @@ export function isReadyForDispatch(statusNew: string): boolean {
 export function isLockedToTrip(statusNew: string): boolean {
   return statusNew === TOOL_STATUS_IN_TRANSIT || statusNew === TOOL_STATUS_DELIVERED
 }
+
+/**
+ * The old `Tool Status` option set's counterpart to `Available` — the one
+ * value this app writes to the **legacy `status` field**, and only on create.
+ *
+ * Everywhere else the rule in `CLAUDE.md` holds: this app reads and writes
+ * `statusNew`, and `status` belongs to the old Bubble UI. A brand-new row is
+ * the one case where leaving it alone isn't neutral — Bubble has no default,
+ * so the tool would show a blank Status in the old UI forever, and nothing in
+ * this app ever writes that field to fix it. Stamping the equivalent value
+ * once at birth keeps both UIs agreeing about a tool that has never moved.
+ *
+ * Not a full mirror of the old set (`Ready for Pickup`, `To be Repaired`,
+ * `Repairing / Under Maintenance`, `Discharged`, `Missing`) on purpose: one
+ * value is all that is written, and listing the rest would invite a second
+ * writer of a field this app has deliberately stopped maintaining.
+ */
+export const LEGACY_STATUS_OK = "Ok"

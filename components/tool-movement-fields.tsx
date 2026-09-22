@@ -2,15 +2,8 @@
 
 import { Controller, type Control } from "react-hook-form"
 
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/ui/combobox"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
+import { ToolLocationField } from "@/components/tool-fields"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import type { ToolEditFormValues } from "@/lib/schemas/tool"
@@ -42,35 +35,14 @@ export function ToolMovementFields({
 }) {
   return (
     <>
-      <Field className="sm:col-span-2">
-        <FieldLabel htmlFor="location">Location</FieldLabel>
-        <Controller
-          control={control}
-          name="location"
-          render={({ field }) => (
-            <Combobox
-              items={locations}
-              value={field.value || null}
-              onValueChange={(next) => field.onChange((next as string | null) ?? "")}
-              disabled={disabled}
-              limit={40}
-            >
-              <ComboboxInput id="location" placeholder="Search jobs and warehouses" aria-invalid={error ? true : undefined} />
-              <ComboboxContent>
-                <ComboboxEmpty>No job or warehouse matches.</ComboboxEmpty>
-                <ComboboxList>
-                  {(item: string) => (
-                    <ComboboxItem key={item} value={item}>
-                      {item}
-                    </ComboboxItem>
-                  )}
-                </ComboboxList>
-              </ComboboxContent>
-            </Combobox>
-          )}
-        />
-        {error && <FieldError>{error}</FieldError>}
-      </Field>
+      <ToolLocationField
+        control={control}
+        name="location"
+        locations={locations}
+        disabled={disabled}
+        className="sm:col-span-2"
+        error={error}
+      />
 
       <Field>
         <FieldLabel htmlFor="floor">Floor</FieldLabel>

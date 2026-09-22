@@ -26,16 +26,24 @@ const photoBlob = z
   .refine((blob) => blob.size <= MAX_PHOTO_BYTES, "That photo is too large.")
   .refine((blob) => (PHOTO_MIME_TYPES as readonly string[]).includes(blob.type), "Only JPEG, PNG or WebP photos.")
 
+/**
+ * One save's worth of photos, **without** a minimum — the Add tool form stages
+ * photos alongside the rest of the row and submitting none is the ordinary
+ * case, while the detail page's Add photos button has nothing to do unless at
+ * least one was picked. `toolPhotoUploadSchema` adds that `min(1)`; the create
+ * action uses this as-is.
+ */
+export const toolPhotoFilesSchema = z
+  .array(photoBlob)
+  .max(MAX_PHOTOS_PER_UPLOAD, `Add up to ${MAX_PHOTOS_PER_UPLOAD} photos at a time.`)
+  .refine(
+    (files) => files.reduce((total, file) => total + file.size, 0) <= MAX_UPLOAD_BATCH_BYTES,
+    "That's too much at once — add a few photos at a time."
+  )
+
 export const toolPhotoUploadSchema = z.object({
   toolId: z.string().min(1),
-  files: z
-    .array(photoBlob)
-    .min(1, "Pick at least one photo.")
-    .max(MAX_PHOTOS_PER_UPLOAD, `Add up to ${MAX_PHOTOS_PER_UPLOAD} photos at a time.`)
-    .refine(
-      (files) => files.reduce((total, file) => total + file.size, 0) <= MAX_UPLOAD_BATCH_BYTES,
-      "That's too much at once — add a few photos at a time."
-    ),
+  files: toolPhotoFilesSchema.refine((files) => files.length > 0, "Pick at least one photo."),
 })
 
 /**

@@ -62,3 +62,51 @@ export const toolEditSchema = z.object({
 })
 
 export type ToolEditFormValues = z.infer<typeof toolEditSchema>
+
+/**
+ * What the Add tool form submits — resolved in the browser and re-parsed by
+ * `createToolAction`, the same one-schema arrangement as `toolEditSchema`.
+ *
+ * It is a different shape rather than an extension of that one, and the three
+ * differences are all deliberate:
+ *
+ * - **`name` exists here and nowhere else.** The edit form omits it on purpose
+ *   (renaming a tool changes what a driver reads off a label), but a tool has
+ *   to be named to exist, and it is the only thing identifying it.
+ * - **`typeId` is required**, where the edit form tolerates `""`. Live rows
+ *   exist with no `type` link, but those are legacy — a typeless tool is
+ *   missing the only link from the physical unit to the catalogue requests are
+ *   built from, and there is no reason to create more of them.
+ * - **`condition` is a plain enum**, with none of `toolEditSchema`'s `""`
+ *   escape hatch. That exists to avoid clobbering a blank or legacy value on a
+ *   row nobody has touched since phase 3A; a new row has no such value to
+ *   protect and starts at `Ok`.
+ *
+ * `statusNew` is absent for the same reason it is absent from the edit schema:
+ * this form has no say in it. A new tool is `Available` — see `createTool`.
+ */
+export const toolCreateSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Give this tool a name.")
+    .max(120, "That name is too long."),
+  typeId: z.string().min(1, "Pick a tool type."),
+  /**
+   * Defaults to the warehouse in the form rather than being required here — a
+   * picked value, never typed. As in `toolEditSchema` there is no `min(1)`,
+   * because the meaningful check is "a place that actually exists" rather than
+   * "non-empty", and that one needs the live `jobs` list; it lives in
+   * `createToolAction` via `isKnownToolLocation`.
+   */
+  location: z.string().trim().max(200),
+  floor: z.string().trim().max(120),
+  condition: z.enum(TOOL_CONDITION),
+})
+
+export type ToolCreateFormValues = z.infer<typeof toolCreateSchema>
+
+/** The debounced/on-blur uniqueness probe behind the name field. */
+export const toolNameCheckSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+})

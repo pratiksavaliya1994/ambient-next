@@ -1,4 +1,6 @@
+import { PlusIcon } from "lucide-react"
 import type { Metadata } from "next"
+import Link from "next/link"
 import { Suspense } from "react"
 
 import { ToolsListGrid } from "@/components/tools-list-grid"
@@ -6,6 +8,7 @@ import { ToolsListPagination } from "@/components/tools-list-pagination"
 import { ToolsListSearch } from "@/components/tools-list-search"
 import { ToolsListSelectFilters } from "@/components/tools-list-select-filters"
 import { ToolsListSkeleton } from "@/components/tools-skeletons"
+import { buttonVariants } from "@/components/ui/button"
 import { listAllTools } from "@/lib/bubble/pickup-tools"
 import {
   distinctLocations,
@@ -27,9 +30,15 @@ export default async function AllToolsPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="flex w-full flex-col gap-3">
-      <div className="flex flex-wrap items-baseline gap-x-2">
-        <h1 className="text-lg font-medium">All Tools</h1>
-        <p className="text-xs text-muted-foreground">Every tool — search, filter and page through them.</p>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <h1 className="text-lg font-medium">All Tools</h1>
+          <p className="text-xs text-muted-foreground">Every tool — search, filter and page through them.</p>
+        </div>
+        <Link href="/tools/new" className={buttonVariants({ size: "sm" })}>
+          <PlusIcon />
+          Add tool
+        </Link>
       </div>
 
       <Suspense key={JSON.stringify(params)} fallback={<ToolsListSkeleton />}>

@@ -9,6 +9,7 @@ import {
   LogOutIcon,
   MapPinIcon,
   NavigationIcon,
+  PlusIcon,
   RouteIcon,
   ShoppingCartIcon,
   TruckIcon,
@@ -47,6 +48,10 @@ import { signOutAction } from "@/lib/auth/actions"
  * (`app/(app)/tools/page.tsx`), the latter is a flat searchable/paginated grid
  * (`app/(app)/tools/all/page.tsx`). They're separate routes rather than tabs
  * of one screen so each gets its own nav entry and its own back-button history.
+ * "Add tool" gets a top-level entry alongside them the way "New delivery
+ * request" does under Requests — it's reached from `/tools/all` too, but
+ * adding a tool is a thing you set out to do, not something you discover while
+ * browsing.
  */
 const REQUEST_NAV_ITEMS = [
   { title: "Requests", href: "/requests", icon: ClipboardListIcon },
@@ -62,6 +67,7 @@ const TRIP_NAV_ITEMS = [
 const TOOL_NAV_ITEMS = [
   { title: "Job Dashboard", href: "/tools", icon: MapPinIcon },
   { title: "All Tools", href: "/tools/all", icon: ListIcon },
+  { title: "Add tool", href: "/tools/new", icon: PlusIcon },
 ] as const
 
 const NAV_GROUPS = [
