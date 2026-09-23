@@ -112,12 +112,15 @@ export function LocationCard({
           clear the text. No `border-b` — the fill already separates it, and the
           slot's `[.border-b]:pb-(--card-spacing)` variant outranks any plain
           `pb-*`, so a border here would silently pin the padding back open. */}
-      <CardHeader className="-mt-(--card-spacing) items-center bg-primary/10 py-0.5">
+      <CardHeader className="-mt-(--card-spacing) items-center bg-primary py-0.5">
         {/* `truncate`, not `wrap-anywhere`: a job name like "107 Greenwich St -
             J24-0407" wrapped to three lines at this column width. Unset fades
             its own text rather than switching to `--muted-foreground`, which is
             a grey picked to sit on `--background`, not on the amber band. */}
-        <CardTitle className={cn("truncate text-sm text-primary", isUnset && "italic opacity-70")} title={location}>
+        <CardTitle
+          className={cn("truncate text-sm text-primary-foreground", isUnset && "italic opacity-70")}
+          title={location}
+        >
           {location}
         </CardTitle>
         {isExtra && <span className="sr-only">Match found outside your selection</span>}

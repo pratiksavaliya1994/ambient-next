@@ -14,6 +14,7 @@ import {
   RouteIcon,
   ShoppingCartIcon,
   TruckIcon,
+  WarehouseIcon,
 } from "lucide-react"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -44,15 +45,17 @@ import { signOutAction } from "@/lib/auth/actions"
  * Dispatch is a board like Requests, so it gets one. Active trips is the same
  * call now that it's split off `/dispatch` onto its own route.
  *
- * "Job Dashboard" and "All Tools" are two different views of the same `tools`
- * table, not two features — the former groups by job/location
- * (`app/(app)/tools/page.tsx`), the latter is a flat searchable/paginated grid
- * (`app/(app)/tools/all/page.tsx`). They're separate routes rather than tabs
- * of one screen so each gets its own nav entry and its own back-button history.
- * "Add tool" gets a top-level entry alongside them the way "New delivery
- * request" does under Requests — it's reached from `/tools/all` too, but
- * adding a tool is a thing you set out to do, not something you discover while
- * browsing.
+ * "Job Dashboard", "Warehouse" and "All Tools" are three different views of
+ * the same `tools` table, not three features — the first groups by
+ * job/location (`app/(app)/tools/page.tsx`), the second filters to tools
+ * actually at the warehouse and groups by tool type
+ * (`app/(app)/tools/warehouse/page.tsx`), the third is a flat
+ * searchable/paginated grid over everything (`app/(app)/tools/all/page.tsx`).
+ * They're separate routes rather than tabs of one screen so each gets its own
+ * nav entry and its own back-button history. "Add tool" gets a top-level
+ * entry alongside them the way "New delivery request" does under Requests —
+ * it's reached from `/tools/all` too, but adding a tool is a thing you set out
+ * to do, not something you discover while browsing.
  */
 const REQUEST_NAV_ITEMS = [
   { title: "Requests", href: "/requests", icon: ClipboardListIcon },
@@ -71,6 +74,7 @@ const TRIP_NAV_ITEMS = [
 
 const TOOL_NAV_ITEMS = [
   { title: "Job Dashboard", href: "/tools", icon: MapPinIcon },
+  { title: "Warehouse", href: "/tools/warehouse", icon: WarehouseIcon },
   { title: "All Tools", href: "/tools/all", icon: ListIcon },
   { title: "Add tool", href: "/tools/new", icon: PlusIcon },
 ] as const
