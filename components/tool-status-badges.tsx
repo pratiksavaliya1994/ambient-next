@@ -130,9 +130,15 @@ function isNotable(condition: string): boolean {
  * — "no request or trip is holding this row" — not a statement that the tool
  * can be used. Every picker in the app already knows that: `isAssignable`
  * vetoes a notable condition before `isFreeToAssign` ever gets a say
- * (`lib/bubble/assigned-tools.ts`, `lib/trips/movements.ts`), so a `Missing`
- * tool is offered nowhere no matter what `statusNew` says. The badge row was
- * the one place in the app asserting the opposite.
+ * (`lib/bubble/assigned-tools.ts`), so a `Missing` tool is offered for a new
+ * request nowhere, no matter what `statusNew` says. The badge row was the one
+ * place in the app asserting the opposite.
+ *
+ * The trip pool is the one deliberate exception, and it does not weaken this:
+ * `lib/trips/movements.ts#blockFor` applies the same veto to a delivery and
+ * waives it for a pickup, because collecting a broken tool is the errand, not a
+ * mistake. Such a row renders here precisely so the condition is legible while
+ * the tool is loaded.
  *
  * So when the condition is notable, `Available` — the only status word that
  * claims the tool is usable — is dropped and the condition answers alone. A

@@ -2,7 +2,7 @@
 
 import { ArrowRightIcon, TriangleAlertIcon, TruckIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
+import { ToolStateBadges } from "@/components/tool-status-badges"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { OutstandingMovement } from "@/lib/trips/movement-types"
 import { cn } from "@/lib/utils"
@@ -33,7 +33,16 @@ import { cn } from "@/lib/utils"
  *
  * A tool blocked by its **condition** is shown disabled rather than hidden,
  * with the reason — "Broken" is something the warehouse manager can act on from
- * here, the same call `DispatchRequestRow` made about unavailable requests. A
+ * here, the same call `DispatchRequestRow` made about unavailable requests.
+ * Only a *delivery* row can be blocked that way now: a pickup collects a tool
+ * whatever state it is in, which is the point of a pickup. So the pairing this
+ * row has to render honestly is a site-to-site transfer whose tool is unfit for
+ * the job — the pickup half travels, the delivery half is blocked, and the
+ * blocked row keeps its **own** destination on the chip and says where the tool
+ * is really going in the reason line. Letting `journey` rewrite the arrow there
+ * would have shown a row reading `→ Warehouse` under a job heading, with a
+ * "skips this job" note that reads as a routing shortcut rather than a refusal.
+ * A
  * tool another trip has already claimed never reaches this row at all:
  * `shownMovements` drops it upstream, because its fix lives on that other trip
  * and a red dead row is only noise in a list scanned twenty tools deep. The
@@ -56,8 +65,9 @@ export function TripMovementRow({
   onCheckedChange: (checked: boolean) => void
 }) {
   const blocked = movement.block !== null
-  const goingTo = journey ?? destination
-  const diverted = journey !== undefined && journey !== destination
+  const goingTo = blocked ? destination : (journey ?? destination)
+  const rerouted = journey !== undefined && journey !== destination
+  const diverted = rerouted && !blocked
 
   return (
     <li
@@ -86,10 +96,16 @@ export function TripMovementRow({
           <p className="min-w-0 flex-1 truncate text-xs font-medium" title={movement.toolName}>
             {movement.toolName}
           </p>
-          {movement.tool.status && !blocked && (
-            <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px] font-normal text-muted-foreground">
-              {movement.tool.status}
-            </Badge>
+          {/* Condition *and* status, not the bare status this used to show. A
+              pickup no longer blocks on condition, so "Under Repair" is now
+              something the row has to carry itself — it is half of why the
+              tool is being collected, and the driver is about to load it. */}
+          {!blocked && (
+            <ToolStateBadges
+              status={movement.tool.status}
+              condition={movement.tool.condition}
+              className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
+            />
           )}
         </div>
 
@@ -111,13 +127,20 @@ export function TripMovementRow({
 
         {diverted && <p className="mt-1 text-[11px] text-muted-foreground">Direct transfer — skips {destination}.</p>}
 
-        {blocked && <BlockReason movement={movement} />}
+        {blocked && <BlockReason movement={movement} instead={rerouted ? journey : undefined} />}
       </div>
     </li>
   )
 }
 
-function BlockReason({ movement }: { movement: OutstandingMovement }) {
+function BlockReason({
+  movement,
+  /** Where the trip is taking this tool anyway, on another request's leg. */
+  instead,
+}: {
+  movement: OutstandingMovement
+  instead?: string
+}) {
   if (movement.block?.kind === "claimed") {
     return (
       <p className="mt-1 flex items-center gap-1 text-[11px] text-destructive">
@@ -128,9 +151,12 @@ function BlockReason({ movement }: { movement: OutstandingMovement }) {
   }
 
   return (
-    <p className="mt-1 flex items-center gap-1 text-[11px] text-destructive">
-      <TriangleAlertIcon className="size-3 shrink-0" />
-      Not available — {movement.block?.detail}
-    </p>
+    <>
+      <p className="mt-1 flex items-center gap-1 text-[11px] text-destructive">
+        <TriangleAlertIcon className="size-3 shrink-0" />
+        Not available — {movement.block?.detail}
+      </p>
+      {instead && <p className="mt-1 text-[11px] text-muted-foreground">Going back to {instead} instead.</p>}
+    </>
   )
 }

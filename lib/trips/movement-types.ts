@@ -67,6 +67,21 @@ type Leg = { movement: Movement; pickup: boolean }
  * action needs to *refuse* with a reason, and quietly planning a trip without a
  * tool the manager ticked would be worse than failing.
  *
+ * **A blocked leg is fatal only when it is the tool's last one.** A tool with
+ * somewhere else to go is still going somewhere, and the blocked leg has simply
+ * lost the same way a pickup loses to a delivery in `oneJourney` — it is a
+ * reconciliation, not a failure. This matters for exactly one shape, and it is
+ * the shape a site-to-site transfer takes when the tool turns out to be unfit
+ * for the job it was headed to: its pickup leg is clear (condition never blocks
+ * a pickup — see `blockFor`) while its delivery leg is blocked, so the tool
+ * comes home to the warehouse instead of being driven on to the next site.
+ * That is the outcome anyone would want, and refusing the whole save over it
+ * would strand the dispatcher — the builder plans the warehouse route happily,
+ * and only the write would fail, with no way to act on the message.
+ *
+ * A **claim** can never split this way: it is read off the tool, so it lands on
+ * every leg at once and still refuses the save by name.
+ *
  * The per-tool collapse is what makes a **site-to-site transfer** work. Raising
  * a pickup is how a tool standing on a job site becomes assignable at all
  * (`isFreeToAssign` counts `Pickup Requested` as free), so the ordinary way to
@@ -83,15 +98,15 @@ export function selectMovements(
   toolIds: ReadonlySet<string>,
   destinationByRequest: ReadonlyMap<string, string>
 ): { movements: Movement[]; blocked: OutstandingMovement[] } {
-  const blocked: OutstandingMovement[] = []
   const legsByTool = new Map<string, Leg[]>()
+  const blockedByTool = new Map<string, OutstandingMovement[]>()
 
   for (const group of groups) {
     const destination = destinationByRequest.get(group.requestId) ?? group.destination
     for (const movement of group.movements) {
       if (!toolIds.has(movement.toolId)) continue
       if (movement.block) {
-        blocked.push(movement)
+        blockedByTool.set(movement.toolId, [...(blockedByTool.get(movement.toolId) ?? []), movement])
         continue
       }
       const leg: Leg = {
@@ -111,6 +126,11 @@ export function selectMovements(
 
   const movements: Movement[] = []
   for (const legs of legsByTool.values()) movements.push(...oneJourney(legs))
+
+  const blocked: OutstandingMovement[] = []
+  for (const [toolId, rows] of blockedByTool) {
+    if (!legsByTool.has(toolId)) blocked.push(...rows)
+  }
 
   return { movements, blocked }
 }

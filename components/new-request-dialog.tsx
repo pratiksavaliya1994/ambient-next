@@ -3,7 +3,7 @@
 import type { ComponentType } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowRightIcon, PackagePlusIcon, PlusIcon, ShoppingCartIcon, TruckIcon } from "lucide-react"
+import { ArrowLeftRightIcon, ArrowRightIcon, PackagePlusIcon, PlusIcon, ShoppingCartIcon, TruckIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -39,6 +39,13 @@ const REQUEST_TYPES = [
     icon: ShoppingCartIcon,
     accent: "pickup",
   },
+  {
+    href: "/requests/new/combined",
+    label: "Delivery + Pickup",
+    description: "One form for both. Creates two separate requests on the same job and date.",
+    icon: ArrowLeftRightIcon,
+    accent: "combined",
+  },
 ] as const
 
 /**
@@ -65,7 +72,7 @@ export function NewRequestDialog() {
         }
       />
 
-      <DialogContent className="gap-6 sm:max-w-xl">
+      <DialogContent className="gap-6 sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="text-center text-xl">New Request</DialogTitle>
           <DialogDescription className="text-center text-sm">
@@ -73,7 +80,7 @@ export function NewRequestDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           {REQUEST_TYPES.map((type) => (
             <RequestTypeCard key={type.href} {...type} />
           ))}
@@ -142,6 +149,15 @@ const ACCENTS = {
     wash: "border-pickup/30 bg-pickup/8 hover:bg-pickup/14",
     iconBg: "bg-pickup/15 text-pickup-foreground",
     text: "text-pickup-foreground",
+  },
+  // The combined option is neither movement, so it takes the neutral primary
+  // tokens rather than borrowing one of the two colours the board reads as a
+  // request's direction.
+  combined: {
+    border: "border-primary/25 hover:border-primary/60 hover:bg-primary/5",
+    wash: "border-primary/30 bg-primary/8 hover:bg-primary/14",
+    iconBg: "bg-primary/15 text-primary",
+    text: "text-primary",
   },
 } as const
 

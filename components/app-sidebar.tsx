@@ -4,6 +4,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  ArrowLeftRightIcon,
   ClipboardListIcon,
   ListIcon,
   LogOutIcon,
@@ -57,6 +58,10 @@ const REQUEST_NAV_ITEMS = [
   { title: "Requests", href: "/requests", icon: ClipboardListIcon },
   { title: "New delivery request", href: "/requests/new", icon: TruckIcon },
   { title: "New pickup request", href: "/requests/new/pickup", icon: ShoppingCartIcon },
+  // Not a third kind of request — one form that submits the other two. It earns
+  // an entry for the same reason "Add tool" does: it's a thing you set out to
+  // do, not something you'd find by starting a delivery.
+  { title: "New delivery + pickup", href: "/requests/new/combined", icon: ArrowLeftRightIcon },
 ] as const
 
 const TRIP_NAV_ITEMS = [

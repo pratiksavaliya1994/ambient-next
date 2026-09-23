@@ -102,7 +102,7 @@ export async function listOutstandingMovements(excludeTripId?: string): Promise<
         from: originOf(tool),
         to: destination,
         tool,
-        block: blockFor(tool, claims.get(tool.id)),
+        block: blockFor(tool, claims.get(tool.id), pickup),
       })
     }
 
@@ -148,10 +148,32 @@ function originOf(tool: CandidateTool): string {
  * A claim beats a condition problem in the message, because it is the one the
  * warehouse manager can actually do something about — finish or cancel the
  * other trip.
+ *
+ * **Condition blocks a delivery and never a pickup**, which is the one asymmetry
+ * that matters here. `isAssignable` answers "is this tool fit to be *sent out*"
+ * — right for a delivery, since nobody wants a broken buffer turning up on a
+ * job, and exactly backwards for a pickup, which exists *because* something is
+ * wrong with the tool. Phase 3A made that explicit on the way in: the pickup
+ * picker offers a condition selector, `lib/bubble/pickup-tools.ts` filters on
+ * condition nowhere, and `listToolsByIds` keeps an already-assigned tool visible
+ * however it has since been marked. This was the one screen still reading the
+ * delivery question and refusing to collect the tools the PM had just told it
+ * about.
+ *
+ * Every condition is collectable, `Missing` and `Retired` included. A retired
+ * tool standing on a site is precisely one that has to come back, and whether a
+ * missing one is actually there is not a question this screen can answer — the
+ * driver settles it at the collect stop, and `triptool.state` records what
+ * really happened. Refusing to route the visit just guarantees the tool stays
+ * where it is.
  */
-function blockFor(tool: CandidateTool, claim: { id: string; driver: string | null } | undefined): MovementBlock | null {
+function blockFor(
+  tool: CandidateTool,
+  claim: { id: string; driver: string | null } | undefined,
+  pickup: boolean
+): MovementBlock | null {
   if (claim) return { kind: "claimed", tripId: claim.id, driver: claim.driver }
-  if (!isAssignable(tool.condition, tool.status)) {
+  if (!pickup && !isAssignable(tool.condition, tool.status)) {
     return { kind: "condition", detail: tool.condition || tool.status }
   }
   return null
