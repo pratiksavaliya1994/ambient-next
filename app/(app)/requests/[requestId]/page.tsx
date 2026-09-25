@@ -245,17 +245,17 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
             </CardContent>
           </Card>
 
-          {request.materials.length > 0 && (
+          {request.legacyMaterials.length > 0 && (
             <Card data-size="sm">
               <CardHeader>
                 <CardTitle className="text-base">Materials</CardTitle>
                 <span className="text-sm text-muted-foreground tabular-nums">
-                  {request.materials.length} {request.materials.length === 1 ? "line" : "lines"}
+                  {request.legacyMaterials.length} {request.legacyMaterials.length === 1 ? "line" : "lines"}
                 </span>
               </CardHeader>
               <CardContent>
                 <ul className="divide-y overflow-hidden rounded-lg border">
-                  {request.materials.map((line, index) => (
+                  {request.legacyMaterials.map((line, index) => (
                     <li key={index} className="px-3 py-2 text-sm wrap-anywhere">
                       {line}
                     </li>

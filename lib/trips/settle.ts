@@ -29,9 +29,10 @@ import type { PlannedItem, PlannedStop } from "@/lib/trips/plan-types"
  * caller's warning says.
  */
 
-const RETRY_DELAYS_MS = [250, 500, 900, 1400, 2000] as const
+/** Exported so the other async fan-outs (`waitForMaterialLines`) wait on the same ladder. */
+export const RETRY_DELAYS_MS = [250, 500, 900, 1400, 2000] as const
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function sameKeys(live: ReadonlySet<string>, expected: ReadonlySet<string>): boolean {
   return live.size === expected.size && [...expected].every((key) => live.has(key))

@@ -6,6 +6,7 @@ import { listJobs } from "@/lib/bubble/reference"
 import { newYorkInstant } from "@/lib/bubble/dates"
 import { buildSummary } from "@/lib/notify"
 import { requireSession } from "@/lib/auth/session"
+import { materialLinesWarning, resolveMaterialLines } from "@/lib/bubble/requested-materials"
 import { requestFormSchema } from "@/lib/schemas/request"
 import type { CreateRequestState } from "./action-state"
 
@@ -42,6 +43,11 @@ export async function createRequestAction(input: unknown): Promise<CreateRequest
     return { status: "error", message: "That job no longer exists in Bubble." }
   }
 
+  // Inventory lines take their name and unit from a fresh catalogue read, and
+  // an unknown or retired item refuses the submit before anything is written.
+  const resolved = await resolveMaterialLines(values.materialLines)
+  if (!resolved.ok) return { status: "error", message: resolved.message }
+
   // Built before the request exists — the message never references the
   // request's id — so the one Bubble workflow call can carry it alongside
   // everything else instead of composing it afterward.
@@ -65,11 +71,12 @@ export async function createRequestAction(input: unknown): Promise<CreateRequest
     tools: values.tools,
     toolsNotes: values.toolsNotes,
     materials: values.materials,
+    materialLines: resolved.lines,
   })
 
   let created
   try {
-    created = await createToolRequest(values, job, summary)
+    created = await createToolRequest(values, job, summary, resolved.lines)
   } catch (error) {
     return {
       status: "error",
@@ -78,11 +85,14 @@ export async function createRequestAction(input: unknown): Promise<CreateRequest
     }
   }
 
+  const warning = await materialLinesWarning(created.requestId, resolved.lines.length)
+
   revalidatePath("/requests")
 
   return {
     status: "created",
     requestId: created.requestId,
     job: created.job,
+    warning,
   }
 }

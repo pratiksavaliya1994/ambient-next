@@ -20,8 +20,15 @@ import {
   TOOL_STATUS_PICKUP_REQUESTED,
 } from "@/lib/bubble/tool-enums"
 import type { Job } from "@/lib/bubble/reference-types"
+import { listMaterialLines } from "@/lib/bubble/requested-materials"
+import {
+  formatMaterialsSummary,
+  type MaterialLine,
+  type ResolvedMaterialLine,
+} from "@/lib/bubble/requested-materials-types"
 import { formatToolConditionUpdates } from "@/lib/bubble/tool-status-updates"
 import { formatToolsSummary, parseToolsSummary, type ToolLine } from "@/lib/bubble/tools-summary"
+import { toNewRequestMaterialLines } from "@/lib/schemas/material"
 import type { RequestFormValues } from "@/lib/schemas/request"
 import type { PickupRequestFormValues } from "@/lib/schemas/pickup-request"
 
@@ -42,7 +49,6 @@ import type { PickupRequestFormValues } from "@/lib/schemas/pickup-request"
 
 const REQUEST = "request"
 const REQUESTED_TOOLS = "requestedtools"
-const REQUESTED_MATERIALS = "requestedmaterials"
 
 const requestRow = z.looseObject({
   _id: z.string(),
@@ -83,21 +89,6 @@ const requestedToolsRow = z.looseObject({
   toolsNotes: z.string().optional(),
 })
 
-const requestedMaterialsRow = z.looseObject({
-  _id: z.string(),
-  requestID: z.string().optional(),
-  materials: z.string().optional(),
-})
-
-/** `materials` is one line per item, free text — no `Name: qty` structure to lean on. */
-function parseMaterialsList(text: string | undefined): string[] {
-  if (!text) return []
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-}
-
 export type ToolRequest = {
   id: string
   createdAt: string | null
@@ -120,8 +111,14 @@ export type ToolRequest = {
   end: string | null
   tools: ToolLine[]
   toolsNotes: string | null
-  /** Lines from the request's `requestedmaterials` row(s), free text. */
-  materials: string[]
+  /** Phase 5 structured lines — see `lib/bubble/requested-materials.ts`. */
+  materialLines: MaterialLine[]
+  /**
+   * The legacy free-text note, one entry per line. Empty whenever
+   * `materialLines` isn't: `new-request` also writes the lines' summary as a legacy row,
+   * and showing it beside the lines would list everything twice.
+   */
+  legacyMaterials: string[]
   /** Phase 2 lifecycle. A row with no `status` is `New`. */
   status: RequestStatus
   /** Phase 2B. The driver/PM's name, same free-text convention as `fieldPM2`. */
@@ -153,7 +150,8 @@ export function hasContent(request: ToolRequest): boolean {
     request.pickup ||
     request.start !== null ||
     request.tools.length > 0 ||
-    request.materials.length > 0
+    request.materialLines.length > 0 ||
+    request.legacyMaterials.length > 0
   )
 }
 
@@ -161,7 +159,7 @@ function toToolRequest(
   row: z.infer<typeof requestRow>,
   lines: ToolLine[],
   toolsNotes: string | null,
-  materials: string[]
+  materials: { lines: MaterialLine[]; legacy: string[] }
 ): ToolRequest {
   return {
     id: row._id,
@@ -183,7 +181,8 @@ function toToolRequest(
     end: row.requestDateEnd ?? null,
     tools: lines,
     toolsNotes,
-    materials,
+    materialLines: materials.lines,
+    legacyMaterials: materials.legacy,
     status: row.status ?? DEFAULT_REQUEST_STATUS,
     driver: row.driver?.trim() || null,
     // Defaulting to the constant rather than `null` keeps this a plain number,
@@ -431,7 +430,7 @@ export async function listRequestStopInfo(ids: readonly string[]): Promise<Reque
   }))
 }
 
-/** The second half of both list calls: one `in` lookup each for tools and materials. */
+/** The second half of every list call: one `in` lookup each for tools and materials. */
 async function withLines(rows: z.infer<typeof requestRow>[]): Promise<ToolRequest[]> {
   const ids = rows.map((row) => row._id)
   if (ids.length === 0) return []
@@ -439,13 +438,11 @@ async function withLines(rows: z.infer<typeof requestRow>[]): Promise<ToolReques
   // Paged through rather than capped at one page: several `requestedtools`
   // rows per request means a single 100-row page runs out before the last
   // request does, which showed up as cards claiming "No tools listed".
-  const [toolRows, materialRows] = await Promise.all([
+  const [toolRows, materialsByRequest] = await Promise.all([
     bubbleListAll(REQUESTED_TOOLS, {
       constraints: [{ key: "requestID", constraint_type: "in", value: ids }],
     }),
-    bubbleListAll(REQUESTED_MATERIALS, {
-      constraints: [{ key: "requestID", constraint_type: "in", value: ids }],
-    }),
+    listMaterialLines(ids),
   ])
 
   const byRequest = new Map<string, { lines: Map<string, number>; notes: string[] }>()
@@ -464,28 +461,25 @@ async function withLines(rows: z.infer<typeof requestRow>[]): Promise<ToolReques
     byRequest.set(row.requestID, bucket)
   }
 
-  const materialsByRequest = new Map<string, string[]>()
-  for (const raw of materialRows) {
-    const row = requestedMaterialsRow.parse(raw)
-    if (!row.requestID) continue
-
-    const lines = materialsByRequest.get(row.requestID) ?? []
-    lines.push(...parseMaterialsList(row.materials))
-    materialsByRequest.set(row.requestID, lines)
-  }
-
   return rows.map((row) => {
     const bucket = byRequest.get(row._id)
     const lines = [...(bucket?.lines ?? [])]
       .map(([name, quantity]) => ({ name, quantity }))
       .sort((a, b) => a.name.localeCompare(b.name))
-    return toToolRequest(row, lines, bucket?.notes.join("\n\n") || null, materialsByRequest.get(row._id) ?? [])
+    return toToolRequest(
+      row,
+      lines,
+      bucket?.notes.join("\n\n") || null,
+      materialsByRequest.get(row._id) ?? { lines: [], legacy: [] }
+    )
   })
 }
 
 export type CreatedRequest = {
   requestId: string
   job: string
+  /** Structured material lines `new-request` said it queued — what was sent, not what has landed. */
+  materialLines: number
 }
 
 // Named `create-request` during the original spec; renamed to `new-request`
@@ -498,8 +492,10 @@ const NEW_REQUEST_WORKFLOW = "new-request"
 // `bubble-new-request-workflow-summary.md` for the steps to mirror.
 const NEW_PICKUP_REQUEST_WORKFLOW = "new-pickup-request"
 
-const createRequestResult = z.object({
+const createRequestResult = z.looseObject({
   requestId: z.string(),
+  // Only `new-request` returns it, and only since 5B.
+  materialLines: z.number().optional(),
 })
 
 /**
@@ -527,6 +523,8 @@ type RequestPayloadInput = {
   toolsSummary: string
   toolsNotes: string
   materials: string
+  /** Phase 5, `new-request` only. Left out of the payload when empty, as an older client would. */
+  materialLines?: readonly ResolvedMaterialLine[]
   summary: string
   now: Date
 }
@@ -563,11 +561,11 @@ function buildRequestPayload(input: RequestPayloadInput): Record<string, unknown
     searchable: `${input.job.description} - ${newYorkStamp(input.now)}`,
     toolsSummary: input.toolsSummary,
     toolsNotes: input.toolsNotes,
-    // Forward-compatible: the workflow doesn't act on this yet — it's meant to
-    // create a `requestedmaterials` row (`materials` + `toDo` as `jobType`)
-    // when this is non-empty, once that step is added on the Bubble side. The
-    // WhatsApp line for it is already live — see `buildSummary`.
-    materials: input.materials,
+    // The legacy step: `new-request` writes one `requestedmaterials` row from
+    // this whenever it isn't empty, lines or not (5B §1.4). With lines it carries
+    // their summary, so the old Bubble UI still has one readable row.
+    materials: input.materialLines?.length ? formatMaterialsSummary(input.materialLines) : input.materials,
+    ...(input.materialLines?.length ? { materialLines: toNewRequestMaterialLines(input.materialLines) } : {}),
     summary: input.summary,
   }
 }
@@ -581,8 +579,17 @@ function buildRequestPayload(input: RequestPayloadInput): Record<string, unknown
  * `job` and `summary` (the WhatsApp text, from `buildSummary` in
  * `lib/notify.ts`) come from the caller, which already has the session
  * context (`requestedBy`) needed to build them.
+ *
+ * `materialLines` are the form's lines **after** `resolveMaterialLines` — never
+ * `values.materialLines` straight from the browser, whose inventory lines carry
+ * no trusted name or unit.
  */
-export async function createToolRequest(values: RequestFormValues, job: Job, summary: string): Promise<CreatedRequest> {
+export async function createToolRequest(
+  values: RequestFormValues,
+  job: Job,
+  summary: string,
+  materialLines: readonly ResolvedMaterialLine[] = []
+): Promise<CreatedRequest> {
   const now = new Date()
   // `requestDateStart` is the actual delivery instant — `startDate` at the
   // chosen slot's hour — since ClickUp and the Calendar step both read it as
@@ -624,13 +631,14 @@ export async function createToolRequest(values: RequestFormValues, job: Job, sum
       toolsSummary: formatToolsSummary(values.tools),
       toolsNotes: values.toolsNotes,
       materials: values.materials,
+      materialLines,
       summary,
       now,
     })
   )
 
   const result = createRequestResult.parse(raw)
-  return { requestId: result.requestId, job: job.name }
+  return { requestId: result.requestId, job: job.name, materialLines: result.materialLines ?? 0 }
 }
 
 /**
@@ -704,7 +712,7 @@ export async function createPickupToolRequest(
   })
 
   const result = createRequestResult.parse(raw)
-  return { requestId: result.requestId, job: job.name }
+  return { requestId: result.requestId, job: job.name, materialLines: 0 }
 }
 
 // Phase 2B/2C's shared workflow — see `docs/bubble-request-status-workflow.md`

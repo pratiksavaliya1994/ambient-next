@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { TO_DO, WE_ARE } from "@/lib/bubble/enums"
+import { materialLinesSchema } from "@/lib/schemas/material"
 
 /**
  * The one definition of a valid request, imported by both the form and the
@@ -44,8 +45,14 @@ export const requestFormSchema = z
     fieldPm: z.string().trim().max(120),
     notes: z.string().trim().max(2000),
     toolsNotes: z.string().trim().max(2000),
-    /** Free text, no separate selection — sent as-is, empty is valid. */
+    /**
+     * The legacy free-text popup — still on the form until 5C swaps it for the
+     * line picker, and sent as the legacy `materials` field only when there are
+     * no `materialLines` (which otherwise supply that text themselves).
+     */
     materials: z.string().trim().max(2000),
+    /** Phase 5 structured lines. Resolved against the catalogue server-side before sending. */
+    materialLines: materialLinesSchema,
     tentative: z.boolean(),
     tools: z.array(toolLineSchema),
   })
@@ -57,8 +64,8 @@ export const requestFormSchema = z
     message: "End date can't be before the start date.",
     path: ["endDate"],
   })
-  .refine((value) => value.tools.length > 0 || value.materials.trim().length > 3, {
-    message: "Add at least one tool or enter materials.",
+  .refine((value) => value.tools.length > 0 || value.materialLines.length > 0 || value.materials.trim().length > 3, {
+    message: "Add at least one tool or material.",
     path: ["tools"],
   })
 

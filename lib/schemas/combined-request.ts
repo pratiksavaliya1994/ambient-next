@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import { TO_DO, WE_ARE } from "@/lib/bubble/enums"
 import { TOOL_CONDITION } from "@/lib/bubble/tool-enums"
+import { materialLinesSchema } from "@/lib/schemas/material"
 import { toolLineSchema, type RequestFormValues } from "@/lib/schemas/request"
 import type { PickupRequestFormValues } from "@/lib/schemas/pickup-request"
 
@@ -61,6 +62,8 @@ export const combinedRequestFormSchema = z
     deliveryTools: z.array(toolLineSchema),
     deliveryToolsNotes: z.string().trim().max(2000),
     deliveryMaterials: z.string().trim().max(2000),
+    /** Phase 5 structured lines, delivery half only — the pickup half stays free text until 5G. */
+    deliveryMaterialLines: materialLinesSchema,
 
     /** Individual physical `tools` rows currently at the job. */
     pickupTools: z.array(toolLineSchema),
@@ -75,10 +78,16 @@ export const combinedRequestFormSchema = z
   // one side empty would write an empty request row rather than saving anyone a
   // step. The `> 3` threshold matches the two schemas this projects into, so a
   // value that passes here can't fail their own refine afterwards.
-  .refine((value) => value.deliveryTools.length > 0 || value.deliveryMaterials.trim().length > 3, {
-    message: "Add at least one tool to deliver, or enter delivery materials.",
-    path: ["deliveryTools"],
-  })
+  .refine(
+    (value) =>
+      value.deliveryTools.length > 0 ||
+      value.deliveryMaterialLines.length > 0 ||
+      value.deliveryMaterials.trim().length > 3,
+    {
+      message: "Add at least one tool or material to deliver.",
+      path: ["deliveryTools"],
+    }
+  )
   .refine((value) => value.pickupTools.length > 0 || value.pickupMaterials.trim().length > 3, {
     message: "Add at least one tool to pick up, or enter pickup materials.",
     path: ["pickupTools"],
@@ -118,6 +127,7 @@ export function toDeliveryValues(values: CombinedRequestFormValues): RequestForm
     notes: values.notes,
     toolsNotes: values.deliveryToolsNotes,
     materials: values.deliveryMaterials,
+    materialLines: values.deliveryMaterialLines,
     tentative: values.tentative,
     tools: values.deliveryTools,
   }

@@ -18,6 +18,8 @@ import {
   TOOL_STATUS_PICKUP_REQUESTED,
 } from "@/lib/bubble/tool-enums"
 import type { AssignedTool, CandidateTool } from "@/lib/bubble/assigned-tools-types"
+import { lineProgress, type MaterialLine } from "@/lib/bubble/requested-materials-types"
+import type { TripMaterialRow } from "@/lib/bubble/trip-materials-types"
 
 export type RequestProgress = {
   /** Physical tools on `assignedtools` for this request. */
@@ -31,6 +33,12 @@ export type RequestProgress = {
    * `buildSlots`, so "fully assigned" has one definition app-wide.
    */
   unfilledSlots: number
+  /** Phase 5. Structured material lines on the request. */
+  materialLines: number
+  /** Of those, how many have anything assigned (`assignedQty > 0`). */
+  materialLinesAssigned: number
+  /** Of those, how many are done by `lineProgress`'s rule. */
+  materialLinesDone: number
   terminal: Extract<RequestStatus, "Delivered" | "Returned">
   partial: Extract<RequestStatus, "Partially Delivered" | "Partially Returned">
 }
@@ -108,11 +116,20 @@ export function hasLanded(request: ProgressRequest, tool: CandidateTool): boolea
   )
 }
 
+/** A request's material lines and every trip row naming them. Optional, so tools-only callers are unchanged. */
+export type ProgressMaterials = {
+  lines: readonly MaterialLine[]
+  tripRows: readonly TripMaterialRow[]
+}
+
+const NO_MATERIALS: ProgressMaterials = { lines: [], tripRows: [] }
+
 export function requestProgress(
   request: ProgressRequest,
   assignedRows: readonly AssignedTool[],
   toolsById: Map<string, CandidateTool>,
-  unfilledSlots: number
+  unfilledSlots: number,
+  materials: ProgressMaterials = NO_MATERIALS
 ): RequestProgress {
   const pickup = isPickupRequest(request)
   let landed = 0
@@ -134,6 +151,9 @@ export function requestProgress(
     landed,
     onTruck,
     unfilledSlots,
+    materialLines: materials.lines.length,
+    materialLinesAssigned: materials.lines.filter((line) => line.assignedQty > 0).length,
+    materialLinesDone: materials.lines.filter((line) => lineProgress(line, materials.tripRows).done).length,
     terminal: pickup ? "Returned" : "Delivered",
     partial: pickup ? "Partially Returned" : "Partially Delivered",
   }
@@ -149,16 +169,17 @@ export function requestProgress(
  * request with a slot nobody will ever fill would be undone by the next
  * recompute.
  *
- * A request only closes on its own when **every assigned tool has landed and
- * every requested quantity is filled**. Landing five of five assigned tools
+ * A request only closes on its own when **every assigned tool has landed,
+ * every requested quantity is filled, and every material line is done**. Landing five of five assigned tools
  * while three requested slots were never filled leaves it partial, because the
  * demand is real and unmet — that is the case the escape hatch exists for.
  */
 export function deriveRequestStatus(progress: RequestProgress, current: RequestStatus): RequestStatus {
   if (current === "Delivered" || current === "Returned") return current
-  if (progress.assigned === 0) return "New"
-  if (progress.landed === progress.assigned && progress.unfilledSlots === 0) return progress.terminal
-  if (progress.landed > 0) return progress.partial
+  if (progress.assigned === 0 && progress.materialLinesAssigned === 0) return "New"
+  const toolsDone = progress.landed === progress.assigned && progress.unfilledSlots === 0
+  if (toolsDone && progress.materialLinesDone === progress.materialLines) return progress.terminal
+  if (progress.landed > 0 || progress.materialLinesDone > 0) return progress.partial
   if (progress.onTruck > 0) return "In Transit"
   return "Assigned"
 }

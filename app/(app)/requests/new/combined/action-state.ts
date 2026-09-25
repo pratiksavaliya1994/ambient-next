@@ -25,6 +25,7 @@ export type CombinedRequestState =
    * row and fired ClickUp/Calendar/WhatsApp, none of which a `DELETE` undoes.
    */
   | { status: "partial"; message: string; created: CombinedHalf; requestId: string; job: string }
-  | { status: "created"; pickupRequestId: string; deliveryRequestId: string; job: string }
+  /** `warning`: the delivery's material lines hadn't all shown up when the action returned. */
+  | { status: "created"; pickupRequestId: string; deliveryRequestId: string; job: string; warning?: string }
 
 export const INITIAL_COMBINED_STATE: CombinedRequestState = { status: "idle" }

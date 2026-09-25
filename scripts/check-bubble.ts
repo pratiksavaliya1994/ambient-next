@@ -9,6 +9,8 @@
  * Needs `tsx --conditions=react-server`: the modules it imports are marked
  * `server-only`, which throws under plain Node.
  */
+import { bubbleList, type Constraint } from "@/lib/bubble/client"
+import { listMaterialItems, listStockHistory } from "@/lib/bubble/material-items"
 import { listRecentRequests, listRequestsByStatus } from "@/lib/bubble/requests"
 import { listAllTools, listToolLocations, listToolsForJob } from "@/lib/bubble/pickup-tools"
 import { listFieldPms, listJobs, listTimeSlots, listToolTypes, listUsers } from "@/lib/bubble/reference"
@@ -66,6 +68,34 @@ async function main() {
   for (const request of requests) {
     const tools = request.tools.map((t) => `${t.name} x${t.quantity}`).join(", ") || "—"
     console.log(`  ${request.job}\n    ${request.toDo ?? "—"} · ${tools}`)
+    // Phase 5B: structured lines win; the legacy note shows only without them.
+    if (request.materialLines.length > 0) {
+      const lines = request.materialLines.map((line) => `${line.name} ${line.assignedQty}/${line.quantity ?? "—"}`)
+      console.log(`    materials (${request.materialLines.length} lines): ${lines.join(", ")}`)
+    } else if (request.legacyMaterials.length > 0) {
+      console.log(`    materials (legacy note): ${request.legacyMaterials.join(" / ")}`)
+    }
+  }
+
+  // Phase 5B. Every type here was confirmed with a raw GET in 5A, so a zero is
+  // "no rows yet", not a typo'd type name.
+  const [items, history, tripMaterials, structured, legacy] = await Promise.all([
+    listMaterialItems({ includeInactive: true }),
+    countRows("materialstockhistory"),
+    countRows("tripmaterial"),
+    countRows("requestedmaterials", [{ key: "kind", constraint_type: "is_not_empty" }]),
+    countRows("requestedmaterials", [{ key: "kind", constraint_type: "is_empty" }]),
+  ])
+  const firstItem = items[0]
+  console.log(
+    `\nmaterialitem          ${items.length}\t e.g. ${firstItem ? `${firstItem.name} (${firstItem.stockQty} ${firstItem.unit})` : "—"}`
+  )
+  console.log(`materialstockhistory  ${history}`)
+  console.log(`tripmaterial          ${tripMaterials}`)
+  console.log(`requestedmaterials    ${structured} structured · ${legacy} legacy`)
+  if (firstItem) {
+    const entries = await listStockHistory(firstItem.id)
+    console.log(`  history for ${firstItem.name}: ${entries.length} rows, latest ${entries[0]?.reason ?? "—"}`)
   }
 
   // Phase 2B: the Dispatch board's two reads. Both are expected to come back
@@ -101,6 +131,12 @@ async function main() {
   for (const group of groups.slice(0, 5)) {
     console.log(`  [${group.direction}] ${group.job} → ${group.destination}  (${group.movements.length} to move)`)
   }
+}
+
+/** A row count from one one-row page: Bubble reports `count + remaining` as the total. */
+async function countRows(type: string, constraints: Constraint[] = []): Promise<number> {
+  const page = await bubbleList(type, { limit: 1, constraints })
+  return page.count + page.remaining
 }
 
 main().catch((error) => {

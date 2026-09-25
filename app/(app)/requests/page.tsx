@@ -425,18 +425,18 @@ function RequestCard({ request }: { request: ToolRequest }) {
             )}
           </div>
 
-          {request.materials.length > 0 && (
+          {request.legacyMaterials.length > 0 && (
             <div className="overflow-hidden rounded-lg border bg-background/70">
               <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
                 <FactLabel>Materials</FactLabel>
 
                 <span className="text-xs text-muted-foreground tabular-nums">
-                  {request.materials.length} {request.materials.length === 1 ? "line" : "lines"}
+                  {request.legacyMaterials.length} {request.legacyMaterials.length === 1 ? "line" : "lines"}
                 </span>
               </div>
 
               <ul className="divide-y">
-                {request.materials.map((line, index) => (
+                {request.legacyMaterials.map((line, index) => (
                   <li key={index} className="px-3 py-2 text-sm wrap-anywhere">
                     {line}
                   </li>

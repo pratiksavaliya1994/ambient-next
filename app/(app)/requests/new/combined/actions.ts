@@ -7,6 +7,8 @@ import { newYorkInstant } from "@/lib/bubble/dates"
 import { listJobs } from "@/lib/bubble/reference"
 import { createPickupToolRequest, createToolRequest, type CreatedRequest } from "@/lib/bubble/requests"
 import type { Job } from "@/lib/bubble/reference-types"
+import { materialLinesWarning, resolveMaterialLines } from "@/lib/bubble/requested-materials"
+import type { ResolvedMaterialLine } from "@/lib/bubble/requested-materials-types"
 import { buildSummary } from "@/lib/notify"
 import {
   combinedRequestFormSchema,
@@ -78,6 +80,11 @@ export async function createCombinedRequestAction(input: unknown): Promise<Combi
     return { status: "error", message: "The combined form produced an invalid request. Reload and try again." }
   }
 
+  // Before either workflow fires, so a bad catalogue line can't leave the
+  // pickup half written on its own.
+  const resolved = await resolveMaterialLines(delivery.data.materialLines)
+  if (!resolved.ok) return { status: "error", message: resolved.message }
+
   // Fired together, not in sequence. Each workflow spends most of its time
   // inside Bubble waiting on Whapi, ClickUp and Outlook Calendar in turn, so
   // sequencing them made a submit cost the sum of two ~5s round trips for no
@@ -91,7 +98,7 @@ export async function createCombinedRequestAction(input: unknown): Promise<Combi
   const started = Date.now()
   const [pickupResult, deliveryResult] = await Promise.allSettled([
     createPickupToolRequest(pickup.data, job, summaryFor(values, job, "pickup")),
-    createToolRequest(delivery.data, job, summaryFor(values, job, "delivery")),
+    createToolRequest(delivery.data, job, summaryFor(values, job, "delivery", resolved.lines), resolved.lines),
   ])
   console.info(`[combined-request] both workflows settled in ${Date.now() - started}ms`)
 
@@ -116,6 +123,7 @@ export async function createCombinedRequestAction(input: unknown): Promise<Combi
     pickupRequestId: pickupResult.value.requestId,
     deliveryRequestId: deliveryResult.value.requestId,
     job: job.name,
+    warning: await materialLinesWarning(deliveryResult.value.requestId, resolved.lines.length),
   }
 }
 
@@ -142,7 +150,12 @@ function partial(
  * the tool types and theirs. The date is the same instant on both, since the
  * page asks for one date and one slot.
  */
-function summaryFor(values: CombinedRequestFormValues, job: Job, half: "pickup" | "delivery"): string {
+function summaryFor(
+  values: CombinedRequestFormValues,
+  job: Job,
+  half: "pickup" | "delivery",
+  materialLines: readonly ResolvedMaterialLine[] = []
+): string {
   const instant = newYorkInstant(values.date).toISOString()
   const isPickup = half === "pickup"
 
@@ -166,6 +179,7 @@ function summaryFor(values: CombinedRequestFormValues, job: Job, half: "pickup" 
     tools: isPickup ? values.pickupTools : values.deliveryTools,
     toolsNotes: isPickup ? values.pickupToolsNotes : values.deliveryToolsNotes,
     materials: isPickup ? values.pickupMaterials : values.deliveryMaterials,
+    materialLines,
   })
 }
 

@@ -154,7 +154,7 @@ The Pickup flow's per-tool `statusNew` write-back is fanned out inside Bubble fr
 
 `toolshistory` is never written directly by this app or by any of its workflows — `update-request-status` only edits `tools`, and `DB - Tools Change Log` (a pre-existing, always-on data-event workflow outside this project) is what turns that edit into a `toolshistory` row, the same as it does for every other writer of `tools` (see the `tools` section above and `docs/phase-2-lifecycle.md`). It already held ~1,542 rows from the old Bubble UI's `/wf/Set Status`/`/wf/Set Location` before this app started editing `tools` at all.
 
-`requestedmaterials` (`jobType` + free-text `materials`, one row per request) isn't written here either — the workflow owns row creation. The form sends `materials` on every submit (empty string when none), but **the workflow doesn't yet turn a non-empty value into a row** — that step still needs adding on the Bubble side. The summary line for it is already live in `buildSummary`.
+`requestedmaterials` isn't written here either — the workflow owns row creation. `new-request` writes **one legacy row** (the raw `materials` text, empty `kind`) for any request that has materials, and since phase 5B also one structured row per `materialLines` item when that list is sent. See [`docs/phase-5b-delivery-backend-catalogue-assign.md`](docs/phase-5b-delivery-backend-catalogue-assign.md) §1.4 — including the uppercase `materialID` key on `materialLines` items.
 
 ## The flow that is built
 
@@ -257,5 +257,4 @@ Two non-obvious bits: the shell's sidebar open/collapsed state round-trips throu
 ### Where to go next
 
 - Assigning specific `tools` rows to a request — **now phase 2A**, designed and in progress. `requestedtools` links to nothing, so an assignment had no natural home; the answer agreed with the user is a new `assignedtools` child type mirroring `requestedtools`, plus `request.status` and `request.driver`. Start at [`docs/phase-2a-assignment.md`](docs/phase-2a-assignment.md).
-- The `new-request` workflow's `requestedmaterials` step: create a row (`materials` + `toDo` as `jobType`) when the form's `materials` field is non-empty, the same way it already creates `requestedtools`. This app already sends it.
 - `request.pictures` is a text field, unused here.

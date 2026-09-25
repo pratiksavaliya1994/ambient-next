@@ -1,4 +1,5 @@
 import { newYorkWeekday } from "@/lib/bubble/dates"
+import { formatMaterialsSummary, type MaterialLine } from "@/lib/bubble/requested-materials-types"
 import type { ToolLine } from "@/lib/bubble/tools-summary"
 
 /**
@@ -27,7 +28,10 @@ export type NotificationInput = {
   notes: string
   tools: readonly ToolLine[]
   toolsNotes: string
+  /** The legacy free text. Ignored when `materialLines` has any. */
   materials: string
+  /** Phase 5 lines, formatted with the same codec as the `requestedmaterials` rows. */
+  materialLines?: readonly Pick<MaterialLine, "name" | "quantity" | "unit">[]
 }
 
 /**
@@ -40,6 +44,8 @@ export function buildSummary(input: NotificationInput): string {
   const startDay = newYorkWeekday(input.start)
   const endDay = newYorkWeekday(input.end)
   const dateLine = startDay === endDay ? startDay : `${startDay} – ${endDay}`
+
+  const materials = input.materialLines?.length ? formatMaterialsSummary(input.materialLines) : input.materials
 
   const lines = [
     `New ${input.delivery ? "Delivery" : "Pickup"} Request from ${input.requestedBy}`,
@@ -58,7 +64,7 @@ export function buildSummary(input: NotificationInput): string {
     "Tools:",
     ...input.tools.map((tool) => ` ${tool.name}: ${tool.quantity}`),
     input.toolsNotes ? `\nTool notes: ${input.toolsNotes}` : null,
-    input.materials ? `\nmaterial :\n ${input.materials}` : null,
+    materials ? `\nmaterial :\n ${materials}` : null,
   ]
 
   return lines.filter((line) => line !== null).join("\n")

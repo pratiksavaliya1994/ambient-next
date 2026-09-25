@@ -6,6 +6,7 @@ import type { RequestStatus } from "@/lib/bubble/enums"
 import { listToolTypes } from "@/lib/bubble/reference"
 import { getRequest } from "@/lib/bubble/requests"
 import { setRequestStatuses } from "@/lib/bubble/request-status"
+import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { deriveRequestStatus, requestProgress } from "@/lib/trips/request-progress"
 
 /**
@@ -56,9 +57,14 @@ export async function syncRequestStatuses(
       listToolTypes(),
     ])
 
-    const toolsById = new Map(
-      (await listToolsByIds([...new Set(assignedRows.map((row) => row.toolId))])).map((tool) => [tool.id, tool])
-    )
+    // `getRequest` already carries each request's material lines; one `in`
+    // query more fetches every trip row naming any of them.
+    const lineIds = requests.flatMap((request) => request?.materialLines.map((line) => line.id) ?? [])
+    const [tools, materialTripRows] = await Promise.all([
+      listToolsByIds([...new Set(assignedRows.map((row) => row.toolId))]),
+      listTripMaterialsForLines(lineIds),
+    ])
+    const toolsById = new Map(tools.map((tool) => [tool.id, tool]))
 
     const byStatus = new Map<RequestStatus, string[]>()
 
@@ -69,7 +75,12 @@ export async function syncRequestStatuses(
       const { slots } = buildSlots(request.tools, rows, toolTypes)
       const unfilledSlots = slots.filter((slot) => !slot.consumable && slot.toolIds.length < slot.requested).length
 
-      const next = deriveRequestStatus(requestProgress(request, rows, toolsById, unfilledSlots), request.status)
+      // `lineProgress` matches trip rows by line id, so the whole list is fine.
+      const materials = { lines: request.materialLines, tripRows: materialTripRows }
+      const next = deriveRequestStatus(
+        requestProgress(request, rows, toolsById, unfilledSlots, materials),
+        request.status
+      )
       // A no-op write is still a real Bubble round trip, and there are usually
       // more unchanged requests than changed ones.
       if (next === request.status) continue

@@ -103,6 +103,7 @@ export function RequestForm({
       notes: "",
       toolsNotes: "",
       materials: "",
+      materialLines: [],
       tentative: false,
       tools: [],
     },

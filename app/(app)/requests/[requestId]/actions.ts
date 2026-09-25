@@ -12,7 +12,10 @@ import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { clearRequestOrder } from "@/lib/bubble/request-order"
 import { getRequest, offloadRequest } from "@/lib/bubble/requests"
 import { listTripFlags } from "@/lib/bubble/triptool-read"
-import { requireSession } from "@/lib/auth/session"
+import { assignMaterials, targetsLanded, waitForMaterialLines } from "@/lib/bubble/requested-materials"
+import { holdsStock, IN_MOTION_STATES, lineProgress } from "@/lib/bubble/requested-materials-types"
+import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
+import { displayNameOf, requireSession } from "@/lib/auth/session"
 import { deriveTripStatus } from "@/lib/dispatch/tool-state"
 import { offloadSchema } from "@/lib/schemas/assignment"
 import type { OffloadState } from "@/app/(app)/requests/[requestId]/action-state"
@@ -135,13 +138,14 @@ export async function offloadAction(input: unknown): Promise<OffloadState> {
  * for four grinders, got three, and is finished with them would otherwise sit
  * at `Partially Delivered` forever — real unmet demand nobody is going to meet.
  *
- * All this writes is the terminal status: it moves no tools, because there is
- * nothing left to move. And nothing reopens the request afterwards —
+ * It moves no tools, because there is nothing left to move. It does give back
+ * material stock that was assigned but never shipped (phase 5), then writes the
+ * terminal status. And nothing reopens the request afterwards —
  * `deriveRequestStatus` treats the terminal values as a ratchet, which is
  * exactly what makes this one write enough.
  */
 export async function closeRequestAction(input: unknown): Promise<CloseRequestState> {
-  await requireSession()
+  const session = await requireSession()
 
   const parsed = closeRequestSchema.safeParse(input)
   if (!parsed.success) return { status: "error", message: "That isn't a valid request." }
@@ -167,6 +171,55 @@ export async function closeRequestAction(input: unknown): Promise<CloseRequestSt
     }
   }
 
+  // The same refusal for material units still moving: on a draft trip, in the
+  // van, or turned away and riding home. Released or not, closing now would
+  // strand them.
+  const lineIds = request.materialLines.map((line) => line.id)
+  const tripRows = await listTripMaterialsForLines(lineIds)
+  const moving = tripRows.filter((row) => IN_MOTION_STATES.includes(row.state))
+  if (moving.length > 0) {
+    return {
+      status: "error",
+      message: moving.every((row) => row.state === "Planned")
+        ? "Some of this request's materials are on a draft trip. Remove them from the draft trip first."
+        : "Some of this request's materials are still on a trip. Finish the trip first.",
+    }
+  }
+
+  // Stock that never left the yard goes back on the shelf — **before** the
+  // terminal status, because nothing re-opens a closed request, so one closed
+  // while holding stock would hold it for good. Only inventory delivery lines
+  // hold stock (`holdsStock`, Bubble's own test); each is lowered to what was
+  // actually dropped.
+  const releases = request.materialLines
+    .filter((line) => holdsStock(line, request))
+    .map((line) => ({ lineId: line.id, targetQty: lineProgress(line, tripRows).delivered, from: line.assignedQty }))
+    .filter((entry) => entry.from > entry.targetQty)
+    .map(({ lineId, targetQty }) => ({ lineId, targetQty }))
+
+  if (releases.length > 0) {
+    try {
+      await assignMaterials(requestId, releases, displayNameOf(session), { release: true })
+      const { settled } = await waitForMaterialLines(requestId, targetsLanded(releases))
+      // Retrying is safe — the release is a target, so a second press writes
+      // only what the first didn't.
+      if (!settled) {
+        return {
+          status: "error",
+          message: "Bubble is still returning this request's unshipped stock. Try Close again in a moment.",
+        }
+      }
+    } catch (error) {
+      return {
+        status: "error",
+        message:
+          error instanceof Error
+            ? `Couldn't return the unshipped stock: ${error.message}`
+            : "Couldn't return the unshipped stock.",
+      }
+    }
+  }
+
   const terminal = isPickupRequest(request) ? "Returned" : "Delivered"
 
   try {
@@ -181,6 +234,7 @@ export async function closeRequestAction(input: unknown): Promise<CloseRequestSt
   revalidatePath("/requests")
   revalidatePath(`/requests/${requestId}`)
   revalidatePath("/trips/new")
+  if (releases.length > 0) revalidatePath("/materials")
 
   return { status: "closed", requestStatus: terminal }
 }
