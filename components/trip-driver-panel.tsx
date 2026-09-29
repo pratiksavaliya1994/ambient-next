@@ -93,7 +93,7 @@ export function TripDriverPanel({
         </span>
         <Button
           onClick={onSave}
-          disabled={pending || problem !== null || toolCount + materialCount === 0 || !driver.trim()}
+          disabled={pending || problem !== null || stopCount === 0 || !driver.trim()}
         >
           {pending ? <Spinner /> : <CheckIcon />}
           {saveLabel}

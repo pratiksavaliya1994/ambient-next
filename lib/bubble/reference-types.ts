@@ -37,6 +37,17 @@ export function toJobOption(job: Job): Job {
   }
 }
 
+/**
+ * A job as the trip builder's "Add stop" picker sees it. Lighter than
+ * `toJobOption` on purpose: no `description`, the field that doubles the payload
+ * across all 1,445 jobs, since a stop needs only the name to write.
+ */
+export type StopJob = Pick<Job, "id" | "name" | "gc" | "borough">
+
+export function toStopJob(job: Job): StopJob {
+  return { id: job.id, name: job.name, gc: job.gc, borough: job.borough }
+}
+
 export type ToolType = {
   id: string
   name: string

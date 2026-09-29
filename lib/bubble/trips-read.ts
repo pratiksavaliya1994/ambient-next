@@ -62,6 +62,7 @@ const tripStopRow = z.looseObject({
   seq: z.coerce.number().optional(),
   location: z.string().optional(),
   kind: z.enum(STOP_KIND).optional(),
+  doneAt: z.string().optional(),
 })
 
 function toTrip(row: z.infer<typeof tripRow>): Trip {
@@ -88,6 +89,7 @@ function toStop(row: z.infer<typeof tripStopRow>): TripStop | null {
     seq: row.seq ?? 0,
     location: row.location ?? "",
     kind: row.kind ?? "Job",
+    doneAt: row.doneAt ?? null,
   }
 }
 

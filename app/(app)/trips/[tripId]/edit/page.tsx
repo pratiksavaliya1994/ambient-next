@@ -8,8 +8,10 @@ import { TripBuilder } from "@/components/trip-builder"
 import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkDayValue, newYorkToday } from "@/lib/bubble/dates"
-import { listFieldPms, listUsers } from "@/lib/bubble/reference"
+import { listFieldPms, listJobs, listUsers } from "@/lib/bubble/reference"
+import { toStopJob } from "@/lib/bubble/reference-types"
 import { getTrip } from "@/lib/bubble/trips-read"
+import { manualLocationsOf } from "@/lib/trips/manual-stops"
 import { shownMovements } from "@/lib/trips/movement-types"
 import { listOutstandingMovements } from "@/lib/trips/movements"
 import { tripStartTime } from "@/lib/trips/schedule"
@@ -71,7 +73,12 @@ async function EditTripBody({ tripId }: { tripId: string }) {
 
   // This trip's own claims are excluded, or its tools would all read as
   // "already on a trip" — their own — and the route panel would plan nothing.
-  const [groups, pms, users] = await Promise.all([listOutstandingMovements(tripId), listFieldPms(), listUsers()])
+  const [groups, pms, users, jobs] = await Promise.all([
+    listOutstandingMovements(tripId),
+    listFieldPms(),
+    listUsers(),
+    listJobs(),
+  ])
 
   const driverOptions = [...new Set([...pms.map((pm) => pm.name), ...users.map((user) => user.name)])].sort((a, b) =>
     a.localeCompare(b)
@@ -94,8 +101,10 @@ async function EditTripBody({ tripId }: { tripId: string }) {
         toolIds: trip.items.map((item) => item.toolId),
         materials: trip.materials.map((row) => ({ lineId: row.lineId, qty: row.qty })),
         stopOrder: trip.stops.map((stop) => stop.stopKey),
+        manualStops: manualLocationsOf(trip.stops),
         splitLocations: splitLocationsOf(trip.stops),
       }}
+      jobs={jobs.map(toStopJob)}
     />
   )
 }

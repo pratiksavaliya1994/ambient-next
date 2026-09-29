@@ -21,6 +21,8 @@ export type TripDraft = {
   /** The saved trip's material lines and how much of each it carries. */
   materials: { lineId: string; qty: number }[]
   stopOrder: string[]
+  /** Job names of the stops added by hand — read back off their keys (`manualLocationsOf`). */
+  manualStops: string[]
   /** Locations that appeared twice among the saved trip's stops — i.e. the side of a cycle it split. */
   splitLocations: string[]
 }

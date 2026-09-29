@@ -15,6 +15,7 @@
  * Not `server-only`, same as `lib/trips/plan.ts` and for the same reason.
  */
 
+import { isManualStopKey } from "@/lib/trips/manual-stops"
 import type { PlannedItem, PlannedMaterial, PlannedStop } from "@/lib/trips/plan-types"
 
 export type PlanProblem =
@@ -75,7 +76,9 @@ export function violatingStopKeys(
  *
  * An **empty** plan is a problem, not a no-op: a trip with no tools is a driver
  * sent nowhere, and it would also hold no claims, so nothing would stop the
- * same tools going out on a second trip.
+ * same tools going out on a second trip. A draft of **manual stops alone** is
+ * allowed — the cargo is added in edit later — and `startTripAction` is what
+ * refuses to send it out empty.
  */
 export function validatePlan(
   stops: readonly PlannedStop[],
@@ -84,8 +87,8 @@ export function validatePlan(
 ): PlanProblem[] {
   const problems: PlanProblem[] = []
 
-  if (items.length === 0 && materials.length === 0) {
-    problems.push({ kind: "empty", message: "Add at least one tool or material before saving this trip." })
+  if (items.length === 0 && materials.length === 0 && !stops.some((stop) => isManualStopKey(stop.stopKey))) {
+    problems.push({ kind: "empty", message: "Add at least one tool, material or stop before saving this trip." })
   }
 
   const seen = new Set<string>()
@@ -180,14 +183,15 @@ export function validatePlan(
 
   // A stop nothing collects from and nothing drops at is a place the driver
   // would visit for no reason. Cheap to catch, and it means a stop can never be
-  // stranded by removing the last tool or material that justified it.
+  // stranded by removing the last tool or material that justified it. A manual
+  // stop is the exception: the dispatcher asked for that visit by name.
   const used = new Set<string>()
   for (const row of [...items, ...materials]) {
     used.add(row.fromStopKey)
     used.add(row.toStopKey)
   }
   for (const stop of stops) {
-    if (!used.has(stop.stopKey)) {
+    if (!used.has(stop.stopKey) && !isManualStopKey(stop.stopKey)) {
       problems.push({
         kind: "orphan-stop",
         message: `Nothing is picked up or dropped at ${stop.location}.`,

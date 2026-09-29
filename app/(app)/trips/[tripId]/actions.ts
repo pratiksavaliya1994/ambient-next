@@ -81,6 +81,10 @@ export async function startTripAction(input: unknown): Promise<TripRunState> {
     return { status: "error", message: `This trip is already ${trip.status}. Reload the page.` }
   }
   if (!trip.driver) return { status: "error", message: "This trip has no driver. Edit it before starting." }
+  // A draft of hand-added stops alone can be saved, but not sent out.
+  if (trip.items.length + trip.materials.length === 0) {
+    return { status: "error", message: "This trip has nothing to carry yet. Edit it to add a tool or material." }
+  }
 
   // Re-check the claim immediately before writing. The pool check happened when
   // the draft was built, which may have been yesterday — this narrows the window

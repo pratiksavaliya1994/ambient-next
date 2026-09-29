@@ -44,6 +44,8 @@ export type TripStop = {
   seq: number
   location: string
   kind: StopKind
+  /** ISO. When the driver marked a stop with nothing at it done — the only stop a flag decides. */
+  doneAt: string | null
 }
 
 export type TripToolRow = {
@@ -173,12 +175,15 @@ export function refusable(work: StopWork): TripToolRow[] {
  * marked done.
  *
  * Material lines are asked the same two questions: a stop is done only when
- * its tools **and** its materials are.
+ * its tools **and** its materials are. A stop with **nothing** at it (a manual
+ * one) has no rows to ask, so it is done once the driver has said so.
  */
 export function isStopDone(work: StopWork): boolean {
   const collects = [...work.collect, ...work.collectMaterials]
   const drops = [...work.drop, ...work.dropMaterials]
-  if (collects.length + drops.length + work.refused.length + work.refusedMaterials.length === 0) return false
+  if (collects.length + drops.length + work.refused.length + work.refusedMaterials.length === 0) {
+    return work.stop.doneAt !== null
+  }
   return collects.every(isCollectFinished) && drops.every(isDropFinished)
 }
 
@@ -274,6 +279,7 @@ function returnStop(trip: TripDetail): StopWork {
       seq: lastSeq + 1,
       location: DEFAULT_WAREHOUSE,
       kind: "Warehouse",
+      doneAt: null,
     },
     collect: [],
     drop: [],

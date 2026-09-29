@@ -119,12 +119,19 @@ const tripHeaderShape = {
   /** Defaulted so a builder that predates 5D (tools only) still validates. */
   materials: materialSelectionSchema.default([]),
   plannedMaterials: z.array(plannedMaterialSchema).default([]),
+  /**
+   * Job **names** the dispatcher added as stops by hand — a choice, so taken
+   * from the client, and checked against `jobs` by the action. Defaulted so a
+   * builder that predates manual stops still validates.
+   */
+  manualStops: z.array(z.string().trim().min(1)).max(50).default([]),
 }
 
-type TripSelection = { toolIds: string[]; materials: { lineId: string }[] }
+type TripSelection = { toolIds: string[]; materials: { lineId: string }[]; manualStops: string[] }
 
-const hasCargo = (value: TripSelection) => value.toolIds.length + value.materials.length > 0
-const hasCargoIssue = { message: "Pick at least one tool or material.", path: ["toolIds"] }
+const hasCargo = (value: TripSelection) =>
+  value.toolIds.length + value.materials.length + value.manualStops.length > 0
+const hasCargoIssue = { message: "Pick at least one tool, material or stop.", path: ["toolIds"] }
 const uniqueTools = (value: TripSelection) => new Set(value.toolIds).size === value.toolIds.length
 const uniqueToolsIssue = { message: "The same tool can't be on a trip twice.", path: ["toolIds"] }
 
@@ -204,6 +211,9 @@ function toolOutcomes(value: StopOutcomes): string[] {
 function materialOutcomes(value: StopOutcomes): string[] {
   return [...value.dropMaterialIds, ...value.loadMaterialIds, ...value.skipMaterialIds, ...value.refuseMaterialIds]
 }
+
+/** A stop with nothing to collect or drop, marked done by the driver. See `markStopDoneAction`. */
+export const markStopDoneSchema = z.object({ tripId: z.string().min(1), stopKey: z.string().min(1) })
 
 export const completeTripSchema = z.object({ tripId: z.string().min(1) })
 export const cancelTripSchema = z.object({ tripId: z.string().min(1) })

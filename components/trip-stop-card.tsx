@@ -4,8 +4,10 @@ import { Suspense, use } from "react"
 import { StopTimeRail } from "@/components/stop-time"
 import { TripStopActions } from "@/components/trip-stop-actions"
 import { TripStopItems } from "@/components/trip-stop-items"
+import { TripStopMarkDone } from "@/components/trip-stop-mark-done"
 import type { RequestStopInfo, SiteContact } from "@/lib/bubble/requests"
 import { hasTransferCollect, isStopDone, type StopWork } from "@/lib/bubble/trips-types"
+import { isEmptyStopWork } from "@/lib/trips/manual-stops"
 import type { StopKind } from "@/lib/trips/plan-types"
 import { stopRequests } from "@/lib/trips/stop-contacts"
 import { cn } from "@/lib/utils"
@@ -26,7 +28,10 @@ import { cn } from "@/lib/utils"
  *
  * The "done" state is **derived** from the items at the stop, never stored —
  * a `tripstop.status` column would be a second source of truth that starts
- * lying the moment an item is added to a stop already marked done.
+ * lying the moment an item is added to a stop already marked done. The one
+ * exception is a stop with nothing at it, which only the driver can call done
+ * (`tripstop.doneAt`, via `TripStopMarkDone`); items can't be added once the
+ * trip is running, so that flag can't go stale.
  *
  * Actions only render while the trip is under way. On a `Planned` trip this is
  * a preview of the route; on a `Completed` one it is a record.
@@ -107,7 +112,13 @@ export function TripStopCard({
             requests={requests}
             siteContacts={siteContacts}
           />
-          {live && !done && <TripStopActions tripId={tripId} work={work} />}
+          {live &&
+            !done &&
+            (isEmptyStopWork(work) ? (
+              <TripStopMarkDone tripId={tripId} stopKey={work.stop.stopKey} location={work.stop.location} />
+            ) : (
+              <TripStopActions tripId={tripId} work={work} />
+            ))}
         </div>
       </div>
     </li>

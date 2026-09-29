@@ -37,6 +37,7 @@ export type TripRunState =
       materialsReturned: number
       warning?: string
     }
+  | { status: "stop-marked" }
   | { status: "completed"; warning?: string }
   | { status: "cancelled" }
 

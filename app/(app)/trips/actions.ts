@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache"
 
 import { requireSession } from "@/lib/auth/session"
 import { newYorkInstant } from "@/lib/bubble/dates"
+import { listJobs } from "@/lib/bubble/reference"
 import { cancelTrip, createTrip, saveTrip, type TripHeaderInput } from "@/lib/bubble/trips"
 import { getTrip, listToolClaims } from "@/lib/bubble/trips-read"
 import { invalidMaterialMessage, selectMaterialMovements } from "@/lib/trips/material-movement-types"
+import { withManualStops } from "@/lib/trips/manual-stops"
 import { listOutstandingMovements } from "@/lib/trips/movements"
 import { selectMovements } from "@/lib/trips/movement-types"
 import { planTrip, resequence } from "@/lib/trips/plan"
@@ -61,6 +63,8 @@ async function buildPlan(
     stops: readonly PlannedStop[]
     /** The dispatcher's "split here instead" choices — see `splitChoiceSchema`. */
     splitPreference: readonly { key: string; chosen: string }[]
+    /** Job names added as stops by hand — see `withManualStops`. */
+    manualStops: readonly string[]
   },
   /** The trip being saved, when editing — its own claims aren't a block on itself. */
   excludeTripId?: string
@@ -97,10 +101,21 @@ async function buildPlan(
     }
   }
 
-  const plan = planTrip(
-    movements,
-    { splitPreference: new Map(splitPreference.map((choice) => [choice.key, choice.chosen])) },
-    picked.materials
+  // A manual stop has to be a job on file — the builder only offers those, and
+  // a direct POST is held to the same list.
+  if (selection.manualStops.length > 0) {
+    const jobNames = new Set((await listJobs()).map((job) => job.name))
+    const unknown = selection.manualStops.find((name) => !jobNames.has(name))
+    if (unknown) return { error: `${unknown} isn't a job on file. Reload the builder.` }
+  }
+
+  const plan = withManualStops(
+    planTrip(
+      movements,
+      { splitPreference: new Map(splitPreference.map((choice) => [choice.key, choice.chosen])) },
+      picked.materials
+    ),
+    selection.manualStops
   )
 
   // Reconcile the dispatcher's order onto the freshly-planned stops, matching on

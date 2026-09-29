@@ -51,6 +51,8 @@ export function TripRunSheet({
   const startTime = tripStartTime(trip.tripDate)
   const onboard = [...stillLoaded(trip.items), ...stillLoadedMaterials(trip.materials)]
   const live = trip.status === "In Transit"
+  // Hand-added stops alone make a draft, not a trip — `startTripAction` refuses it too.
+  const nothingToCarry = trip.items.length + trip.materials.length === 0
   // Where the driver has got to: the first stop with anything still outstanding.
   // `-1` on a trip that isn't running, so a plan highlights nothing.
   const currentIndex = live ? work.findIndex((entry) => !isStopDone(entry)) : -1
@@ -135,8 +137,11 @@ export function TripRunSheet({
       {trip.status === "Planned" && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
-            Nothing has moved yet. Starting the trip sends {trip.driver ?? "the driver"} to{" "}
-            {first ? first.stop.location : "the first stop"} — tools move as each stop is recorded.
+            {nothingToCarry
+              ? "Nothing to carry yet. Edit the trip to add a tool or material before it can start."
+              : `Nothing has moved yet. Starting the trip sends ${trip.driver ?? "the driver"} to ${
+                  first ? first.stop.location : "the first stop"
+                } — tools move as each stop is recorded.`}
           </p>
           <div className="flex items-center gap-2">
             <TripActionConfirm
@@ -159,7 +164,7 @@ export function TripRunSheet({
               open={startOpen}
               onOpenChange={setStartOpen}
               trigger={
-                <Button disabled={pending || !trip.driver}>
+                <Button disabled={pending || !trip.driver || nothingToCarry}>
                   <TruckIcon />
                   Start trip
                 </Button>

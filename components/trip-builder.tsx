@@ -7,17 +7,18 @@ import { createTripAction, saveTripAction } from "@/app/(app)/trips/actions"
 import { INITIAL_TRIP_DRAFT_STATE, type TripDraftState } from "@/app/(app)/trips/action-state"
 import { TripDriverPanel } from "@/components/trip-driver-panel"
 import { TripMovementPool } from "@/components/trip-movement-pool"
-import { TripPlanPreview } from "@/components/trip-plan-preview"
+import { TripRouteCard } from "@/components/trip-route-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { toast } from "@/components/ui/toast"
 import { useMaterialSelection } from "@/hooks/use-material-selection"
+import type { StopJob } from "@/lib/bubble/reference-types"
+import { manualStopKey, renameInOrder, withManualStops } from "@/lib/trips/manual-stops"
 import { invalidMaterialMessage, selectMaterialMovements } from "@/lib/trips/material-movement-types"
 import type { RequestMovements } from "@/lib/trips/movement-types"
 import { selectMovements } from "@/lib/trips/movement-types"
 import { planTrip } from "@/lib/trips/plan"
 import type { PlannedStop, TripPlan } from "@/lib/trips/plan-types"
-import { DEFAULT_START_TIME, formatClock, minutesOfTime } from "@/lib/trips/schedule"
+import { DEFAULT_START_TIME } from "@/lib/trips/schedule"
 import { deriveInitialSplitPreference, initialMaterialSelection, type TripDraft } from "@/lib/trips/trip-draft"
 import { validatePlan } from "@/lib/trips/validate"
 
@@ -43,9 +44,12 @@ export function TripBuilder({
   today,
   draft,
   preselectRequestId,
+  jobs,
 }: {
   groups: RequestMovements[]
   driverOptions: string[]
+  /** Every job on file — what the "Add stop" popup picks from. */
+  jobs: StopJob[]
   /** `yyyy-mm-dd` in New York — the server knows "today", the browser shouldn't guess. */
   today: string
   /** Present when editing an existing `Planned` trip. */
@@ -77,6 +81,7 @@ export function TripBuilder({
   const [startTime, setStartTime] = useState(draft?.startTime ?? DEFAULT_START_TIME)
   const [notes, setNotes] = useState(draft?.notes ?? "")
   const [stopOrder, setStopOrder] = useState<string[]>(draft?.stopOrder ?? [])
+  const [manualStops, setManualStops] = useState<string[]>(draft?.manualStops ?? [])
   const [splitPreference, setSplitPreference] = useState<Map<string, string>>(() => {
     if (!draft) return new Map()
     const { movements } = selectMovements(groups, selectedIds, destinations)
@@ -93,10 +98,15 @@ export function TripBuilder({
     [groups, lines.quantities]
   )
 
+  // Hand-added stops are laid over the fresh plan, never stored in it — the
+  // same derivation the server repeats. See `withManualStops`.
   const plan = useMemo(() => {
-    if (selection.movements.length + materialSelection.materials.length === 0) return EMPTY_PLAN
-    return planTrip(selection.movements, { splitPreference }, materialSelection.materials)
-  }, [selection, materialSelection, splitPreference])
+    const planned =
+      selection.movements.length + materialSelection.materials.length === 0
+        ? EMPTY_PLAN
+        : planTrip(selection.movements, { splitPreference }, materialSelection.materials)
+    return { ...planned, ...withManualStops(planned, manualStops) }
+  }, [selection, materialSelection, splitPreference, manualStops])
 
   // Where each ticked tool is *really* going. Usually its own group's
   // destination, but a tool that a pickup and a delivery both name travels once
@@ -153,6 +163,18 @@ export function TripBuilder({
     lines.setAll(group.materials, checked)
   }
 
+  // A stop already on the route keeps its dragged place when it turns manual
+  // (or back) — its key changes, so the order is renamed with it.
+  function addStop(location: string) {
+    setManualStops((current) => (current.includes(location) ? current : [...current, location]))
+    setStopOrder((order) => renameInOrder(order, location, manualStopKey(location)))
+  }
+
+  function removeStop(location: string) {
+    setManualStops((current) => current.filter((entry) => entry !== location))
+    setStopOrder((order) => renameInOrder(order, manualStopKey(location), location))
+  }
+
   function save() {
     startTransition(async () => {
       const payload = {
@@ -168,6 +190,7 @@ export function TripBuilder({
             warehouse: destinations.get(group.requestId) ?? group.destination,
           })),
         materials: [...lines.quantities].map(([lineId, qty]) => ({ lineId, qty })),
+        manualStops,
         stops,
         items: plan.items,
         plannedMaterials: plan.materials,
@@ -181,12 +204,12 @@ export function TripBuilder({
       setState(result)
 
       if (result.status === "saved") {
-        const cargo = [`${result.tools} tools`, result.materials ? `${result.materials} materials` : null]
+        const cargo = [result.tools ? `${result.tools} tools` : null, result.materials ? `${result.materials} materials` : null]
         toast.add({
           title: `${draft ? "Trip updated" : "Trip saved"}${result.warning ? ", with a warning" : ""}`,
           description:
             result.warning ??
-            `${cargo.filter(Boolean).join(", ")} over ${result.stops} stops. Nothing has moved yet — start the trip when the driver leaves.`,
+            `${cargo.filter(Boolean).join(", ") || "Nothing to carry yet"} over ${result.stops} stops. Nothing has moved yet — start the trip when the driver leaves.`,
         })
         router.push(`/trips/${result.tripId}`)
       }
@@ -224,39 +247,20 @@ export function TripBuilder({
       </Card>
 
       <div className="flex flex-col gap-6">
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Route</CardTitle>
-            {/* The departure is repeated here, above the stops it times, because
-                the control that sets it lives in the panel *below* this card —
-                without it you change a time out of sight of its effect. */}
-            <CardDescription>
-              Leaves {formatClock(minutesOfTime(startTime))} &mdash; drag a stop to change the order you&rsquo;d drive
-              it, and the times follow.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {stops.length === 0 ? (
-              <Empty className="border border-dashed py-8">
-                <EmptyHeader>
-                  <EmptyTitle>No stops yet</EmptyTitle>
-                  <EmptyDescription>Pick a tool or a material and the route builds itself.</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <TripPlanPreview
-                stops={stops}
-                items={plan.items}
-                materials={plan.materials}
-                startTime={startTime}
-                splitChoices={plan.splitChoices}
-                onReorder={(next: PlannedStop[]) => setStopOrder(next.map((stop) => stop.stopKey))}
-                onFlipSplit={(key, location) => setSplitPreference((current) => new Map(current).set(key, location))}
-                disabled={pending}
-              />
-            )}
-          </CardContent>
-        </Card>
+        <TripRouteCard
+          stops={stops}
+          items={plan.items}
+          materials={plan.materials}
+          startTime={startTime}
+          splitChoices={plan.splitChoices}
+          jobs={jobs}
+          manualStops={manualStops}
+          pending={pending}
+          onReorder={(next: PlannedStop[]) => setStopOrder(next.map((stop) => stop.stopKey))}
+          onFlipSplit={(key, location) => setSplitPreference((current) => new Map(current).set(key, location))}
+          onAddStop={addStop}
+          onRemoveStop={removeStop}
+        />
 
         <Card size="sm">
           <CardContent>

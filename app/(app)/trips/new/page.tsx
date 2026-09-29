@@ -7,7 +7,8 @@ import { TripBuilder } from "@/components/trip-builder"
 import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkToday } from "@/lib/bubble/dates"
-import { listFieldPms, listUsers } from "@/lib/bubble/reference"
+import { listFieldPms, listJobs, listUsers } from "@/lib/bubble/reference"
+import { toStopJob } from "@/lib/bubble/reference-types"
 import { shownMovements } from "@/lib/trips/movement-types"
 import { listOutstandingMovements } from "@/lib/trips/movements"
 
@@ -53,7 +54,12 @@ export default async function NewTripPage({
 }
 
 async function NewTripBody({ preselectRequestId }: { preselectRequestId?: string }) {
-  const [groups, pms, users] = await Promise.all([listOutstandingMovements(), listFieldPms(), listUsers()])
+  const [groups, pms, users, jobs] = await Promise.all([
+    listOutstandingMovements(),
+    listFieldPms(),
+    listUsers(),
+    listJobs(),
+  ])
 
   // `pms` and `user` merged, as the dispatch board did: neither is an actual
   // driver roster — no such table exists in Bubble — so this is a quick-pick
@@ -68,6 +74,7 @@ async function NewTripBody({ preselectRequestId }: { preselectRequestId?: string
       driverOptions={driverOptions}
       today={newYorkToday()}
       preselectRequestId={preselectRequestId}
+      jobs={jobs.map(toStopJob)}
     />
   )
 }
