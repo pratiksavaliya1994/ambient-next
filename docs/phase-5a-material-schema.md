@@ -4,6 +4,14 @@ Part of [phase 5](./phase-5-materials.md). **Schema only**: three new types and
 six new fields on one existing type. No workflows, no Next.js code, no data
 written. Workflows come in 5B, 5D and 5F, next to the code that calls them.
 
+> **Later schema (re-plan 2026-09-28).** This slice stays done as built. Two
+> more schema additions come with the slices that first need them:
+> - [5D §1.0](./phase-5d-delivery-backend-trips.md#10-schema-additions-added-2026-09-28):
+>   the `materialsitestock` table and `materialstockhistory.location`;
+> - [5F §1.0](./phase-5f-pickup-backend.md#10-schema-additions-added-2026-09-28):
+>   `requestedmaterials.transferToLineID` / `transferToRequestID` /
+>   `transferToLocation`.
+
 > The `version-test` branch is the only version in use. Treat it as production.
 > Adding a type or a field is safe; **renaming, retyping or deleting one is not**,
 > and nothing here does either.

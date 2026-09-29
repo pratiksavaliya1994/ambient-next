@@ -55,8 +55,10 @@ export function TripCard({ trip }: { trip: TripDetail }) {
         </p>
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
           <WrenchIcon className="size-3.5 shrink-0" />
-          {trip.items.length} {trip.items.length === 1 ? "tool" : "tools"} · {work.length}{" "}
-          {work.length === 1 ? "stop" : "stops"}
+          {trip.items.length} {trip.items.length === 1 ? "tool" : "tools"}
+          {trip.materials.length > 0 &&
+            ` · ${trip.materials.length} ${trip.materials.length === 1 ? "material" : "materials"}`}{" "}
+          · {work.length} {work.length === 1 ? "stop" : "stops"}
         </p>
       </CardContent>
     </Card>

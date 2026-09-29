@@ -178,7 +178,7 @@ function summaryFor(
     notes: values.notes,
     tools: isPickup ? values.pickupTools : values.deliveryTools,
     toolsNotes: isPickup ? values.pickupToolsNotes : values.deliveryToolsNotes,
-    materials: isPickup ? values.pickupMaterials : values.deliveryMaterials,
+    materials: isPickup ? values.pickupMaterials : "",
     materialLines,
   })
 }

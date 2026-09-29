@@ -9,15 +9,22 @@ stops, its planner and its conventions, and adds a second kind of cargo.
 | --- | --- | --- |
 | 5A — schema | [`phase-5a-material-schema.md`](./phase-5a-material-schema.md) | **done** 2026-09-24 — verified live |
 | 5B — delivery backend: catalogue, request, assign | [`phase-5b-delivery-backend-catalogue-assign.md`](./phase-5b-delivery-backend-catalogue-assign.md) | **done** 2026-09-24 — typecheck + `check-bubble` green; write tests not yet run |
-| 5C — delivery frontend: catalogue, request, assign | [`phase-5c-delivery-frontend-catalogue-assign.md`](./phase-5c-delivery-frontend-catalogue-assign.md) | not started |
-| 5D — delivery backend: trips | [`phase-5d-delivery-backend-trips.md`](./phase-5d-delivery-backend-trips.md) | not started |
-| 5E — delivery frontend: trips | [`phase-5e-delivery-frontend-trips.md`](./phase-5e-delivery-frontend-trips.md) | not started |
-| 5F — pickup backend | [`phase-5f-pickup-backend.md`](./phase-5f-pickup-backend.md) | not started |
-| 5G — pickup frontend | [`phase-5g-pickup-frontend.md`](./phase-5g-pickup-frontend.md) | not started |
+| 5C — delivery frontend: catalogue, request, assign | [`phase-5c-delivery-frontend-catalogue-assign.md`](./phase-5c-delivery-frontend-catalogue-assign.md) | **built** 2026-09-25 — typecheck clean, awaiting the browser pass |
+| 5D — delivery backend: trips **+ site stock** | [`phase-5d-delivery-backend-trips.md`](./phase-5d-delivery-backend-trips.md) | not started |
+| 5E — delivery frontend: trips **+ site view** | [`phase-5e-delivery-frontend-trips.md`](./phase-5e-delivery-frontend-trips.md) | not started |
+| 5F — pickup backend **+ site-to-site transfer** | [`phase-5f-pickup-backend.md`](./phase-5f-pickup-backend.md) | not started |
+| 5G — pickup frontend **+ transfer UI** | [`phase-5g-pickup-frontend.md`](./phase-5g-pickup-frontend.md) | not started |
 
 The order is fixed: schema first, backend and frontend never in the same slice,
 the whole delivery flow (5B–5E) before any of the pickup flow (5F–5G). A slice's
 frontend is built against the backend of the slice before it and nothing later.
+
+> **Re-planned 2026-09-28** for two client requests: **material at job sites**
+> (a "By site" view) and **site-to-site material transfer**. 5A–5C are
+> untouched. The new schema lands in the slice that first needs it, as 5A's
+> workflows did: the site stock table in 5D, the transfer fields in 5F. The
+> slices kept their letters because code comments already refer to them. See
+> [Site stock](#site-stock) and [Site-to-site transfer](#site-to-site-transfer).
 
 ## What phase 5 is for
 
@@ -31,7 +38,7 @@ Phase 5 makes a material request a set of **lines**, each of one of two kinds:
 
 | Kind | Picked from | Quantity | Stock |
 | --- | --- | --- | --- |
-| **Inventory** | the new catalogue (`materialitem`) | required | tracked **at the warehouse only** — consumed on site, so never tracked after delivery |
+| **Inventory** | the new catalogue (`materialitem`) | required | tracked **at the warehouse** (`stockQty`), and **at each job site** as *delivered − picked up* (`materialsitestock`, from 5D). Use on site is not tracked |
 | **Non-Inventory** | free text (name/description) | optional (blank = one lot) | none, anywhere. Only *requested vs delivered for this request* |
 
 Each line then goes through the same four steps a tool does: request → assign
@@ -68,13 +75,35 @@ Don't re-litigate these.
    Legacy rows still show on the request page as "Materials (legacy note)",
    read-only, and never enter assignment or trips.
 
+## Decisions settled with the user (2026-09-28) — the client's re-plan
+
+9. **Site stock is *delivered − picked up*, nothing else.** Use on site is not
+   tracked. There is no manual "record usage" or "recount" at a site. The figure
+   is labelled **"Delivered, not picked up"**, never "on site", because it is an
+   upper bound.
+10. **Site material shows in a new "By site" view under Materials**
+    (`/materials/sites`, Job Dashboard layout). There is also a per-site page,
+    and a "where it is" card on the item page.
+11. **Site-to-site transfer is decided at assignment.** A PM raises an ordinary
+    pickup at Site A. On a **delivery's** assign page at Site B, the open pickup
+    lines for the same item at other sites are listed, and the warehouse manager
+    can **link** one to B's line. A pickup line nobody links goes to the
+    warehouse, as before. The trip plan follows the link.
+12. **Inventory lines only.** Non-inventory lines get no site quantity and are
+    never transfer sources, because they have no identity to add up or match on.
+
 ## Calls made in planning — override here if wrong
 
-- **No site-to-site transfer for materials.** See the section below.
-- **A pickup line is done once it has one `Dropped` trip row**, whatever quantity
-  the driver counted. Site quantity is unknown, so the driver's count is the
-  truth, not the PM's estimate. A collect with `actualQty = 0` is `Skipped` and
-  the line stays outstanding.
+- **A pickup line is done once it has one `Dropped` or `Returned` trip row**,
+  whatever quantity the driver counted. `Returned` is a refused transfer that
+  ended up at the yard. The driver's count is the truth, not the PM's estimate
+  and not the site figure. A collect with `actualQty = 0` is `Skipped` and the
+  line stays outstanding.
+- **A transfer is whole-line.** A pickup line has exactly one destination: the
+  warehouse, or one delivery line at another site. If more comes back than B
+  needed, the extra stays in B's site stock.
+- **A site collect floors at 0.** Counting 10 at a site that reads 6 leaves 0,
+  not −4.
 - **Quantities are positive whole numbers.** The unit (`bag`, `box`, `gal`)
   carries the meaning. A non-inventory line with no quantity is **one lot** —
   stored blank, counted as `1` in progress maths, shown as "—".
@@ -102,6 +131,9 @@ loudly in Zod rather than silently on write.
 | `materialstockhistory` | new | stock change | the audit trail — every `+`/`−` on `stockQty`, with a reason |
 | `requestedmaterials` | **extended** | **line** (new rows) | demand **and** allocation: `quantity` asked, `assignedQty` given |
 | `tripmaterial` | new | line **per trip** | the movement: `qty` planned, `actualQty`, stops, `state` |
+| `materialsitestock` | new (**5D**) | item **per job site** | `qty` delivered and not picked up. The warehouse is **not** a row here; it stays `materialitem.stockQty` |
+| `materialstockhistory` | + `location` (**5D**) | | empty = warehouse, else the job name. Two new reasons: `Deliver`, `Collect` |
+| `requestedmaterials` | + `transferToLineID`, `transferToRequestID`, `transferToLocation` (**5F**) | | set on a **pickup** line linked to a delivery line at another site |
 
 ### Why there is no `assignedmaterials`
 
@@ -174,6 +206,62 @@ stockQty − delta` — never read-modify-write from Next.js. That narrows, but 
 not close, the window for two managers assigning the same item at the same
 second. Accepted: see Known limits.
 
+**The invariant is unchanged by the 2026-09-28 re-plan.** A delivery line's
+`assignedQty` is still warehouse units only. Units coming by transfer are
+counted beside it (see [Site-to-site transfer](#site-to-site-transfer)), never
+in it. A transfer never touches `stockQty` at all.
+
+---
+
+## Site stock
+
+What a job site has been sent and hasn't sent back, per catalogue item. It is
+built in 5D (table, writes on delivery drops, reads) and 5F (writes on pickup
+collects), and shown in 5E.
+
+- **`materialsitestock`**: one row per item per site. Fields: `materialID`,
+  `materialName`, `unit`, `location` and `qty`. `location` is the job **name**,
+  exactly as `request.job` and `tools.location` hold it. It is never a warehouse
+  name: the warehouse stays on `materialitem.stockQty`, so nothing built in 5B
+  changes. Bubble's `Modified Date` is "last moved".
+- **Only workflows write it.** Every change also writes a
+  `materialstockhistory` row with `location` set, so one audit trail covers the
+  warehouse and every site. `stockAfter` is **that location's** quantity.
+- **Inventory only**, by decision 12.
+
+| Event | Warehouse `stockQty` | Site `qty` | history `reason` |
+| --- | --- | --- | --- |
+| Inventory delivery row dropped at job X | — | X `+ qty` | `Deliver` |
+| Inventory pickup row counted at X (`c > 0`) | — | X `− c`, floored at 0 | `Collect` |
+| Transfer row (pickup from A, linked to B) dropped at B | — | B `+ actualQty` | `Deliver` |
+| Pickup row unloaded at the yard, a refused transfer included | `+ actualQty` | — | `Return` (as before) |
+| Refused delivery unloaded at the yard | `+ qty` | — | `Return` (as before) |
+
+A refused delivery never reached the site, so the site figure doesn't move.
+
+### One helper, gated by its callers
+
+Every site change goes through one private Bubble helper,
+**`adjust-site-stock`**. Params: `materialId`, `name`, `unit`, `location`,
+`delta`, `floorAtZero`, `reason`, `requestId`, `tripId`, `byName`. It:
+
+1. **creates the row** when `Search for materialsitestock (materialID, location)
+   :count is 0`, with `qty` = the delta (or 0 if the delta is negative);
+2. **changes the existing row** (`:first item`, oldest first) only when *Result
+   of step 1 is empty*. That avoids reading back a row created earlier in the
+   same run;
+3. **writes the history row**.
+
+The helper is **not idempotent by itself.** It is only ever scheduled from a
+trip helper that is **gated on the row's `state`** and **flips that state last**
+(`drop-material-at-site` in 5D, `load-trip-material` in 5F). A replayed call
+finds the state already flipped and schedules nothing. That is the same retry
+rule as `return-material-stock`.
+
+**Two first drops at once can create two rows** for one item and site, because
+Bubble has no unique constraint. The reader adds rows up by `(materialID,
+location)`, and writers always touch the oldest one, so nothing is lost.
+
 ---
 
 ## Trips — what changes
@@ -186,6 +274,7 @@ pool, the planner, the run sheet and the PDF.
 | --- | --- | --- |
 | Material delivery | `Warehouse` | the request's `job` |
 | Material pickup | the request's `job` | a warehouse (choosable, `WAREHOUSE_JOB_NAMES`) |
+| Material pickup **linked to a delivery** (transfer, 5F) | the pickup request's `job` (A) | the line's `transferToLocation` (B). **Not choosable** in the builder: the link decided it |
 
 **A line can go out over several trips.** The builder offers the outstanding
 quantity and lets the dispatcher lower it ("8 of the 20 today"). One
@@ -197,35 +286,101 @@ quantity and lets the dispatcher lower it ("8 of the 20 today"). One
 | --- | --- | --- |
 | `Planned` | on a draft or not reached yet | same |
 | `Loaded` | in the van (`actualQty = qty`) | collected; `actualQty` = what the driver counted |
-| `Dropped` | landed at the job — nothing written to stock | unloaded at the yard — **inventory `+ actualQty`** |
+| `Dropped` | landed at the job — warehouse untouched; **site `+ qty`** (inventory) | unloaded at the yard — **warehouse `+ actualQty`**; or, for a transfer, landed at B — **site B `+ actualQty`** |
 | `Skipped` | couldn't be loaded at the yard; still allocated, back in the pool | driver entered `0`; line stays outstanding |
-| `Refused` | site turned it away; rides on to a warehouse stop | — (a warehouse never refuses) |
-| `Returned` | unloaded at the yard — **inventory `+ qty`, `assignedQty − qty`** | — |
+| `Refused` | site turned it away; rides on to a warehouse stop | **transfer only**: B turned it away; rides on to a warehouse stop (a warehouse never refuses) |
+| `Returned` | unloaded at the yard — **warehouse `+ qty`, `assignedQty − qty`** | a refused transfer unloaded at the yard — **warehouse `+ actualQty`**; the line counts as done |
+
+A pickup's `Loaded` also takes the count off the site it left (`Collect`). The
+material has physically left that site, whichever way the trip goes next.
 
 The routing of a refused row (to the next `Warehouse` stop, or a synthesised
 `#return` stop) is **the tool rule, reused** — `stopWork` in
 `lib/bubble/trips-types.ts` does it by state, not by key, and it now does it for
 both row kinds.
 
-## Site-to-site transfer — not supported, and why
+## Site-to-site transfer
 
-The brief flagged this as a decision to make. The recommendation is **no**:
+*Re-planned 2026-09-28. This replaces the original "not supported" call.* That
+call rested on three gaps, and this design closes each:
 
-1. **There is no origin to take from.** A tool transfer works because the tool's
-   `location` says where it is. A material has no site stock, so "10 bags from
-   Job A" names nothing the system knows exists.
-2. **There is no identity to collapse on.** Tool transfers work through
-   `oneJourney` (`lib/trips/movement-types.ts`) merging a pickup leg and a
-   delivery leg *for the same physical tool id*. Two material lines on two
-   requests share nothing to merge on.
-3. **Stock arithmetic assumes a warehouse at one end.** Every row in the invariant
-   table above starts or ends at the yard.
+- **No origin to take from.** The origin is now a pickup request at A, and A's
+  site stock.
+- **No identity to match on.** The match is by `materialID`.
+- **Warehouse arithmetic.** A transfer never touches the warehouse.
 
-Workaround, which already works with nothing extra: a pickup at A (returns to
-stock) plus a delivery to B (drawn from stock). The extension point, if it's ever
-wanted: let a **pickup** line's destination be a job as well as a warehouse. Stock
-stays untouched, because the material never reaches a yard. Nothing in 5A–5G
-blocks that.
+It mirrors how tools move between jobs: raising a pickup at A is what makes the
+material available to someone else.
+
+### The link
+
+- **A PM raises an ordinary pickup at Site A** (5F/5G), with an estimate as
+  before. The pickup form now shows A's site figure as a hint.
+- **On a delivery's assign page at Site B**, each inventory line lists its
+  **transfer sources**. A source is an open pickup line meeting all of these:
+  - same `materialID`, at another site;
+  - its request isn't closed;
+  - not linked to anything else;
+  - no live trip row (`Planned` on an open trip, or `Loaded`), and not landed.
+
+  The manager **links** a source to B's line. A pickup line nobody links goes
+  to the warehouse, as before.
+- **The link lives on the pickup line.** It is three `requestedmaterials`
+  fields: `transferToLineID` (B's line), `transferToRequestID` and
+  `transferToLocation` (B's job name, the trip destination).
+- **Linking** is two writes, in this order:
+  1. Approve the pickup line through the existing `assign-material-line`
+     (`assignedQty = effectiveQty`). A linked line is an approved line.
+  2. A plain Data API **`PATCH`** of the three fields. It changes one row, moves
+     no stock and creates no children: the `/tools/[toolId]` rule.
+
+  If step 2 fails, the line is approved and going to the warehouse, which is
+  harmless. **Unlinking** is a `PATCH` clearing the fields, refused once the line
+  has a live trip row.
+- **Whole-line.** One pickup line has one destination. If more comes back than B
+  needs, the extra stays in B's site stock.
+
+### What the delivery line counts
+
+B's `assignedQty` stays **warehouse units only**, so the stock invariant holds
+unchanged. Beside it:
+
+- **coverage** = `assignedQty` + Σ linked pickup lines. A linked line counts its
+  estimate until it is counted, then its `actualQty`.
+- **the warehouse target is capped** at `effectiveQty(line) − linked coverage`,
+  floored at 0. Link first, then top up from stock.
+- **delivered** = own `Dropped` qty + Σ linked rows' `actualQty` `Dropped` at B.
+- **done** = delivered ≥ `quantity`, the rule it always had.
+
+### On the trip
+
+- The linked line's movement is **`A → B`**, fixed. The planner needs nothing
+  new: it's an ordinary edge, alongside B's own warehouse delivery.
+- **At A** the driver counts, as for any pickup. A's site figure goes down
+  (`Collect`).
+- **At B** it's an ordinary drop. B's site figure goes up (`Deliver`). The
+  pickup line is done, and B's delivery line progresses.
+- **B can refuse it.** It then rides on to a warehouse stop, as a refused
+  delivery does. Unloaded there, the warehouse goes up by `actualQty` and the row
+  becomes `Returned`. The pickup line is **done**, because it left A: the tool
+  rule, see `hasLanded`. B's line is short again, and the manager tops it up.
+
+### Status and closing
+
+- **Both requests move.** Any stop that touches a linked pickup row must sync the
+  pickup's request **and** `transferToRequestID`. It's the `touchedToolIds`
+  lesson: a `tripmaterial` row names only the pickup's request.
+- **Close request**, on either side, first clears the link on any linked line
+  not yet collected. The existing refusal for rows on a truck or a draft trip
+  still applies.
+
+### Not supported
+
+- Taking material straight out of site stock with no pickup request. Raise the
+  pickup; that is what makes it available.
+- Splitting one pickup line between the warehouse and B.
+
+Both are extension points. Nothing in this design blocks them.
 
 ## Request status
 
@@ -251,3 +406,14 @@ assigned, and goes through the same states as a tools-only one.
 - **Legacy free-text rows are never migrated.** Parsing `Gravel: 15 bags` into a
   catalogue line is exactly the fragile inference this phase avoids.
 - **A trip can't be edited once started** — unchanged from phase 4.
+- **Site figures overstate.** They are *delivered − picked up*, and use on site
+  isn't tracked (decision 9). A finished job keeps its figure until someone
+  raises a pickup there.
+- **Sites start at zero.** Material already on sites before 5D ships is unknown,
+  and there's no backfill. Nothing had travelled on a material trip before 5D.
+- **A site collect floors at 0**, so a count above the site figure loses the
+  difference. The driver's count is still recorded on the trip row.
+- **Duplicate site rows** from two simultaneous first drops are added together
+  on read, not merged in Bubble.
+- **Whole-line transfers only**, and **pickups are the only transfer source**
+  (see Site-to-site transfer, *Not supported*).

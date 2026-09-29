@@ -1,9 +1,9 @@
 import { ArrowDownToLineIcon, ArrowUpFromLineIcon, CheckIcon, PackageXIcon, UndoIcon, type LucideIcon } from "lucide-react"
 
-import type { StopItem } from "@/components/trip-stop-item-line"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
+import type { StopRow } from "@/lib/trips/stop-checklist"
 import { cn } from "@/lib/utils"
 
 /**
@@ -13,8 +13,9 @@ import { cn } from "@/lib/utils"
  * marked collected, delivered or refused (see `TripStopActions`). A driver's
  * thumb slipping on the wrong checkbox has no recovery but a second, manual
  * correction elsewhere, so the last screen before that write lists every tool
- * by name, split exactly the way the action is about to split them, rather
- * than trusting a count on the button to have been read carefully.
+ * and material line by name, split exactly the way the action is about to
+ * split them, rather than trusting a count on the button to have been read
+ * carefully. A line reads with its quantity first: "20 bag Level-Flor".
  */
 export function TripStopConfirmDialog({
   open,
@@ -29,14 +30,14 @@ export function TripStopConfirmDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Tools about to be recorded as collected. */
-  collect: readonly StopItem[]
-  /** Tools left behind at this stop — not collected. */
-  skip: readonly StopItem[]
-  /** Tools about to be recorded as delivered (or returned, at a warehouse). */
-  drop: readonly StopItem[]
-  /** Tools the site is about to be recorded as refusing. */
-  refuse: readonly StopItem[]
+  /** Rows about to be recorded as collected. */
+  collect: readonly StopRow[]
+  /** Rows left behind at this stop — not collected. */
+  skip: readonly StopRow[]
+  /** Rows about to be recorded as delivered (or returned, at a warehouse). */
+  drop: readonly StopRow[]
+  /** Rows the site is about to be recorded as refusing. */
+  refuse: readonly StopRow[]
   /** `Drop off` or `Return` — what `drop` is called at this stop. */
   verb: string
   pending: boolean
@@ -47,7 +48,7 @@ export function TripStopConfirmDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Confirm this stop</DialogTitle>
-          <DialogDescription>This can&apos;t be undone. Check every tool below before confirming.</DialogDescription>
+          <DialogDescription>This can&apos;t be undone. Check every line below before confirming.</DialogDescription>
         </DialogHeader>
 
         <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
@@ -73,7 +74,7 @@ export function TripStopConfirmDialog({
   )
 }
 
-/** One group of tools in the summary — same shape as a stop's own collect/drop blocks, so it reads as familiar. */
+/** One group of rows in the summary — same shape as a stop's own collect/drop blocks, so it reads as familiar. */
 function ConfirmSection({
   label,
   Icon,
@@ -83,7 +84,7 @@ function ConfirmSection({
   label: string
   Icon: LucideIcon
   tone: "collect" | "drop" | "warn"
-  items: readonly StopItem[]
+  items: readonly StopRow[]
 }) {
   return (
     <section className="overflow-hidden rounded-md border">
@@ -101,16 +102,16 @@ function ConfirmSection({
       </header>
       <ul className="divide-y">
         {items.map((item) => (
-          <li key={item.toolId} className="flex items-center gap-2 px-2 py-1.5 text-xs">
-            <span className="min-w-0 flex-1 truncate font-medium" title={item.toolName}>
-              {item.toolName}
+          <li key={item.id} className="flex items-center gap-2 px-2 py-1.5 text-xs">
+            <span className="min-w-0 flex-1 truncate font-medium" title={item.label}>
+              {item.label}
             </span>
-            {item.toolType && item.toolType !== item.toolName && (
+            {item.detail && (
               <span
                 className="hidden min-w-0 shrink truncate text-[11px] text-muted-foreground sm:inline"
-                title={item.toolType}
+                title={item.detail}
               >
-                {item.toolType}
+                {item.detail}
               </span>
             )}
           </li>

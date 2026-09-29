@@ -9,14 +9,16 @@ import {
   listToolsByIds,
   searchTools,
 } from "@/lib/bubble/assigned-tools"
-import type { CandidateTool, ToolRequestClaim } from "@/lib/bubble/assigned-tools-types"
+import type { AssignmentEntry, CandidateTool, ToolRequestClaim } from "@/lib/bubble/assigned-tools-types"
 import { isFreeToAssign, isLockedToTrip, TOOL_STATUS_ASSIGNED } from "@/lib/bubble/tool-enums"
 import type { RequestStatus } from "@/lib/bubble/enums"
-import { getRequest, markToolsAssigned, releaseToolsToAvailable } from "@/lib/bubble/requests"
+import { getRequest, markToolsAssigned, releaseToolsToAvailable, type ToolRequest } from "@/lib/bubble/requests"
 import { listToolClaims } from "@/lib/bubble/trips-read"
-import { requireSession } from "@/lib/auth/session"
-import { assignToolsSchema } from "@/lib/schemas/assignment"
+import { displayNameOf, requireSession } from "@/lib/auth/session"
+import { saveAssignmentSchema } from "@/lib/schemas/assignment"
 import type { CreateRequestState } from "@/app/(app)/requests/action-state"
+
+import { prepareMaterialSave } from "./material-save"
 
 /** The inverse of `isLockedToTrip`, and narrower: only an untouched commitment goes back to `Available`. */
 function isReleasable(tool: CandidateTool): boolean {
@@ -55,7 +57,85 @@ export async function searchToolsAction(
 }
 
 /**
- * Saves the whole assignment for one request — two Bubble calls, not one.
+ * The assign screen's one Save: tools and materials together.
+ *
+ * Both halves are **checked before either is written** — every refusal below
+ * is a read, and only once both pass does anything reach Bubble. Tools go
+ * first, then materials, because the material half ends by re-deriving the
+ * request's status (`syncRequestStatuses`) and that has to see the tools'
+ * write. Bubble has no transactions, so a material write that Bubble itself
+ * rejects after the tools landed is reported as exactly that, not rolled back.
+ *
+ * Either half may be absent: `assignments` is `null` when the tools weren't
+ * touched, `materials` is empty when no line moved.
+ */
+export async function saveAssignmentAction(input: unknown): Promise<CreateRequestState> {
+  const session = await requireSession()
+
+  const parsed = saveAssignmentSchema.safeParse(input)
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {}
+    for (const issue of parsed.error.issues) {
+      const key = String(issue.path[0] ?? "form")
+      fieldErrors[key] ??= issue.message
+    }
+    return {
+      status: "invalid",
+      message: "That assignment isn't valid.",
+      fieldErrors,
+    }
+  }
+
+  const { requestId, assignments, materials } = parsed.data
+
+  const request = await getRequest(requestId)
+  if (!request) {
+    return { status: "error", message: "That request no longer exists in Bubble." }
+  }
+
+  const tools = assignments ? await prepareToolSave(request, assignments) : null
+  if (tools && "error" in tools) return { status: "error", message: tools.error }
+
+  const material = await prepareMaterialSave(request, materials, displayNameOf(session))
+  if ("error" in material) return { status: "error", message: material.error }
+
+  const warnings: string[] = []
+  let failure: string | null = null
+  let toolsWritten = false
+  try {
+    if (tools) {
+      warnings.push(...(await tools.commit()))
+      toolsWritten = true
+    }
+    warnings.push(...(await material.commit()))
+  } catch (error) {
+    failure = error instanceof Error ? error.message : "Bubble rejected the assignment."
+  }
+
+  revalidatePath("/requests")
+  revalidatePath(`/requests/${requestId}`)
+  revalidatePath(`/requests/${requestId}/assign`)
+  revalidatePath("/dispatch")
+  revalidatePath("/dispatch/active")
+  revalidatePath("/materials")
+
+  if (failure) {
+    return {
+      status: "error",
+      message: toolsWritten ? `The tools were saved, but the materials weren't. ${failure}` : failure,
+    }
+  }
+
+  return {
+    status: "created",
+    requestId,
+    job: request.job,
+    warning: warnings.length > 0 ? `${warnings.join("; ")} — check Bubble for the rest.` : undefined,
+  }
+}
+
+/**
+ * The tool half of the save — two Bubble calls, not one.
  * `create-assigned-tool` deletes and recreates the `assignedtools` rows and
  * sets `request.status = "Assigned"`; right after it succeeds, a second call
  * flips `tools.statusNew` for whichever ids actually changed hands. See the
@@ -75,29 +155,11 @@ export async function searchToolsAction(
  * unconditionally, which would march an `In Transit` or `Partially Delivered`
  * request backwards to a step it has already passed. See `statusAfterSave`.
  */
-export async function assignToolsAction(input: unknown): Promise<CreateRequestState> {
-  await requireSession()
-
-  const parsed = assignToolsSchema.safeParse(input)
-  if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {}
-    for (const issue of parsed.error.issues) {
-      const key = String(issue.path[0] ?? "form")
-      fieldErrors[key] ??= issue.message
-    }
-    return {
-      status: "invalid",
-      message: "That assignment isn't valid.",
-      fieldErrors,
-    }
-  }
-
-  const { requestId, assignments } = parsed.data
-
-  const request = await getRequest(requestId)
-  if (!request) {
-    return { status: "error", message: "That request no longer exists in Bubble." }
-  }
+async function prepareToolSave(
+  request: ToolRequest,
+  assignments: AssignmentEntry[]
+): Promise<{ error: string } | { commit: () => Promise<string[]> }> {
+  const requestId = request.id
 
   const previousToolIds = new Set((await listAssignedTools([requestId])).map((entry) => entry.toolId))
   const submittedToolIds = new Set(assignments.map((entry) => entry.toolId))
@@ -119,8 +181,7 @@ export async function assignToolsAction(input: unknown): Promise<CreateRequestSt
   if (lockedTools.length > 0) {
     const [first] = lockedTools
     return {
-      status: "error",
-      message:
+      error:
         lockedTools.length === 1
           ? `${first.name} is already ${first.status.toLowerCase()} and can't be removed here. Reload the page.`
           : `${lockedTools.length} of these tools are already out on a trip and can't be removed here. Reload the page.`,
@@ -143,8 +204,7 @@ export async function assignToolsAction(input: unknown): Promise<CreateRequestSt
     const [toolId, trip] = [...claims][0]
     const name = removedTools.find((tool) => tool.id === toolId)?.name ?? "A tool"
     return {
-      status: "error",
-      message:
+      error:
         claims.size === 1
           ? `${name} is on ${trip.driver ?? "another"}'s trip and can't be removed here. Take it off that trip first.`
           : `${claims.size} of these tools are on a saved trip and can't be removed here. Take them off that trip first.`,
@@ -162,8 +222,7 @@ export async function assignToolsAction(input: unknown): Promise<CreateRequestSt
     const taken = live.filter((tool) => !isFreeToAssign(tool.status))
     if (taken.length > 0) {
       return {
-        status: "error",
-        message:
+        error:
           taken.length === 1
             ? `${taken[0].name} was just claimed elsewhere. Reload to see what's still free.`
             : `${taken.length} of these tools were just claimed elsewhere. Reload to see what's still free.`,
@@ -171,74 +230,63 @@ export async function assignToolsAction(input: unknown): Promise<CreateRequestSt
     }
   }
 
-  try {
-    await assignTools(requestId, assignments)
-  } catch (error) {
-    return {
-      status: "error",
-      message:
-        error instanceof Error
-          ? `Bubble rejected the assignment: ${error.message}`
-          : "Bubble rejected the assignment.",
-    }
-  }
-
-  // Where the request should be left standing. `create-assigned-tool` has just
-  // stamped `Assigned` over whatever it held, so this is a repair, not a
-  // transition: a request already out on the road stays where it was, and only
-  // a `New` one actually advances. Both terminal values are included
-  // deliberately — a tool added to a closed request must not reopen it, the
-  // same ratchet `deriveRequestStatus` holds.
-  const statusAfterSave: RequestStatus = request.status === "New" ? "Assigned" : request.status
-  const restoresStatus = statusAfterSave !== "Assigned"
-
-  // The `assignedtools` rows are committed from here on regardless of what
-  // follows — a problem below is a tool-status write to retry, not a failed
-  // assignment, so it becomes a warning rather than an error.
-  const warnings: string[] = []
-  try {
-    // `toolIds` may be empty: with nothing added to a request that needs its
-    // status put back, this call is the status write and nothing else.
-    if (added.length > 0 || restoresStatus) {
-      const { toolsUpdated } = await markToolsAssigned(requestId, added, statusAfterSave)
-      if (toolsUpdated !== added.length) {
-        warnings.push(`${toolsUpdated} of ${added.length} newly assigned tools updated`)
-      }
-    }
-    // Belt and braces against the guard above: only a tool still reading
-    // `Assigned` is ever written back to `Available`. Anything else — a
-    // condition value, or a state the guard somehow let through — is left
-    // exactly as it is. Writing `Available` over a tool that is physically
-    // sitting on a job site is the failure mode this whole pair exists to stop.
-    //
-    // Reuses the guard's own read rather than re-fetching: nothing between here
-    // and there writes a *removed* tool's `statusNew` — `markToolsAssigned`
-    // touches only `added` — so a second read would return the same rows.
-    const releasable = removedTools.filter(isReleasable)
-    if (releasable.length > 0) {
-      const { toolsUpdated } = await releaseToolsToAvailable(
-        requestId,
-        releasable.map((tool) => tool.id),
-        statusAfterSave
-      )
-      if (toolsUpdated !== releasable.length) {
-        warnings.push(`${toolsUpdated} of ${releasable.length} released tools updated`)
-      }
-    }
-  } catch (error) {
-    warnings.push(error instanceof Error ? error.message : "some tool statuses didn't update")
-  }
-
-  revalidatePath("/requests")
-  revalidatePath(`/requests/${requestId}`)
-  revalidatePath(`/requests/${requestId}/assign`)
-  revalidatePath("/dispatch")
-  revalidatePath("/dispatch/active")
-
   return {
-    status: "created",
-    requestId,
-    job: request.job,
-    warning: warnings.length > 0 ? `${warnings.join("; ")} — check Bubble for the rest.` : undefined,
+    commit: async () => {
+      try {
+        await assignTools(requestId, assignments)
+      } catch (error) {
+        throw new Error(
+          error instanceof Error ? `Bubble rejected the assignment: ${error.message}` : "Bubble rejected the assignment."
+        )
+      }
+
+      // Where the request should be left standing. `create-assigned-tool` has just
+      // stamped `Assigned` over whatever it held, so this is a repair, not a
+      // transition: a request already out on the road stays where it was, and only
+      // a `New` one actually advances. Both terminal values are included
+      // deliberately — a tool added to a closed request must not reopen it, the
+      // same ratchet `deriveRequestStatus` holds.
+      const statusAfterSave: RequestStatus = request.status === "New" ? "Assigned" : request.status
+      const restoresStatus = statusAfterSave !== "Assigned"
+
+      // The `assignedtools` rows are committed from here on regardless of what
+      // follows — a problem below is a tool-status write to retry, not a failed
+      // assignment, so it becomes a warning rather than an error.
+      const warnings: string[] = []
+      try {
+        // `toolIds` may be empty: with nothing added to a request that needs its
+        // status put back, this call is the status write and nothing else.
+        if (added.length > 0 || restoresStatus) {
+          const { toolsUpdated } = await markToolsAssigned(requestId, added, statusAfterSave)
+          if (toolsUpdated !== added.length) {
+            warnings.push(`${toolsUpdated} of ${added.length} newly assigned tools updated`)
+          }
+        }
+        // Belt and braces against the guard above: only a tool still reading
+        // `Assigned` is ever written back to `Available`. Anything else — a
+        // condition value, or a state the guard somehow let through — is left
+        // exactly as it is. Writing `Available` over a tool that is physically
+        // sitting on a job site is the failure mode this whole pair exists to stop.
+        //
+        // Reuses the guard's own read rather than re-fetching: nothing between here
+        // and there writes a *removed* tool's `statusNew` — `markToolsAssigned`
+        // touches only `added` — so a second read would return the same rows.
+        const releasable = removedTools.filter(isReleasable)
+        if (releasable.length > 0) {
+          const { toolsUpdated } = await releaseToolsToAvailable(
+            requestId,
+            releasable.map((tool) => tool.id),
+            statusAfterSave
+          )
+          if (toolsUpdated !== releasable.length) {
+            warnings.push(`${toolsUpdated} of ${releasable.length} released tools updated`)
+          }
+        }
+      } catch (error) {
+        warnings.push(error instanceof Error ? error.message : "some tool statuses didn't update")
+      }
+
+      return warnings
+    },
   }
 }

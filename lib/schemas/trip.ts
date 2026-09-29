@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { WAREHOUSE_JOB_NAMES } from "@/lib/bubble/enums"
+import { MATERIAL_KIND } from "@/lib/bubble/requested-materials-types"
 import { STOP_KIND } from "@/lib/trips/plan-types"
 
 /**
@@ -39,6 +40,34 @@ export const plannedItemSchema = z.object({
   toStopKey: z.string().min(1),
   toLocation: z.string(),
 })
+
+/** A planned material row as the builder holds it. Like `items`, accepted but re-derived, never trusted. */
+export const plannedMaterialSchema = z.object({
+  lineId: z.string().min(1),
+  requestId: z.string(),
+  materialId: z.string().nullable(),
+  name: z.string(),
+  unit: z.string(),
+  kind: z.enum(MATERIAL_KIND),
+  qty: z.number().int().min(1),
+  from: z.string(),
+  to: z.string(),
+  fromStopKey: z.string().min(1),
+  fromLocation: z.string(),
+  toStopKey: z.string().min(1),
+  toLocation: z.string(),
+})
+
+/**
+ * Which material lines go on this trip, and how much of each — a **choice**,
+ * like the ticked tools. The server re-reads what's outstanding and refuses a
+ * quantity above it by name (`selectMaterialMovements`); it never clamps.
+ */
+export const materialSelectionSchema = z
+  .array(z.object({ lineId: z.string().min(1), qty: z.number().int().min(1, "Send at least one.") }))
+  .refine((lines) => new Set(lines.map((line) => line.lineId)).size === lines.length, {
+    message: "The same material can't be on a trip twice.",
+  })
 
 /**
  * A pickup's destination is a real user choice, so it *is* taken from the
@@ -80,12 +109,24 @@ const tripHeaderShape = {
    */
   startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Pick a start time."),
   notes: z.string().trim().max(2000),
-  toolIds: z.array(z.string().min(1)).min(1, "Pick at least one tool."),
+  // Either list may be empty — a trip can be tools-only or materials-only —
+  // but not both; `hasCargo` holds that.
+  toolIds: z.array(z.string().min(1)),
   destinations: z.array(destinationSchema),
   stops: z.array(plannedStopSchema).min(1),
-  items: z.array(plannedItemSchema).min(1),
+  items: z.array(plannedItemSchema),
   splitPreference: z.array(splitChoiceSchema).default([]),
+  /** Defaulted so a builder that predates 5D (tools only) still validates. */
+  materials: materialSelectionSchema.default([]),
+  plannedMaterials: z.array(plannedMaterialSchema).default([]),
 }
+
+type TripSelection = { toolIds: string[]; materials: { lineId: string }[] }
+
+const hasCargo = (value: TripSelection) => value.toolIds.length + value.materials.length > 0
+const hasCargoIssue = { message: "Pick at least one tool or material.", path: ["toolIds"] }
+const uniqueTools = (value: TripSelection) => new Set(value.toolIds).size === value.toolIds.length
+const uniqueToolsIssue = { message: "The same tool can't be on a trip twice.", path: ["toolIds"] }
 
 /**
  * `idempotencyKey` is generated **once per draft**, not per attempt, and that
@@ -96,17 +137,13 @@ const tripHeaderShape = {
  */
 export const createTripSchema = z
   .object({ idempotencyKey: z.string().uuid(), ...tripHeaderShape })
-  .refine((value) => new Set(value.toolIds).size === value.toolIds.length, {
-    message: "The same tool can't be on a trip twice.",
-    path: ["toolIds"],
-  })
+  .refine(hasCargo, hasCargoIssue)
+  .refine(uniqueTools, uniqueToolsIssue)
 
 export const saveTripSchema = z
   .object({ tripId: z.string().min(1), ...tripHeaderShape })
-  .refine((value) => new Set(value.toolIds).size === value.toolIds.length, {
-    message: "The same tool can't be on a trip twice.",
-    path: ["toolIds"],
-  })
+  .refine(hasCargo, hasCargoIssue)
+  .refine(uniqueTools, uniqueToolsIssue)
 
 export type CreateTripValues = z.infer<typeof createTripSchema>
 export type SaveTripValues = z.infer<typeof saveTripSchema>
@@ -123,38 +160,50 @@ export const startTripSchema = z.object({ tripId: z.string().min(1) })
  * yard is the same gesture as any other drop, so the client ticks it in
  * `dropToolIds`; the action splits the two apart by each row's live state. The
  * client sends choices, never derivations.
+ *
+ * The four material lists hold **line ids** and mirror the tool ones exactly,
+ * `returnMaterialIds` absent for the same reason. Defaulted, so a run sheet
+ * that predates 5D (tools only) still validates.
  */
+const ids = z.array(z.string().min(1))
+const lineIds = ids.default([])
+
 export const completeStopSchema = z
   .object({
     tripId: z.string().min(1),
     stopKey: z.string().min(1),
-    dropToolIds: z.array(z.string().min(1)),
-    loadToolIds: z.array(z.string().min(1)),
-    skipToolIds: z.array(z.string().min(1)),
+    dropToolIds: ids,
+    loadToolIds: ids,
+    skipToolIds: ids,
     /** Drops the site turned away. The mirror of `skipToolIds` on the other half of a stop. */
-    refuseToolIds: z.array(z.string().min(1)),
+    refuseToolIds: ids,
+    dropMaterialIds: lineIds,
+    loadMaterialIds: lineIds,
+    skipMaterialIds: lineIds,
+    refuseMaterialIds: lineIds,
   })
-  .refine(
-    (value) =>
-      value.dropToolIds.length +
-        value.loadToolIds.length +
-        value.skipToolIds.length +
-        value.refuseToolIds.length >
-      0,
-    { message: "Nothing to record at this stop.", path: ["dropToolIds"] }
-  )
-  .refine(
-    (value) => {
-      const all = [
-        ...value.dropToolIds,
-        ...value.loadToolIds,
-        ...value.skipToolIds,
-        ...value.refuseToolIds,
-      ]
-      return new Set(all).size === all.length
-    },
-    { message: "A tool can only have one outcome at a stop.", path: ["skipToolIds"] }
-  )
+  .refine((value) => toolOutcomes(value).length + materialOutcomes(value).length > 0, {
+    message: "Nothing to record at this stop.",
+    path: ["dropToolIds"],
+  })
+  .refine((value) => new Set(toolOutcomes(value)).size === toolOutcomes(value).length, {
+    message: "A tool can only have one outcome at a stop.",
+    path: ["skipToolIds"],
+  })
+  .refine((value) => new Set(materialOutcomes(value)).size === materialOutcomes(value).length, {
+    message: "A material can only have one outcome at a stop.",
+    path: ["skipMaterialIds"],
+  })
+
+type StopOutcomes = Record<`${"drop" | "load" | "skip" | "refuse"}${"Tool" | "Material"}Ids`, string[]>
+
+function toolOutcomes(value: StopOutcomes): string[] {
+  return [...value.dropToolIds, ...value.loadToolIds, ...value.skipToolIds, ...value.refuseToolIds]
+}
+
+function materialOutcomes(value: StopOutcomes): string[] {
+  return [...value.dropMaterialIds, ...value.loadMaterialIds, ...value.skipMaterialIds, ...value.refuseMaterialIds]
+}
 
 export const completeTripSchema = z.object({ tripId: z.string().min(1) })
 export const cancelTripSchema = z.object({ tripId: z.string().min(1) })

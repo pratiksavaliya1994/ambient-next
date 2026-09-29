@@ -35,7 +35,7 @@ import {
  */
 
 const MATERIAL_ITEM = "materialitem"
-const STOCK_HISTORY = "materialstockhistory"
+export const STOCK_HISTORY = "materialstockhistory"
 const ADJUST_STOCK_WORKFLOW = "adjust-material-stock"
 
 const IS_TO_DO = new Set<string>(TO_DO)
@@ -137,7 +137,8 @@ export async function createMaterialItem(fields: MaterialItemFields): Promise<st
 }
 
 /** Everything an edit may change. **No `stockQty`** — see the module comment. */
-export type MaterialItemPatch = MaterialItemFields & { active: boolean }
+/** No `name`: an item's name is fixed once it's created. */
+export type MaterialItemPatch = Omit<MaterialItemFields, "name"> & { active: boolean }
 
 export async function updateMaterialItem(id: string, patch: MaterialItemPatch): Promise<void> {
   await bubblePatch(MATERIAL_ITEM, id, patch)
@@ -178,9 +179,32 @@ const stockHistoryRow = z.looseObject({
   tripID: z.string().optional(),
   byName: z.string().optional(),
   notes: z.string().optional(),
+  location: z.string().optional(),
 })
 
-/** One item's stock changes, newest first. */
+/** One history row as the app reads it. Exported for `site-stock.ts`, which reads the same table by `location`. */
+export function toStockHistoryEntry(raw: BubbleThing): StockHistoryEntry {
+  const row = stockHistoryRow.parse(raw)
+  return {
+    id: row._id,
+    createdAt: row["Created Date"] ?? null,
+    materialId: row.materialID ?? "",
+    materialName: row.materialName ?? "",
+    delta: row.delta ?? 0,
+    stockAfter: row.stockAfter ?? null,
+    reason: row.reason,
+    requestId: row.requestID || null,
+    tripId: row.tripID || null,
+    byName: row.byName?.trim() || null,
+    notes: row.notes?.trim() || null,
+    location: row.location?.trim() ?? "",
+  }
+}
+
+/**
+ * One item's stock changes, newest first — warehouse and site rows in one
+ * mixed list, each carrying its `location`.
+ */
 export async function listStockHistory(materialId: string): Promise<StockHistoryEntry[]> {
   const rows = await bubbleListAll(STOCK_HISTORY, {
     constraints: [{ key: "materialID", constraint_type: "equals", value: materialId }],
@@ -188,20 +212,5 @@ export async function listStockHistory(materialId: string): Promise<StockHistory
     descending: true,
   })
 
-  return rows.map((raw) => {
-    const row = stockHistoryRow.parse(raw)
-    return {
-      id: row._id,
-      createdAt: row["Created Date"] ?? null,
-      materialId: row.materialID ?? materialId,
-      materialName: row.materialName ?? "",
-      delta: row.delta ?? 0,
-      stockAfter: row.stockAfter ?? null,
-      reason: row.reason,
-      requestId: row.requestID || null,
-      tripId: row.tripID || null,
-      byName: row.byName?.trim() || null,
-      notes: row.notes?.trim() || null,
-    }
-  })
+  return rows.map((raw) => ({ ...toStockHistoryEntry(raw), materialId }))
 }

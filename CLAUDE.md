@@ -154,7 +154,7 @@ The Pickup flow's per-tool `statusNew` write-back is fanned out inside Bubble fr
 
 `toolshistory` is never written directly by this app or by any of its workflows — `update-request-status` only edits `tools`, and `DB - Tools Change Log` (a pre-existing, always-on data-event workflow outside this project) is what turns that edit into a `toolshistory` row, the same as it does for every other writer of `tools` (see the `tools` section above and `docs/phase-2-lifecycle.md`). It already held ~1,542 rows from the old Bubble UI's `/wf/Set Status`/`/wf/Set Location` before this app started editing `tools` at all.
 
-`requestedmaterials` isn't written here either — the workflow owns row creation. `new-request` writes **one legacy row** (the raw `materials` text, empty `kind`) for any request that has materials, and since phase 5B also one structured row per `materialLines` item when that list is sent. See [`docs/phase-5b-delivery-backend-catalogue-assign.md`](docs/phase-5b-delivery-backend-catalogue-assign.md) §1.4 — including the uppercase `materialID` key on `materialLines` items.
+`requestedmaterials` isn't written here either — the workflow owns row creation. `new-request` writes one structured row per `materialLines` item. Its old **legacy row** step (the raw `materials` text, empty `kind`) was disabled 2026-09-25 since no one uses the old Bubble UI; the ~373 existing legacy rows are still read as `legacyMaterials`. See [`docs/phase-5b-delivery-backend-catalogue-assign.md`](docs/phase-5b-delivery-backend-catalogue-assign.md) §1.4 — `materialLines` is a **list of texts**, one per line with `::` between fields, built only in `toNewRequestMaterialLines`.
 
 ## The flow that is built
 

@@ -4,8 +4,8 @@ import { TO_DO } from "@/lib/bubble/enums"
 import { formatMaterialLine, type ResolvedMaterialLine } from "@/lib/bubble/requested-materials-types"
 
 /**
- * Every material payload — form in, and the one wire shape out to Bubble whose
- * field names differ from the app's.
+ * Every material payload — form in, and the one delimited wire text out to
+ * `new-request`.
  *
  * Quantities are positive whole numbers throughout; the unit carries the
  * meaning. Bubble doesn't enforce integers, so this does.
@@ -38,40 +38,43 @@ export type MaterialLineInput = z.infer<typeof materialLineInputSchema>
 /** The cap a request form may send, shared by both forms that carry lines. */
 export const materialLinesSchema = z.array(materialLineInputSchema).max(50)
 
-/**
- * One `materialLines` item as `new-request` takes it.
- *
- * **`materialID`, uppercase `ID`** — the parameter is typed as the existing
- * `requestedmaterials` Bubble type rather than a custom shape, so its items
- * carry that type's field names (5B §1.4). Everywhere else in the app it is
- * `materialId`, and `adjust-material-stock` / `assign-request-materials` take
- * the lowercase forms. This schema and `toNewRequestMaterialLines` are the only
- * place the uppercase spelling may appear; get it wrong and Bubble creates the
- * row with a blank `materialID`, silently.
- *
- * `quantity` is omitted rather than sent null for a lot with none, so the
- * number field stays blank in Bubble.
- */
-const newRequestMaterialLineWire = z.object({
-  kind: z.enum(["Inventory", "NonInventory"]),
-  materialID: z.string(),
-  name: z.string().min(1),
-  unit: z.string(),
-  quantity: z.number().int().min(1).optional(),
-  /** Pre-formatted `Name: qty unit`, from the shared codec. */
-  materials: z.string(),
-})
+const FIELD_SEPARATOR = "::"
 
-export function toNewRequestMaterialLines(lines: readonly ResolvedMaterialLine[]) {
+/**
+ * One field made safe to sit between separators: a `::` — or a `:` at either
+ * edge, which joins a neighbouring separator into `:::` — would shift every
+ * later field.
+ */
+function wireField(value: string): string {
+  return value.replace(/:{2,}/g, ":").replace(/^:+|:+$/g, "")
+}
+
+/**
+ * `new-request`'s `materialLines` — a **list of texts**, one per line, its
+ * fields joined by `::`, which Bubble splits apart when it schedules
+ * `create-requested-material` on the list. The parameter was a list of the
+ * `requestedmaterials` type, which Bubble reads as row ids and rejects.
+ *
+ * Field order is fixed and **is the contract**:
+ * `kind::materialID::name::unit::quantity::materials`. `materialID` and `unit`
+ * are empty for a non-inventory line without them, and `quantity` is empty for a
+ * lot with none, so the number field stays blank in Bubble. `materials` is the
+ * pre-formatted `Name: qty unit` from the shared codec.
+ *
+ *     ["Inventory::1758…x2::Acetone::gal::1::Acetone: 1 gal", "NonInventory::::Rags::::2::Rags: 2"]
+ */
+export function toNewRequestMaterialLines(lines: readonly ResolvedMaterialLine[]): string[] {
   return lines.map((line) =>
-    newRequestMaterialLineWire.parse({
-      kind: line.kind,
-      materialID: line.materialId ?? "",
-      name: line.name,
-      unit: line.unit ?? "",
-      ...(line.quantity !== null ? { quantity: line.quantity } : {}),
-      materials: formatMaterialLine(line),
-    })
+    [
+      line.kind,
+      line.materialId ?? "",
+      line.name,
+      line.unit ?? "",
+      line.quantity !== null ? String(line.quantity) : "",
+      formatMaterialLine(line),
+    ]
+      .map(wireField)
+      .join(FIELD_SEPARATOR)
   )
 }
 
@@ -94,8 +97,11 @@ export const materialItemCreateSchema = materialItemSchema.extend({
 
 export type MaterialItemCreateValues = z.infer<typeof materialItemCreateSchema>
 
-/** `/materials/[itemId]`: the fields plus retire/restore. */
-export const materialItemEditSchema = materialItemSchema.extend({
+/**
+ * `/materials/[itemId]`: the fields plus retire/restore. The name is fixed once
+ * created — requests and history carry it — so it isn't editable here.
+ */
+export const materialItemEditSchema = materialItemSchema.omit({ name: true }).extend({
   itemId: z.string().min(1),
   active: z.boolean(),
 })
@@ -128,16 +134,14 @@ export const adjustStockSchema = z
 export type AdjustStockValues = z.infer<typeof adjustStockSchema>
 
 /**
- * The assign card's save: a **target** quantity per line, never a delta — see
- * `assignMaterials`. `0` is legal: it un-assigns (or un-approves) the line.
+ * The assign screen's material half: a **target** quantity per line, never a
+ * delta — see `assignMaterials`. `0` is legal: it un-assigns (or un-approves)
+ * the line. Empty when no line moved; the combined save in
+ * `saveAssignmentSchema` carries it beside the tools.
  */
-export const assignMaterialsSchema = z.object({
-  requestId: z.string().min(1),
-  lines: z
-    .array(z.object({ lineId: z.string().min(1), targetQty: z.number().int().min(0).max(99999) }))
-    .min(1)
-    .max(50)
-    .refine((lines) => new Set(lines.map((line) => line.lineId)).size === lines.length, "A line appears twice."),
-})
+export const materialTargetsSchema = z
+  .array(z.object({ lineId: z.string().min(1), targetQty: z.number().int().min(0).max(99999) }))
+  .max(50)
+  .refine((lines) => new Set(lines.map((line) => line.lineId)).size === lines.length, "A line appears twice.")
 
-export type AssignMaterialsValues = z.infer<typeof assignMaterialsSchema>
+export type MaterialTargetValues = z.infer<typeof materialTargetsSchema>

@@ -4,6 +4,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { Suspense } from "react"
 
+import type { AssignMaterialsData } from "@/components/assign-materials-panel"
 import { AssignToolsPanel } from "@/components/assign-tools-panel"
 import { RequestStatusBadge } from "@/components/request-status-badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -22,8 +23,12 @@ import {
   type ToolTripClaim,
 } from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
+import { isOpenRequest } from "@/lib/bubble/enums"
+import { listMaterialItemsByIds } from "@/lib/bubble/material-items"
 import { listToolTypes } from "@/lib/bubble/reference"
-import { getRequest } from "@/lib/bubble/requests"
+import { lineProgress } from "@/lib/bubble/requested-materials-types"
+import { getRequest, type ToolRequest } from "@/lib/bubble/requests"
+import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { listToolClaims } from "@/lib/bubble/trips-read"
 
 export const metadata: Metadata = { title: "Assign tools" }
@@ -79,7 +84,7 @@ async function AssignBody({ requestId }: { requestId: string }) {
   // Every tool currently on the request — what both lock checks are asked about.
   const assignedIds = [...new Set([...extraToolIds, ...slots.flatMap((slot) => slot.toolIds)])]
 
-  const [candidates, alreadyAssigned, claims] = await Promise.all([
+  const [candidates, alreadyAssigned, claims, materials] = await Promise.all([
     listCandidateTools([...new Set(typeIds)]),
     // Extras, and slot fills whose tool the candidate query wouldn't return
     // (a renamed type, a blank `tools.type`) — resolved by id so every
@@ -91,6 +96,7 @@ async function AssignBody({ requestId }: { requestId: string }) {
     // `ToolTripClaim`. Without this the picker offers to unassign a tool a
     // driver is on their way to load.
     listToolClaims(assignedIds),
+    request.materialLines.length > 0 ? loadMaterials(request) : null,
   ])
 
   // One pool, keyed by id: the candidates for the requested types plus
@@ -152,7 +158,7 @@ async function AssignBody({ requestId }: { requestId: string }) {
           </Card>
         </aside>
 
-        <div className="min-w-0 lg:order-1">
+        <div className="flex min-w-0 flex-col gap-6 lg:order-1">
           <AssignToolsPanel
             requestId={request.id}
             slots={slots}
@@ -161,11 +167,38 @@ async function AssignBody({ requestId }: { requestId: string }) {
             claims={tripClaims}
             requestClaims={heldElsewhere}
             unresolvedSlots={unresolved}
+            materials={materials}
           />
         </div>
       </div>
     </>
   )
+}
+
+/**
+ * The Materials card's reads: live stock for the lines' items, and the trip
+ * rows that set each line's floor. Both fresh — stock is what the bounds are
+ * about. Loaded with the tools because the two share one Save; a failure is
+ * still the card's alone, handed down as an error rather than thrown, so it
+ * never takes the tools panel down with it.
+ */
+async function loadMaterials(request: ToolRequest): Promise<AssignMaterialsData> {
+  const lines = request.materialLines
+  try {
+    const [items, tripRows] = await Promise.all([
+      listMaterialItemsByIds(lines.flatMap((line) => (line.materialId ? [line.materialId] : []))),
+      listTripMaterialsForLines(lines.map((line) => line.id)),
+    ])
+    return {
+      lines,
+      stock: Object.fromEntries(items.map((item) => [item.id, item.stockQty])),
+      floors: Object.fromEntries(lines.map((line) => [line.id, lineProgress(line, tripRows).onTrips])),
+      pickup: request.pickup,
+      readOnly: !isOpenRequest(request.status),
+    }
+  } catch (error) {
+    return { lines, error: error instanceof Error ? error.message : "Bubble didn't answer." }
+  }
 }
 
 /**

@@ -25,6 +25,7 @@ export function TripDriverPanel({
   startTime,
   notes,
   toolCount,
+  materialCount,
   stopCount,
   problem,
   pending,
@@ -42,6 +43,7 @@ export function TripDriverPanel({
   startTime: string
   notes: string
   toolCount: number
+  materialCount: number
   stopCount: number
   /** The first blocking problem, or `null` when the trip is saveable. */
   problem: string | null
@@ -85,9 +87,14 @@ export function TripDriverPanel({
 
       <Field orientation="horizontal" className="justify-between">
         <span className="text-xs text-muted-foreground tabular-nums">
-          {toolCount} {toolCount === 1 ? "tool" : "tools"} · {stopCount} {stopCount === 1 ? "stop" : "stops"}
+          {toolCount} {toolCount === 1 ? "tool" : "tools"}
+          {materialCount > 0 && ` · ${materialCount} ${materialCount === 1 ? "material" : "materials"}`} · {stopCount}{" "}
+          {stopCount === 1 ? "stop" : "stops"}
         </span>
-        <Button onClick={onSave} disabled={pending || problem !== null || toolCount === 0 || !driver.trim()}>
+        <Button
+          onClick={onSave}
+          disabled={pending || problem !== null || toolCount + materialCount === 0 || !driver.trim()}
+        >
           {pending ? <Spinner /> : <CheckIcon />}
           {saveLabel}
         </Button>

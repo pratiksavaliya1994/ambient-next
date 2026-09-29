@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { MAX_STOP_ORDER } from "@/lib/bubble/enums"
+import { materialTargetsSchema } from "@/lib/schemas/material"
 
 /**
  * What the assign screen submits. Validated in the client island **and**
@@ -42,6 +43,27 @@ export const assignToolsSchema = z
   })
 
 export type AssignToolsValues = z.infer<typeof assignToolsSchema>
+
+/**
+ * The assign screen's one Save: tools and materials together, so a PM makes
+ * one decision about the load rather than two.
+ *
+ * `assignments` is `null` when the tools weren't touched — `create-assigned-tool`
+ * is a wholesale replace that also stamps `request.status`, so an unchanged set
+ * isn't resent just because a material line moved. `materials` holds only the
+ * lines whose target moved, and is empty when none did.
+ */
+export const saveAssignmentSchema = z
+  .object({
+    requestId: z.string().min(1),
+    assignments: z.array(assignmentEntrySchema).nullable(),
+    materials: materialTargetsSchema,
+  })
+  .refine(
+    (value) =>
+      !value.assignments || new Set(value.assignments.map((entry) => entry.toolId)).size === value.assignments.length,
+    { message: "The same tool can't be assigned twice.", path: ["assignments"] }
+  )
 
 /**
  * What the Dispatch board submits: the selected `Assigned` requests and the

@@ -1,7 +1,6 @@
 import "server-only"
 
-import type { RequestStopInfo } from "@/lib/bubble/requests"
-import type { StopWork, Trip, TripToolRow } from "@/lib/bubble/trips-types"
+import type { Trip, TripToolRow } from "@/lib/bubble/trips-types"
 
 /**
  * Which half of a stop's work an item belongs to. **No `refused` case here** —
@@ -10,30 +9,6 @@ import type { StopWork, Trip, TripToolRow } from "@/lib/bubble/trips-types"
  * `refused` list or any per-item outcome.
  */
 export type PdfItemTone = "collect" | "drop"
-
-/**
- * The distinct requests a stop's items point back to, in first-seen order.
- *
- * A job site normally serves one request, but a warehouse stop can carry
- * items for several — so the PDF (which has no popover to look one up in)
- * shows the contact block only when there is exactly one, and falls back to
- * naming the job per tool line otherwise. See `pdf-stop-block.tsx`. Only
- * `collect`/`drop` are considered, matching what the PDF actually prints —
- * a request that shows up solely on this stop's hidden `refused` list would
- * otherwise print a contact block for nothing.
- */
-export function stopRequests(work: StopWork, requests: ReadonlyMap<string, RequestStopInfo>): RequestStopInfo[] {
-  const seen = new Set<string>()
-  const list: RequestStopInfo[] = []
-  for (const item of [...work.collect, ...work.drop]) {
-    if (!item.requestId) continue
-    const request = requests.get(item.requestId)
-    if (!request || seen.has(request.id)) continue
-    seen.add(request.id)
-    list.push(request)
-  }
-  return list
-}
 
 /**
  * The far end of an item's journey: where a collect is headed, or where a
@@ -45,7 +20,10 @@ export function stopRequests(work: StopWork, requests: ReadonlyMap<string, Reque
  * exactly like an ordinary drop's origin, with nothing to say this one is a
  * returned refusal rather than a first delivery.
  */
-export function journeyLabel(item: TripToolRow, tone: PdfItemTone): string | null {
+export function journeyLabel(
+  item: Pick<TripToolRow, "fromLocation" | "toLocation" | "state">,
+  tone: PdfItemTone
+): string | null {
   const sentBack = tone === "drop" && (item.state === "Refused" || item.state === "Returned")
   const location = tone === "collect" || sentBack ? item.toLocation : item.fromLocation
   if (!location) return null

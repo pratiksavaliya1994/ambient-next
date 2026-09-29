@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { describeBubbleError } from "@/lib/bubble/client"
 import { createToolRequest } from "@/lib/bubble/requests"
 import { listJobs } from "@/lib/bubble/reference"
 import { newYorkInstant } from "@/lib/bubble/dates"
@@ -70,7 +71,8 @@ export async function createRequestAction(input: unknown): Promise<CreateRequest
     notes: values.notes,
     tools: values.tools,
     toolsNotes: values.toolsNotes,
-    materials: values.materials,
+    // No free text on the delivery form since 5C — the lines are the materials.
+    materials: "",
     materialLines: resolved.lines,
   })
 
@@ -78,11 +80,7 @@ export async function createRequestAction(input: unknown): Promise<CreateRequest
   try {
     created = await createToolRequest(values, job, summary, resolved.lines)
   } catch (error) {
-    return {
-      status: "error",
-      message:
-        error instanceof Error ? `Bubble rejected the request: ${error.message}` : "Bubble rejected the request.",
-    }
+    return { status: "error", message: `Bubble rejected the request: ${describeBubbleError(error)}` }
   }
 
   const warning = await materialLinesWarning(created.requestId, resolved.lines.length)

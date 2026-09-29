@@ -113,18 +113,67 @@ Closed requests render the card read-only, as the tools panel does.
 
 ---
 
+## As built (2026-09-25)
+
+Tasks 1–9 are built; `npm run typecheck` passes. No backend was added. Where
+this differs from §1–§4:
+
+- **`materials` is gone from `requestFormSchema`** and `deliveryMaterials` from
+  the combined schema, as 5B said 5C would do. Both refines are now "a tool or
+  a material line". The two delivery call sites pass `materials: ""` to
+  `buildSummary`/`buildRequestPayload`, which already fall back to the lines'
+  summary.
+- **Extra shared files**, all within the size rules: `quantity-stepper.tsx`
+  (the picker, the form's lines and the assign card share it),
+  `material-stock-badge.tsx`, `material-other-item-form.tsx` (the picker's
+  second tab), `material-name-field.tsx` + `material-item-fields.tsx` (the
+  item form's parts, read through `useFormContext` so create and edit can both
+  host them), `material-catalogue-card.tsx`, `materials-skeletons.tsx`,
+  `request-card-materials.tsx` (the list card's box, extracted from the 20KB
+  page), `lib/materials/line-inputs.ts` (pure edits on the form's line array)
+  and `hooks/use-material-targets.ts` (the assign card's draft and bounds).
+- **`/materials` reads with `includeInactive: true`** and the "show retired"
+  toggle filters in the browser, like search and category — no round trip.
+- **`app/(app)/materials/error.tsx`** is the error state for all three
+  routes; the assign page's Materials card catches its own read failure and
+  renders an alert instead of taking the tools panel down.
+- **The "Other item" tab has no `<form>` element.** It sits inside a dialog
+  inside the request form's React tree, and a submit would bubble through the
+  portal to the request form. Enter adds the line by hand.
+- **One inventory line per item** on a form: picking an item again changes its
+  quantity (`setInventoryQty`).
+- **Assign bounds count other lines of the same item** in the same draft, the
+  way the action checks stock per item across the whole save.
+- **Request page**: "short" shows once part of a line is assigned; a line with
+  nothing assigned reads "Not assigned", and a non-inventory line "Approved" /
+  "Awaiting approval". `NextAction` offers the assign link while any line is
+  short, and says "Assign materials" on a materials-only `New` request.
+- The request form's right-hand card is titled **Tools & materials**, since
+  either satisfies it.
+- `materials-field.tsx` and `material-dialog.tsx` stay: the pickup form and the
+  combined pickup card still use them until 5G.
+
+> **Re-plan 2026-09-28.** Three screens built here get later additions:
+> - 5E adds a location column to `material-stock-history.tsx`, a "where it
+>   is" card to `/materials/[itemId]` and a Warehouse / By site switch to
+>   `/materials` ([5E §5](./phase-5e-delivery-frontend-trips.md#5-site-view-added-2026-09-28));
+> - 5G adds transfer coverage and "From pickups" to the assign card
+>   ([5G §2a](./phase-5g-pickup-frontend.md#2a-transfers-on-a-deliverys-assign-page-added-2026-09-28)).
+>
+> Nothing built here is wrong. It just isn't the last word.
+
 ## Tasks
 
-- [ ] 1. `/materials` list + `loading.tsx` + sidebar entry
-- [ ] 2. `/materials/new` and the shared item form
-- [ ] 3. `/materials/[itemId]`: edit, adjust stock, history
-- [ ] 4. `material-line-row.tsx`, `material-lines-field.tsx`,
+- [x] 1. `/materials` list + `loading.tsx` + sidebar entry
+- [x] 2. `/materials/new` and the shared item form
+- [x] 3. `/materials/[itemId]`: edit, adjust stock, history
+- [x] 4. `material-line-row.tsx`, `material-lines-field.tsx`,
       `material-picker-dialog.tsx`
-- [ ] 5. Wire into `request-form.tsx` and `requests/new/page.tsx`
-- [ ] 6. Wire into `combined-delivery-card.tsx` and `requests/new/combined/page.tsx`
-- [ ] 7. `request-materials-card.tsx` on the request page; list-card count
-- [ ] 8. `assign-materials-panel.tsx` + `assign-material-line.tsx` on the assign page
-- [ ] 9. `npm run typecheck` once, at the end
+- [x] 5. Wire into `request-form.tsx` and `requests/new/page.tsx`
+- [x] 6. Wire into `combined-delivery-card.tsx` and `requests/new/combined/page.tsx`
+- [x] 7. `request-materials-card.tsx` on the request page; list-card count
+- [x] 8. `assign-materials-panel.tsx` + `assign-material-line.tsx` on the assign page
+- [x] 9. `npm run typecheck` once, at the end
 
 ## Verification
 

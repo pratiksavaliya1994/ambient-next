@@ -3,7 +3,7 @@ import "server-only"
 import { Document, Page, Text, View } from "@react-pdf/renderer"
 
 import { newYorkDayLabel } from "@/lib/bubble/dates"
-import type { RequestStopInfo } from "@/lib/bubble/requests"
+import type { RequestStopInfo, SiteContact } from "@/lib/bubble/requests"
 import { stopWork, type TripDetail } from "@/lib/bubble/trips-types"
 import { PdfStopBlock } from "@/lib/trips/pdf/pdf-stop-block"
 import { pdfStyles } from "@/lib/trips/pdf/pdf-styles"
@@ -17,9 +17,11 @@ import { formatClock, minutesOfTime, tripFinishMinutes, tripStartTime } from "@/
 export function TripRunSheetPdf({
   trip,
   requests,
+  siteContacts,
 }: {
   trip: TripDetail
   requests: ReadonlyMap<string, RequestStopInfo>
+  siteContacts: ReadonlyMap<string, SiteContact>
 }) {
   const work = stopWork(trip)
   const startTime = tripStartTime(trip.tripDate)
@@ -35,6 +37,7 @@ export function TripRunSheetPdf({
             position={index + 1}
             startTime={startTime}
             requests={requests}
+            siteContacts={siteContacts}
           />
         ))}
       </Page>
@@ -61,8 +64,10 @@ function PdfHeader({
       <Text style={pdfStyles.headerTitle}>{trip.driver ?? "No driver assigned"}</Text>
       <Text style={pdfStyles.headerMeta}>
         {trip.tripDate ? newYorkDayLabel(trip.tripDate) : "No date"}
-        {span ? ` · ${span}` : ""} · {trip.items.length} {trip.items.length === 1 ? "tool" : "tools"} ·{" "}
-        {trip.status}
+        {span ? ` · ${span}` : ""} · {trip.items.length} {trip.items.length === 1 ? "tool" : "tools"}
+        {trip.materials.length > 0 &&
+          ` · ${trip.materials.length} ${trip.materials.length === 1 ? "material" : "materials"}`}{" "}
+        · {trip.status}
       </Text>
       {trip.notes && <Text style={pdfStyles.notes}>{trip.notes}</Text>}
     </View>

@@ -1,7 +1,9 @@
 import { PhoneIcon, UserIcon } from "lucide-react"
 import Link from "next/link"
+import { Suspense, use } from "react"
 
-import type { RequestStopInfo } from "@/lib/bubble/requests"
+import { CargoKindIcon } from "@/components/cargo-kind"
+import type { RequestStopInfo, SiteContact } from "@/lib/bubble/requests"
 import type { TripToolState } from "@/lib/trips/plan-types"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { buttonVariants } from "@/components/ui/button"
@@ -50,11 +52,18 @@ export function TripStopItemLine({
   item,
   tone,
   request,
+  site,
 }: {
   item: StopItem
   tone: StopItemTone
   /** Resolved from `item.requestId` by the caller — absent for a leg that belongs to no request. */
   request?: RequestStopInfo
+  /**
+   * Set instead of `request` on a transfer collect (`isTransferCollect`): the
+   * tool's request is the far end's, so the popover names this site and its
+   * own contact rather than someone who isn't here.
+   */
+  site?: { location: string; contacts: Promise<ReadonlyMap<string, SiteContact>> }
 }) {
   // Settled-and-unhappy: struck through because there is nothing left to do
   // about it *here*. A refused tool sitting in the yard's drop list is live work
@@ -68,8 +77,34 @@ export function TripStopItemLine({
   const elsewhere = tone === "collect" || sentBack ? item.toLocation : item.fromLocation
 
   return (
-    <li className={cn("flex items-center gap-2 px-2 py-1.5", spent && "bg-status-attention/5")}>
-      {request ? (
+    <li
+      className={cn(
+        "flex items-center gap-2 border-l-4 border-l-foreground/25 px-2 py-1.5",
+        spent ? "bg-status-attention/5" : "bg-background"
+      )}
+    >
+      <CargoKindIcon kind="tool" />
+      {site ? (
+        <Popover>
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                className={cn(
+                  "min-w-0 truncate text-left text-xs font-medium underline decoration-dotted underline-offset-2",
+                  spent && "text-muted-foreground line-through"
+                )}
+                title={`${item.toolName} — ${site.location}`}
+              />
+            }
+          >
+            {item.toolName}
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-64 gap-2">
+            <SitePopoverBody site={site} toolId={item.toolId} />
+          </PopoverContent>
+        </Popover>
+      ) : request ? (
         <Popover>
           <PopoverTrigger
             render={
@@ -160,6 +195,63 @@ function RequestPopoverBody({ request, toolId }: { request: RequestStopInfo; too
 }
 
 /**
+ * A transfer collect's popover: this site, and whoever its last request named.
+ *
+ * No "View request" link — the tool's request belongs to the site it is headed
+ * to, which is exactly the confusion this popover exists to avoid.
+ */
+function SitePopoverBody({
+  site,
+  toolId,
+}: {
+  site: { location: string; contacts: Promise<ReadonlyMap<string, SiteContact>> }
+  toolId: string
+}) {
+  return (
+    <>
+      <p className="truncate text-sm font-medium" title={site.location}>
+        {site.location}
+      </p>
+      <Suspense fallback={<span className="text-xs text-muted-foreground">Loading contact…</span>}>
+        <SiteContactLines contacts={site.contacts} location={site.location} />
+      </Suspense>
+      <Link href={`/tools/${toolId}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+        View Tool
+      </Link>
+    </>
+  )
+}
+
+/** Nothing at all when the site has no contact on file — an empty line beats the wrong person. */
+function SiteContactLines({
+  contacts,
+  location,
+}: {
+  contacts: Promise<ReadonlyMap<string, SiteContact>>
+  location: string
+}) {
+  const contact = use(contacts).get(location)
+  if (!contact) return null
+
+  return (
+    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+      {contact.contact && (
+        <span className="flex items-center gap-1.5">
+          <UserIcon className="size-3.5 shrink-0" />
+          {contact.contact}
+        </span>
+      )}
+      {contact.contactPhone && (
+        <span className="flex items-center gap-1.5">
+          <PhoneIcon className="size-3.5 shrink-0" />
+          {contact.contactPhone}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/**
  * How far this tool has got — rendered only once it has actually been acted on,
  * so a plan reads as a plan.
  *
@@ -173,7 +265,7 @@ function RequestPopoverBody({ request, toolId }: { request: RequestStopInfo; too
  * amber moment; by the time a tool is back in the yard the story has ended
  * tidily, which is what "Back at yard" is there to say.
  */
-function StateChip({ state }: { state?: TripToolState }) {
+export function StateChip({ state }: { state?: TripToolState }) {
   if (!state || state === "Planned") return null
 
   const unhappy = state === "Skipped" || state === "Refused"

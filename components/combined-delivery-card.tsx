@@ -1,44 +1,45 @@
 "use client"
 
 import { useMemo } from "react"
-import { useWatch, type UseFormReturn } from "react-hook-form"
+import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { PlusIcon, TruckIcon } from "lucide-react"
 
-import { MaterialsField } from "@/components/materials-field"
+import { MaterialLinesField } from "@/components/material-lines-field"
 import { SelectedTools, ToolPickerDialog, toolLinesOf } from "@/components/tool-picker"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
-import { defaultMaterialsFor, toolTypesFor, type MaterialDefault, type ToolType } from "@/lib/bubble/reference-types"
+import type { MaterialItem } from "@/lib/bubble/material-items-types"
+import { toolTypesFor, type ToolType } from "@/lib/bubble/reference-types"
 import type { CombinedRequestFormValues } from "@/lib/schemas/combined-request"
 
 /**
  * The outbound half: tool **types** with quantities, from the 112-row
- * `toolstype` catalogue, exactly as `/requests/new` picks them. Its materials
- * and tool notes are its own — see `combinedRequestFormSchema`.
+ * `toolstype` catalogue, exactly as `/requests/new` picks them, and material
+ * lines from the catalogue the same way. Its materials and tool notes are its
+ * own — see `combinedRequestFormSchema`.
  */
 export function CombinedDeliveryCard({
   form,
   toolTypes,
-  materialDefaults,
+  materialItems,
   selected,
   onChange,
 }: {
   form: UseFormReturn<CombinedRequestFormValues>
   toolTypes: ToolType[]
-  materialDefaults: MaterialDefault[]
+  materialItems: MaterialItem[]
   selected: Record<string, number>
   onChange: (next: Record<string, number>) => void
 }) {
   const {
     control,
     register,
-    setValue,
+    trigger,
     formState: { errors },
   } = form
   const toDo = useWatch({ control, name: "toDo" })
-  const materials = useWatch({ control, name: "deliveryMaterials" })
 
   const tools = toolLinesOf(selected)
   const units = tools.reduce((sum, line) => sum + line.quantity, 0)
@@ -81,12 +82,23 @@ export function CombinedDeliveryCard({
             {errors.deliveryTools && <FieldError errors={[errors.deliveryTools]} />}
           </Field>
 
-          <MaterialsField
-            label="Materials to deliver"
-            emptyText="No delivery materials added."
-            value={materials}
-            defaultText={defaultMaterialsFor(materialDefaults, toDo)}
-            onChange={(next) => setValue("deliveryMaterials", next, { shouldValidate: true })}
+          {/* The refine is "a tool or a material line", reported on
+              `deliveryTools` — so a line change re-checks that too. */}
+          <Controller
+            control={control}
+            name="deliveryMaterialLines"
+            render={({ field }) => (
+              <MaterialLinesField
+                label="Materials to deliver"
+                lines={field.value}
+                onChange={(next) => {
+                  field.onChange(next)
+                  void trigger(["deliveryMaterialLines", "deliveryTools"])
+                }}
+                items={materialItems}
+                toDo={toDo}
+              />
+            )}
           />
 
           <Field>

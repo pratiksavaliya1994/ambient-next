@@ -4,6 +4,7 @@ import Link from "next/link"
 import { Suspense } from "react"
 
 import { NewRequestDialog, NewRequestFab } from "@/components/new-request-dialog"
+import { RequestCardMaterials } from "@/components/request-card-materials"
 import { RequestSearchBar } from "@/components/request-search"
 import { RequestStatusBadge } from "@/components/request-status-badge"
 import { Badge } from "@/components/ui/badge"
@@ -401,9 +402,16 @@ function RequestCard({ request }: { request: ToolRequest }) {
             <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
               <FactLabel>Tools</FactLabel>
 
-              {request.tools.length > 0 && (
+              {(request.tools.length > 0 || request.materialLines.length > 0) && (
                 <span className="text-xs text-muted-foreground tabular-nums">
-                  {request.tools.length} {request.tools.length === 1 ? "tool" : "tools"} · {totalTools} total items
+                  {[
+                    request.tools.length > 0 &&
+                      `${request.tools.length} ${request.tools.length === 1 ? "tool" : "tools"} · ${totalTools} total items`,
+                    request.materialLines.length > 0 &&
+                      `${request.materialLines.length} ${request.materialLines.length === 1 ? "material" : "materials"}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </span>
               )}
             </div>
@@ -425,25 +433,7 @@ function RequestCard({ request }: { request: ToolRequest }) {
             )}
           </div>
 
-          {request.legacyMaterials.length > 0 && (
-            <div className="overflow-hidden rounded-lg border bg-background/70">
-              <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-                <FactLabel>Materials</FactLabel>
-
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {request.legacyMaterials.length} {request.legacyMaterials.length === 1 ? "line" : "lines"}
-                </span>
-              </div>
-
-              <ul className="divide-y">
-                {request.legacyMaterials.map((line, index) => (
-                  <li key={index} className="px-3 py-2 text-sm wrap-anywhere">
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <RequestCardMaterials lines={request.materialLines} legacy={request.legacyMaterials} />
 
           {hasNotes && (
             <div className="flex flex-col gap-2 border-t pt-4">

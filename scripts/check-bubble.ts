@@ -14,6 +14,8 @@ import { listMaterialItems, listStockHistory } from "@/lib/bubble/material-items
 import { listRecentRequests, listRequestsByStatus } from "@/lib/bubble/requests"
 import { listAllTools, listToolLocations, listToolsForJob } from "@/lib/bubble/pickup-tools"
 import { listFieldPms, listJobs, listTimeSlots, listToolTypes, listUsers } from "@/lib/bubble/reference"
+import { listSiteStock } from "@/lib/bubble/site-stock"
+import { groupBySite } from "@/lib/bubble/site-stock-types"
 import { listTripDetails } from "@/lib/bubble/trips-read"
 import { listOutstandingMovements } from "@/lib/trips/movements"
 
@@ -98,6 +100,18 @@ async function main() {
     console.log(`  history for ${firstItem.name}: ${entries.length} rows, latest ${entries[0]?.reason ?? "—"}`)
   }
 
+  // Phase 5D: site stock. `location` is a job name matched with `equals`, the
+  // same typo hazard `tools.location` has, so each one is checked against
+  // `jobs`. A warehouse name here is a bug too: site stock never holds the yard.
+  // A zero is ambiguous for the reason the trip check below gives: a 404 reads
+  // as empty.
+  const siteRows = await listSiteStock()
+  const sites = groupBySite(siteRows)
+  console.log(`\nmaterialsitestock     ${siteRows.length} rows · ${sites.length} sites holding stock`)
+  for (const location of [...new Set(siteRows.map((row) => row.location))]) {
+    if (!jobNames.has(location)) console.log(`  ⚠ «${location}» — no jobs row with this exact name`)
+  }
+
   // Phase 2B: the Dispatch board's two reads. Both are expected to come back
   // empty until `update-request-status` exists and something actually writes
   // these statuses — a 0 here isn't a failure, just unexercised.
@@ -119,7 +133,9 @@ async function main() {
   console.log(`\nopen trips                     ${trips.length}`)
   for (const trip of trips) {
     const route = trip.stops.map((stop) => stop.location).join(" → ") || "no stops"
-    console.log(`  ${trip.driver ?? "(no driver)"} · ${trip.status} · ${trip.items.length} tools`)
+    console.log(
+      `  ${trip.driver ?? "(no driver)"} · ${trip.status} · ${trip.items.length} tools · ${trip.materials.length} material lines`
+    )
     console.log(`    ${route}`)
   }
 
@@ -127,9 +143,12 @@ async function main() {
   // their `assignedtools`, the live `tools`, and the claim check.
   const groups = await listOutstandingMovements()
   const waiting = groups.reduce((sum, group) => sum + group.movements.length, 0)
-  console.log(`\noutstanding movements          ${waiting} across ${groups.length} requests`)
+  const lines = groups.reduce((sum, group) => sum + group.materials.length, 0)
+  console.log(`\noutstanding movements          ${waiting} tools · ${lines} material lines across ${groups.length} requests`)
   for (const group of groups.slice(0, 5)) {
-    console.log(`  [${group.direction}] ${group.job} → ${group.destination}  (${group.movements.length} to move)`)
+    console.log(
+      `  [${group.direction}] ${group.job} → ${group.destination}  (${group.movements.length} tools, ${group.materials.length} lines to move)`
+    )
   }
 }
 

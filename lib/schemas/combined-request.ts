@@ -24,8 +24,8 @@ import type { PickupRequestFormValues } from "@/lib/schemas/pickup-request"
  * - tools — delivery picks `toolstype` *types with quantities*, pickup picks
  *   individual `tools` rows already on the job. Two pickers, two lists.
  * - materials — what a crew wants brought to site is not what they want taken
- *   off it, so each half carries its own free text and its own
- *   `requestedmaterials` row.
+ *   off it, so each half carries its own: structured lines on the delivery
+ *   half (phase 5C), free text on the pickup half until 5G.
  * - tool notes — likewise, the warehouse instruction for an outbound load is
  *   not the one for an inbound load.
  *
@@ -61,7 +61,6 @@ export const combinedRequestFormSchema = z
     /** Tool *types* with quantities, from the `toolstype` catalogue. */
     deliveryTools: z.array(toolLineSchema),
     deliveryToolsNotes: z.string().trim().max(2000),
-    deliveryMaterials: z.string().trim().max(2000),
     /** Phase 5 structured lines, delivery half only — the pickup half stays free text until 5G. */
     deliveryMaterialLines: materialLinesSchema,
 
@@ -78,16 +77,10 @@ export const combinedRequestFormSchema = z
   // one side empty would write an empty request row rather than saving anyone a
   // step. The `> 3` threshold matches the two schemas this projects into, so a
   // value that passes here can't fail their own refine afterwards.
-  .refine(
-    (value) =>
-      value.deliveryTools.length > 0 ||
-      value.deliveryMaterialLines.length > 0 ||
-      value.deliveryMaterials.trim().length > 3,
-    {
-      message: "Add at least one tool or material to deliver.",
-      path: ["deliveryTools"],
-    }
-  )
+  .refine((value) => value.deliveryTools.length > 0 || value.deliveryMaterialLines.length > 0, {
+    message: "Add at least one tool or material to deliver.",
+    path: ["deliveryTools"],
+  })
   .refine((value) => value.pickupTools.length > 0 || value.pickupMaterials.trim().length > 3, {
     message: "Add at least one tool to pick up, or enter pickup materials.",
     path: ["pickupTools"],
@@ -126,7 +119,6 @@ export function toDeliveryValues(values: CombinedRequestFormValues): RequestForm
     fieldPm: values.fieldPm,
     notes: values.notes,
     toolsNotes: values.deliveryToolsNotes,
-    materials: values.deliveryMaterials,
     materialLines: values.deliveryMaterialLines,
     tentative: values.tentative,
     tools: values.deliveryTools,

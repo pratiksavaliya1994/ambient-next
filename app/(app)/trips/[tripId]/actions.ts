@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { requireSession } from "@/lib/auth/session"
+import { stillLoadedMaterials } from "@/lib/bubble/trip-materials-types"
 import { completeTrip, completeTripStop, startTrip } from "@/lib/bubble/trips"
 import { getTrip, listToolClaims } from "@/lib/bubble/trips-read"
 import {
@@ -17,6 +18,7 @@ import {
 import { syncRequestStatuses } from "@/lib/trips/sync-request-status"
 import { completeStopSchema, completeTripSchema, startTripSchema } from "@/lib/schemas/trip"
 import type { TripRunState } from "@/app/(app)/trips/action-state"
+import { settleStopMaterials, stopMaterialLists } from "@/app/(app)/trips/[tripId]/stop-materials"
 
 /**
  * Running a trip: the three moments that actually move inventory.
@@ -41,9 +43,12 @@ function revalidateTrip(trip: TripDetail): void {
   // `/tools` — it was simply missed here until it became the way into the tool
   // detail page.
   revalidatePath("/tools/all")
-  for (const requestId of new Set(trip.items.map((item) => item.requestId).filter(Boolean))) {
+  const requestIds = [...trip.items, ...trip.materials].map((row) => row.requestId)
+  for (const requestId of new Set(requestIds.filter(Boolean))) {
     revalidatePath(`/requests/${requestId}`)
   }
+  // A drop credits site stock and a return puts units back on the shelf.
+  if (trip.materials.length > 0) revalidatePath("/materials", "layout")
   for (const toolId of new Set(trip.items.map((item) => item.toolId).filter(Boolean))) {
     revalidatePath(`/tools/${toolId}`)
   }
@@ -58,6 +63,11 @@ function revalidateTrip(trip: TripDetail): void {
  * trip whose first stop was already ticked off, with no way to say which tools
  * actually made it into the van. Every collect is recorded where it happens,
  * through `completeStopAction`, including the first.
+ *
+ * **Material lines follow the same rule**, so `materialLineIds` goes out
+ * empty. The 5D spec had start load the first stop's lines, but that would
+ * bring back the pre-loaded first stop described above, this time for
+ * materials. The driver ticks them at the stop like any tool.
  */
 export async function startTripAction(input: unknown): Promise<TripRunState> {
   await requireSession()
@@ -100,7 +110,7 @@ export async function startTripAction(input: unknown): Promise<TripRunState> {
   }
 
   const { warning } = await syncRequestStatuses(
-    trip.items.map((item) => item.requestId),
+    [...trip.items, ...trip.materials].map((row) => row.requestId),
     trip.driver,
     trip.items.map((item) => item.toolId)
   )
@@ -130,7 +140,7 @@ export async function completeStopAction(input: unknown): Promise<TripRunState> 
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "That stop isn't valid." }
   }
-  const { tripId, stopKey, dropToolIds, loadToolIds, skipToolIds, refuseToolIds } = parsed.data
+  const { tripId, stopKey, dropToolIds, loadToolIds, skipToolIds, refuseToolIds, ...materialChoice } = parsed.data
 
   const trip = await getTrip(tripId)
   if (!trip) return { status: "error", message: "That trip no longer exists." }
@@ -177,6 +187,9 @@ export async function completeStopAction(input: unknown): Promise<TripRunState> 
     }
   }
 
+  const materialLists = stopMaterialLists(work, materialChoice)
+  if ("error" in materialLists) return { status: "error", message: materialLists.error }
+
   const outcome = dropOutcome(work.stop.kind)
   // A ticked drop is a return if its row already says the site sent it back.
   // Both halves move the tool identically; only the state they write differs,
@@ -188,9 +201,10 @@ export async function completeStopAction(input: unknown): Promise<TripRunState> 
   const returnToolIds = dropToolIds.filter((id) => refusedHere.has(id))
   const plainDropToolIds = dropToolIds.filter((id) => !refusedHere.has(id))
 
-  let counts: { dropped: number; loaded: number; skipped: number; refused: number; returned: number }
+  let counts: Awaited<ReturnType<typeof completeTripStop>>
   try {
     counts = await completeTripStop({
+      ...materialLists,
       tripId,
       stopKey,
       driver: trip.driver,
@@ -209,15 +223,22 @@ export async function completeStopAction(input: unknown): Promise<TripRunState> 
     }
   }
 
+  // Drops and returns flip asynchronously; derive statuses only once they have.
+  const materialWarning = await settleStopMaterials(tripId, materialLists)
+
   const touched = [...dropToolIds, ...loadToolIds, ...skipToolIds, ...refuseToolIds]
+  const touchedLines = new Set(Object.values(materialChoice).flat())
   const { warning } = await syncRequestStatuses(
-    trip.items.filter((item) => touched.includes(item.toolId)).map((item) => item.requestId),
+    [
+      ...trip.items.filter((item) => touched.includes(item.toolId)).map((item) => item.requestId),
+      ...trip.materials.filter((row) => touchedLines.has(row.lineId)).map((row) => row.requestId),
+    ],
     trip.driver,
     touched
   )
 
   revalidateTrip(trip)
-  return { status: "stop-done", ...counts, warning }
+  return { status: "stop-done", ...counts, warning: [materialWarning, warning].filter(Boolean).join(" ") || undefined }
 }
 
 /**
@@ -239,15 +260,18 @@ export async function completeTripAction(input: unknown): Promise<TripRunState> 
     return { status: "error", message: `This trip is ${trip.status}, not under way. Reload the page.` }
   }
 
-  const onboard = stillLoaded(trip.items)
+  const onboard = [
+    ...stillLoaded(trip.items).map((item) => item.toolName),
+    ...stillLoadedMaterials(trip.materials).map((row) => row.name),
+  ]
   if (onboard.length > 0) {
-    const names = onboard.slice(0, 3).map((item) => item.toolName).join(", ")
+    const names = onboard.slice(0, 3).join(", ")
     return {
       status: "error",
       message:
         onboard.length === 1
           ? `${names} is still on the truck. Record its stop before finishing.`
-          : `${onboard.length} tools are still on the truck (${names}${onboard.length > 3 ? ", …" : ""}). Record their stops before finishing.`,
+          : `${onboard.length} items are still on the truck (${names}${onboard.length > 3 ? ", …" : ""}). Record their stops before finishing.`,
     }
   }
 
@@ -261,7 +285,7 @@ export async function completeTripAction(input: unknown): Promise<TripRunState> 
   }
 
   const { warning } = await syncRequestStatuses(
-    trip.items.map((item) => item.requestId),
+    [...trip.items, ...trip.materials].map((row) => row.requestId),
     trip.driver ?? undefined,
     trip.items.map((item) => item.toolId)
   )

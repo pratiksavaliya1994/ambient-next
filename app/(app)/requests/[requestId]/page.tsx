@@ -6,6 +6,7 @@ import { notFound } from "next/navigation"
 import { AssignedToolRow } from "@/components/assigned-tool-row"
 import { CloseRequestAction } from "@/components/close-request-action"
 import { CompleteDeliveryAction } from "@/components/complete-delivery-action"
+import { RequestMaterialsCard } from "@/components/request-materials-card"
 import { RequestStatusBadge, statusIcon, statusIndex } from "@/components/request-status-badge"
 import { RequestToolSlots } from "@/components/request-tool-slots"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -25,7 +26,10 @@ import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { assignedLabel, buildSlots, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
 import { isOpenRequest, isPickupRequest, requestSteps, type RequestStatus } from "@/lib/bubble/enums"
+import { effectiveQty } from "@/lib/bubble/requested-materials-types"
+import { lineTripFlags, listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { listTripFlags } from "@/lib/bubble/triptool-read"
+import { outstandingMaterialsFor } from "@/lib/trips/material-movement-types"
 import { listToolClaims } from "@/lib/bubble/trips-read"
 import { listToolTypes } from "@/lib/bubble/reference"
 import { getRequest, type ToolRequest } from "@/lib/bubble/requests"
@@ -60,7 +64,12 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   // can say "on Rosa's trip" instead of just "In Transit", now that a request's
   // tools can be spread across several — and what the last trip made of each,
   // which is what the amber "Not picked up" and "Refused" rows are read off.
-  const [claims, flagsByRequest] = await Promise.all([listToolClaims(toolIds), listTripFlags(toolIds)])
+  // The material lines' trip rows too — one read feeds both their progress and their flags.
+  const [claims, flagsByRequest, lineRows] = await Promise.all([
+    listToolClaims(toolIds),
+    listTripFlags(toolIds),
+    listTripMaterialsForLines(request.materialLines.map((line) => line.id)),
+  ])
 
   // Every status but `New` wants this — `Assigned` to review which tools the
   // driver will have to collect en route *before* committing to dispatch,
@@ -86,6 +95,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   // `docs/phase-4-trips.md`.
   const hasLegacyTrip = request.status === "In Transit" && claims.size === 0
   const outstandingSlots = incompleteSlots.reduce((sum, slot) => sum + (slot.requested - slot.toolIds.length), 0)
+  const unassignedLines = request.materialLines.filter((line) => line.assignedQty < effectiveQty(line)).length
 
   // Assigned tools a trip could still take: not yet where this request was
   // sending them (`hasLanded`, via `deriveTripStatus`'s two landed states — the
@@ -99,6 +109,9 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
         (entry) => entry.state !== "delivered" && entry.state !== "returned" && !claims.has(entry.tool.id)
       ).length
     : assigned.length
+  // Lines with units still to send — the builder's own pool rule — so "Add to
+  // a trip" shows for a request whose tools have all gone but whose materials haven't.
+  const linesToSend = outstandingMaterialsFor(request, request.materialLines, lineRows).length
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -195,7 +208,8 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                   pendingPickupCount={pendingPickupCount}
                   undeliverableCount={undeliverableCount}
                   outstandingSlots={outstandingSlots}
-                  movableCount={movableCount}
+                  unassignedLines={unassignedLines}
+                  movableCount={movableCount + linesToSend}
                   hasLegacyTrip={hasLegacyTrip}
                 />
               </div>
@@ -245,25 +259,12 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
             </CardContent>
           </Card>
 
-          {request.legacyMaterials.length > 0 && (
-            <Card data-size="sm">
-              <CardHeader>
-                <CardTitle className="text-base">Materials</CardTitle>
-                <span className="text-sm text-muted-foreground tabular-nums">
-                  {request.legacyMaterials.length} {request.legacyMaterials.length === 1 ? "line" : "lines"}
-                </span>
-              </CardHeader>
-              <CardContent>
-                <ul className="divide-y overflow-hidden rounded-lg border">
-                  {request.legacyMaterials.map((line, index) => (
-                    <li key={index} className="px-3 py-2 text-sm wrap-anywhere">
-                      {line}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
+          <RequestMaterialsCard
+            lines={request.materialLines}
+            legacy={request.legacyMaterials}
+            tripRows={lineRows}
+            flags={lineTripFlags(lineRows).get(request.id)}
+          />
         </div>
       </div>
     </div>
@@ -324,6 +325,7 @@ function NextAction({
   pendingPickupCount,
   undeliverableCount,
   outstandingSlots,
+  unassignedLines,
   movableCount,
   hasLegacyTrip,
 }: {
@@ -335,7 +337,9 @@ function NextAction({
   undeliverableCount: number
   /** Requested units never assigned — what makes "Close request" meaningful. */
   outstandingSlots: number
-  /** Assigned tools not yet where this request was sending them — what a trip would carry. */
+  /** Material lines assigned (or approved) short of what was asked — they send you to the assign page too. */
+  unassignedLines: number
+  /** Assigned tools not yet where this request was sending them, plus material lines left to send — what a trip would carry. */
   movableCount: number
   /**
    * `In Transit` under the **pre-trip** flow — dispatched before phase 4, so it
@@ -365,8 +369,14 @@ function NextAction({
   // assignment to edit. Once a request is on the road the link narrows to the
   // one job still worth doing from here — filling the slots that went out
   // short; swapping tools around a load already moving is not it.
-  const canAssign = !pickup && (!dispatched || outstandingSlots > 0)
-  const assignLabel = dispatched ? "Assign remaining" : request.status === "New" ? "Assign tools" : "Edit assignment"
+  const canAssign = !pickup && (!dispatched || outstandingSlots > 0 || unassignedLines > 0)
+  const assignLabel = dispatched
+    ? "Assign remaining"
+    : request.status === "New"
+      ? request.tools.length === 0 && request.materialLines.length > 0
+        ? "Assign materials"
+        : "Assign tools"
+      : "Edit assignment"
   const nothingToOffer = !canAssign && movableCount === 0 && !partial && !legacy
 
   return (

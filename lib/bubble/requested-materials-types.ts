@@ -1,5 +1,5 @@
 import type { TripMaterialRow } from "@/lib/bubble/trip-materials-types"
-import type { TripToolState } from "@/lib/trips/plan-types"
+import { isOpenTrip, type TripStatus, type TripToolState } from "@/lib/trips/plan-types"
 
 /**
  * A request's material lines — structured `requestedmaterials` rows — and the
@@ -109,13 +109,24 @@ export type LineProgress = {
  *
  * Delivery only for now: **done** is delivered ≥ requested. 5F adds the pickup
  * branch (done on one `Dropped` row, whatever was counted).
+ *
+ * **A `Planned` row counts only while its trip is open.** One can outlive a
+ * completed trip whose collect was never recorded, and it holds nothing. The
+ * rule applies only when the row carries `tripStatus` (`listTripMaterialsForLines`
+ * sets it; `null` = the trip row is gone). A row without the field is read as
+ * committed, as before.
  */
-export function lineProgress(line: MaterialLine, tripRows: readonly TripMaterialRow[]): LineProgress {
+export function lineProgress(
+  line: MaterialLine,
+  tripRows: readonly (TripMaterialRow & { tripStatus?: TripStatus | null })[]
+): LineProgress {
   let onTrips = 0
   let delivered = 0
   for (const row of tripRows) {
     if (row.lineId !== line.id) continue
-    if (COMMITTED_STATES.includes(row.state)) onTrips += row.qty
+    const tripClosed = row.tripStatus !== undefined && (row.tripStatus === null || !isOpenTrip(row.tripStatus))
+    const stale = row.state === "Planned" && tripClosed
+    if (COMMITTED_STATES.includes(row.state) && !stale) onTrips += row.qty
     if (row.state === "Dropped") delivered += row.qty
   }
 

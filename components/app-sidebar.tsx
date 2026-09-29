@@ -10,6 +10,8 @@ import {
   LogOutIcon,
   MapPinIcon,
   NavigationIcon,
+  PackageIcon,
+  PackagePlusIcon,
   PlusIcon,
   RouteIcon,
   ShoppingCartIcon,
@@ -39,8 +41,11 @@ import { signOutAction } from "@/lib/auth/actions"
  * in the Bubble schema, so there is nothing to branch this list on — every
  * signed-in user sees every item.
  *
- * Approval and materials are deliberately not built yet (see CLAUDE.md); they
- * get entries here when they get routes, not before. Assignment reaches its
+ * Approval is deliberately not built yet (see CLAUDE.md); it gets an entry
+ * here when it gets a route, not before. Materials (phase 5C) sit beside
+ * Tools: the catalogue and its stock are the warehouse's, like the tools
+ * views, and "Add material" earns its own entry for the same reason
+ * "Add tool" does. Assignment reaches its
  * screen from a request's detail page instead of a top-level item of its own;
  * Dispatch is a board like Requests, so it gets one. Active trips is the same
  * call now that it's split off `/dispatch` onto its own route.
@@ -79,10 +84,16 @@ const TOOL_NAV_ITEMS = [
   { title: "Add tool", href: "/tools/new", icon: PlusIcon },
 ] as const
 
+const MATERIAL_NAV_ITEMS = [
+  { title: "Materials", href: "/materials", icon: PackageIcon },
+  { title: "Add material", href: "/materials/new", icon: PackagePlusIcon },
+] as const
+
 const NAV_GROUPS = [
   { label: "Requests", items: REQUEST_NAV_ITEMS },
   { label: "Trips", items: TRIP_NAV_ITEMS },
   { label: "Tools", items: TOOL_NAV_ITEMS },
+  { label: "Materials", items: MATERIAL_NAV_ITEMS },
 ] as const
 /**
  * The signed-in navigation. A client component only because the active item

@@ -5,8 +5,9 @@ import { AlertCircleIcon, LockIcon, RotateCcwIcon, SaveIcon, XIcon } from "lucid
 import { useRouter } from "next/navigation"
 
 import { INITIAL_CREATE_STATE, type CreateRequestState } from "@/app/(app)/requests/action-state"
-import { assignToolsAction } from "@/app/(app)/requests/[requestId]/assign/actions"
+import { saveAssignmentAction } from "@/app/(app)/requests/[requestId]/assign/actions"
 import { AssignLockNotice } from "@/components/assign-lock-notice"
+import { AssignMaterialsCard, type AssignMaterialsData } from "@/components/assign-materials-panel"
 import { AssignSlotCard } from "@/components/assign-slot"
 import { ExtraToolsPicker } from "@/components/extra-tools-picker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -16,6 +17,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import { useMaterialTargets } from "@/hooks/use-material-targets"
 import {
   assignedLabel,
   type AssignmentEntry,
@@ -49,8 +51,13 @@ import { isLockedToTrip } from "@/lib/bubble/tool-enums"
  * this screen now routinely renders tools it must refuse to unpick — the ones
  * already on a truck or already dropped, *and* the ones a saved trip is on its
  * way to collect — so `lockedIds` takes their remove control away.
- * `assignToolsAction` rejects the save regardless; this is so nobody spends a
+ * `saveAssignmentAction` rejects the save regardless; this is so nobody spends a
  * minute building one that will be rejected.
+ *
+ * **One Save for tools and materials.** The materials draft
+ * (`useMaterialTargets`) lives here too, so the sticky bar counts and saves
+ * both. Only the half that changed is sent: the tool set goes as `null` when
+ * untouched, because `create-assigned-tool` is a wholesale replace.
  */
 export function AssignToolsPanel({
   requestId,
@@ -60,6 +67,7 @@ export function AssignToolsPanel({
   claims,
   requestClaims,
   unresolvedSlots,
+  materials,
 }: {
   requestId: string
   slots: AssignSlot[]
@@ -76,6 +84,8 @@ export function AssignToolsPanel({
   requestClaims: ToolRequestClaim[]
   /** Requested names that matched no `toolstype` row — those slots offer no candidates. */
   unresolvedSlots: number
+  /** `null` when the request has no material lines. */
+  materials: AssignMaterialsData | null
 }) {
   const [picks, setPicks] = useState<Map<string, string[]>>(
     () => new Map(slots.map((slot) => [slot.toolType, slot.toolIds]))
@@ -87,6 +97,17 @@ export function AssignToolsPanel({
   const [state, setState] = useState<CreateRequestState>(INITIAL_CREATE_STATE)
   const [pending, startTransition] = useTransition()
   const router = useRouter()
+
+  // A card that failed to load, or a closed request, has nothing to draft —
+  // the hook still runs (hooks can't be conditional), just over no lines.
+  const editableMaterials = materials && !("error" in materials) && !materials.readOnly ? materials : null
+  const materialDraft = useMaterialTargets({
+    lines: editableMaterials?.lines ?? [],
+    stock: editableMaterials?.stock ?? {},
+    floors: editableMaterials?.floors ?? {},
+    pickup: editableMaterials?.pickup ?? false,
+  })
+  const materialsChanged = materialDraft.changed.length
 
   const candidatesByType = useMemo(() => {
     const byType = new Map<string, CandidateTool[]>()
@@ -146,9 +167,10 @@ export function AssignToolsPanel({
   const requested = slots.filter((slot) => !slot.consumable).reduce((sum, slot) => sum + slot.requested, 0)
   const filled = [...picks.values()].reduce((sum, ids) => sum + ids.length, 0)
 
-  const dirty =
+  const toolsDirty =
     extras.join(",") !== extraToolIds.join(",") ||
     slots.some((slot) => (picks.get(slot.toolType) ?? []).join(",") !== slot.toolIds.join(","))
+  const dirty = toolsDirty || materialsChanged > 0
 
   function remember(tool: CandidateTool) {
     if (known.has(tool.id)) return
@@ -203,6 +225,7 @@ export function AssignToolsPanel({
   function reset() {
     setPicks(new Map(slots.map((slot) => [slot.toolType, slot.toolIds])))
     setExtras(extraToolIds)
+    materialDraft.reset()
     setState(INITIAL_CREATE_STATE)
   }
 
@@ -227,13 +250,17 @@ export function AssignToolsPanel({
 
   function save() {
     startTransition(async () => {
-      const result = await assignToolsAction({ requestId, assignments: entries() })
+      const result = await saveAssignmentAction({
+        requestId,
+        assignments: toolsDirty ? entries() : null,
+        materials: materialDraft.changed,
+      })
       setState(result)
 
       if (result.status === "created") {
         toast.add({
           title: result.warning ? "Assignment saved with a warning" : "Assignment saved",
-          description: result.warning ?? `${result.job} has its tools.`,
+          description: result.warning ?? `${result.job} has its assignment.`,
         })
         router.push(`/requests/${requestId}`)
       }
@@ -370,12 +397,16 @@ export function AssignToolsPanel({
         </CardContent>
       </Card>
 
+      {materials && <AssignMaterialsCard data={materials} draft={materialDraft} />}
+
       {/* Sticky, because the slot list is as long as the request is big and the
           count is the thing a PM checks before saving. */}
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card/95 p-3 backdrop-blur">
         <span className="text-sm text-muted-foreground tabular-nums">
           {assignedLabel(filled, requested)}
           {extraTools.length > 0 && ` · ${extraTools.length} extra`}
+          {materialsChanged > 0 &&
+            ` · ${materialsChanged} material ${materialsChanged === 1 ? "line" : "lines"} changed`}
           {dirty && " · unsaved"}
         </span>
         <div className="flex items-center gap-2">

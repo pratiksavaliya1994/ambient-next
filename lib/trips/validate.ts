@@ -15,15 +15,31 @@
  * Not `server-only`, same as `lib/trips/plan.ts` and for the same reason.
  */
 
-import type { PlannedItem, PlannedStop } from "@/lib/trips/plan-types"
+import type { PlannedItem, PlannedMaterial, PlannedStop } from "@/lib/trips/plan-types"
 
 export type PlanProblem =
   | { kind: "empty"; message: string }
   | { kind: "order"; message: string; item: PlannedItem }
   | { kind: "dangling"; message: string; item: PlannedItem }
+  | { kind: "material-order"; message: string; material: PlannedMaterial }
+  | { kind: "material-dangling"; message: string; material: PlannedMaterial }
   | { kind: "duplicate-stop-key"; message: string }
   | { kind: "duplicate-tool"; message: string; toolId: string }
+  | { kind: "duplicate-line"; message: string; lineId: string }
   | { kind: "orphan-stop"; message: string; stopKey: string }
+
+/** Anything carried between two stops — a tool or a material line. */
+type Routed = Pick<PlannedItem, "fromStopKey" | "toStopKey">
+
+type Placement = "ok" | "dangling" | "order"
+
+/** Where one row stands against the stop order: both stops present, and collect strictly first. */
+function placementOf(seq: ReadonlyMap<string, number>, row: Routed): Placement {
+  const from = seq.get(row.fromStopKey)
+  const to = seq.get(row.toStopKey)
+  if (from === undefined || to === undefined) return "dangling"
+  return from >= to ? "order" : "ok"
+}
 
 /**
  * Items whose collect stop does not strictly precede their drop stop — the
@@ -34,27 +50,21 @@ export type PlanProblem =
  * the wrong order, and silently ignoring it would let a save through that
  * writes an unreachable row.
  */
-export function orderViolations(
-  stops: readonly PlannedStop[],
-  items: readonly PlannedItem[]
-): PlannedItem[] {
+export function orderViolations<T extends Routed>(stops: readonly PlannedStop[], items: readonly T[]): T[] {
   const seq = seqByKey(stops)
-  return items.filter((item) => {
-    const from = seq.get(item.fromStopKey)
-    const to = seq.get(item.toStopKey)
-    return from === undefined || to === undefined || from >= to
-  })
+  return items.filter((item) => placementOf(seq, item) !== "ok")
 }
 
-/** The stop keys an order violation implicates, for highlighting in the UI. */
+/** The stop keys an order violation implicates, tools and materials alike, for highlighting in the UI. */
 export function violatingStopKeys(
   stops: readonly PlannedStop[],
-  items: readonly PlannedItem[]
+  items: readonly PlannedItem[],
+  materials: readonly PlannedMaterial[] = []
 ): Set<string> {
   const keys = new Set<string>()
-  for (const item of orderViolations(stops, items)) {
-    keys.add(item.fromStopKey)
-    keys.add(item.toStopKey)
+  for (const row of [...orderViolations(stops, items), ...orderViolations(stops, materials)]) {
+    keys.add(row.fromStopKey)
+    keys.add(row.toStopKey)
   }
   return keys
 }
@@ -67,11 +77,15 @@ export function violatingStopKeys(
  * sent nowhere, and it would also hold no claims, so nothing would stop the
  * same tools going out on a second trip.
  */
-export function validatePlan(stops: readonly PlannedStop[], items: readonly PlannedItem[]): PlanProblem[] {
+export function validatePlan(
+  stops: readonly PlannedStop[],
+  items: readonly PlannedItem[],
+  materials: readonly PlannedMaterial[] = []
+): PlanProblem[] {
   const problems: PlanProblem[] = []
 
-  if (items.length === 0) {
-    problems.push({ kind: "empty", message: "Add at least one tool before saving this trip." })
+  if (items.length === 0 && materials.length === 0) {
+    problems.push({ kind: "empty", message: "Add at least one tool or material before saving this trip." })
   }
 
   const seen = new Set<string>()
@@ -122,21 +136,24 @@ export function validatePlan(stops: readonly PlannedStop[], items: readonly Plan
     })
   }
 
+  // **One row per line per trip.** Two partial loads of one line on one trip
+  // are one row with the summed qty — the complete-stop lists address a row by
+  // its line id, so a second row would take the same outcome without ever
+  // being asked. `selectMaterialMovements` never emits two; a direct POST can.
+  const lineCounts = new Map<string, number>()
+  for (const material of materials) lineCounts.set(material.lineId, (lineCounts.get(material.lineId) ?? 0) + 1)
+  for (const [lineId, count] of lineCounts) {
+    if (count < 2) continue
+    const name = materials.find((material) => material.lineId === lineId)?.name ?? "A material"
+    problems.push({ kind: "duplicate-line", lineId, message: `${name} is on this trip twice. Send it as one line.` })
+  }
+
   const seq = seqByKey(stops)
   for (const item of items) {
-    const from = seq.get(item.fromStopKey)
-    const to = seq.get(item.toStopKey)
-
-    if (from === undefined || to === undefined) {
-      problems.push({
-        kind: "dangling",
-        message: `${item.toolName} points at a stop that isn't on this trip.`,
-        item,
-      })
-      continue
-    }
-
-    if (from >= to) {
+    const placement = placementOf(seq, item)
+    if (placement === "dangling") {
+      problems.push({ kind: "dangling", message: `${item.toolName} points at a stop that isn't on this trip.`, item })
+    } else if (placement === "order") {
       problems.push({
         kind: "order",
         message: `${item.toolName} is dropped at ${item.toLocation} before it's collected at ${item.fromLocation}.`,
@@ -144,14 +161,30 @@ export function validatePlan(stops: readonly PlannedStop[], items: readonly Plan
       })
     }
   }
+  for (const material of materials) {
+    const placement = placementOf(seq, material)
+    if (placement === "dangling") {
+      problems.push({
+        kind: "material-dangling",
+        message: `${material.name} points at a stop that isn't on this trip.`,
+        material,
+      })
+    } else if (placement === "order") {
+      problems.push({
+        kind: "material-order",
+        message: `${material.name} is dropped at ${material.toLocation} before it's collected at ${material.fromLocation}.`,
+        material,
+      })
+    }
+  }
 
   // A stop nothing collects from and nothing drops at is a place the driver
   // would visit for no reason. Cheap to catch, and it means a stop can never be
-  // stranded by removing the last tool that justified it.
+  // stranded by removing the last tool or material that justified it.
   const used = new Set<string>()
-  for (const item of items) {
-    used.add(item.fromStopKey)
-    used.add(item.toStopKey)
+  for (const row of [...items, ...materials]) {
+    used.add(row.fromStopKey)
+    used.add(row.toStopKey)
   }
   for (const stop of stops) {
     if (!used.has(stop.stopKey)) {

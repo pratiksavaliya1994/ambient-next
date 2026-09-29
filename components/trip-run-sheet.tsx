@@ -12,7 +12,8 @@ import { TripStopCard } from "@/components/trip-stop-card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
-import type { RequestStopInfo } from "@/lib/bubble/requests"
+import type { RequestStopInfo, SiteContact } from "@/lib/bubble/requests"
+import { stillLoadedMaterials } from "@/lib/bubble/trip-materials-types"
 import { isStopDone, stillLoaded, stopWork, type TripDetail } from "@/lib/bubble/trips-types"
 import { tripStartTime } from "@/lib/trips/schedule"
 
@@ -30,10 +31,13 @@ import { tripStartTime } from "@/lib/trips/schedule"
 export function TripRunSheet({
   trip,
   requests,
+  siteContacts,
 }: {
   trip: TripDetail
   /** Which request each stop item's `requestId` names — fetched once, up front, by the page. */
   requests: ReadonlyMap<string, RequestStopInfo>
+  /** Transfer stops' own contacts, by site — streamed, not awaited. See `listSiteContacts`. */
+  siteContacts: Promise<ReadonlyMap<string, SiteContact>>
 }) {
   const router = useRouter()
   const [state, setState] = useState<TripRunState>(INITIAL_TRIP_RUN_STATE)
@@ -45,7 +49,7 @@ export function TripRunSheet({
   const work = stopWork(trip)
   const [first] = work
   const startTime = tripStartTime(trip.tripDate)
-  const onboard = stillLoaded(trip.items)
+  const onboard = [...stillLoaded(trip.items), ...stillLoadedMaterials(trip.materials)]
   const live = trip.status === "In Transit"
   // Where the driver has got to: the first stop with anything still outstanding.
   // `-1` on a trip that isn't running, so a plan highlights nothing.
@@ -117,6 +121,7 @@ export function TripRunSheet({
             current={index === currentIndex}
             live={live && !pending}
             requests={requests}
+            siteContacts={siteContacts}
           />
         ))}
       </ol>
@@ -176,8 +181,12 @@ export function TripRunSheet({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
             {onboard.length === 0
-              ? "Every tool has been dealt with."
-              : `${onboard.length} ${onboard.length === 1 ? "tool is" : "tools are"} still on the truck.`}
+              ? trip.materials.length > 0
+                ? "Every tool and material has been dealt with."
+                : "Every tool has been dealt with."
+              : trip.materials.length > 0
+                ? `${onboard.length} ${onboard.length === 1 ? "item is" : "items are"} still on the truck.`
+                : `${onboard.length} ${onboard.length === 1 ? "tool is" : "tools are"} still on the truck.`}
           </p>
           <TripActionConfirm
             open={finishOpen}

@@ -4,6 +4,8 @@ import { z } from "zod"
 
 import { bubbleGet, bubbleListMaybeMissing, type BubbleThing, type Constraint } from "@/lib/bubble/client"
 import { newYorkDayAfter, newYorkInstant } from "@/lib/bubble/dates"
+import { listTripMaterials, toMaterialRow, TRIP_MATERIAL, tripMaterialRow } from "@/lib/bubble/tripmaterial-read"
+import type { TripMaterialRow } from "@/lib/bubble/trip-materials-types"
 import { listToolTripRows, toItem, TRIP_TOOL, tripToolRow } from "@/lib/bubble/triptool-read"
 import type { Trip, TripDetail, TripStop, TripToolRow } from "@/lib/bubble/trips-types"
 import {
@@ -131,19 +133,25 @@ export async function listTrips(statuses: readonly TripStatus[], range?: TripDat
   )
 }
 
-/** Every trip's stops and items in two queries, not two per trip. */
+/** Every trip's stops, items and material lines in three queries, not three per trip. */
 export async function attachTripRows(trips: Trip[]): Promise<TripDetail[]> {
   if (trips.length === 0) return []
 
   const tripIds = trips.map((trip) => trip.id)
-  const [stopRows, itemRows] = await Promise.all([
+  const [stopRows, itemRows, materialRows] = await Promise.all([
     bubbleListMaybeMissing(TRIP_STOP, {
       constraints: [{ key: "tripID", constraint_type: "in", value: tripIds }],
     }),
     bubbleListMaybeMissing(TRIP_TOOL, {
       constraints: [{ key: "tripID", constraint_type: "in", value: tripIds }],
     }),
+    listTripMaterials(tripIds),
   ])
+
+  const materialsByTrip = new Map<string, TripMaterialRow[]>()
+  for (const row of materialRows) {
+    materialsByTrip.set(row.tripId, [...(materialsByTrip.get(row.tripId) ?? []), row])
+  }
 
   const stopsByTrip = new Map<string, TripStop[]>()
   for (const raw of stopRows) {
@@ -163,6 +171,7 @@ export async function attachTripRows(trips: Trip[]): Promise<TripDetail[]> {
     ...trip,
     stops: (stopsByTrip.get(trip.id) ?? []).sort((a, b) => a.seq - b.seq || a.stopKey.localeCompare(b.stopKey)),
     items: (itemsByTrip.get(trip.id) ?? []).sort((a, b) => a.toolName.localeCompare(b.toolName)),
+    materials: (materialsByTrip.get(trip.id) ?? []).sort((a, b) => a.name.localeCompare(b.name)),
   }))
 }
 
@@ -245,11 +254,14 @@ export async function listToolClaims(toolIds: readonly string[], excludeTripId?:
  * the one key each side is identified by, because this gets polled. See
  * `waitForTripPlan`.
  */
-export async function readTripPlanKeys(tripId: string): Promise<{ stopKeys: Set<string>; toolIds: Set<string> }> {
+export async function readTripPlanKeys(
+  tripId: string
+): Promise<{ stopKeys: Set<string>; toolIds: Set<string>; lineIds: Set<string> }> {
   const constraints: Constraint[] = [{ key: "tripID", constraint_type: "equals", value: tripId }]
-  const [stopRows, itemRows] = await Promise.all([
+  const [stopRows, itemRows, materialRows] = await Promise.all([
     bubbleListMaybeMissing(TRIP_STOP, { constraints }),
     bubbleListMaybeMissing(TRIP_TOOL, { constraints }),
+    bubbleListMaybeMissing(TRIP_MATERIAL, { constraints }),
   ])
 
   // Re-filtered on `tripID` in JS for the same reason `listTrips` re-filters its
@@ -267,6 +279,12 @@ export async function readTripPlanKeys(tripId: string): Promise<{ stopKeys: Set<
       .filter((item): item is TripToolRow => item !== null && item.tripId === tripId)
       .map((item) => item.toolId)
   )
+  const lineIds = new Set(
+    materialRows
+      .map((raw) => toMaterialRow(tripMaterialRow.parse(raw)))
+      .filter((row): row is TripMaterialRow => row !== null && row.tripId === tripId)
+      .map((row) => row.lineId)
+  )
 
-  return { stopKeys, toolIds }
+  return { stopKeys, toolIds, lineIds }
 }

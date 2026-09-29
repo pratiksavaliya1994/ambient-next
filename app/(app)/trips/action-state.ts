@@ -15,7 +15,7 @@ export type TripDraftState =
   | { status: "idle" }
   | { status: "invalid"; message: string; fieldErrors: Record<string, string> }
   | { status: "error"; message: string }
-  | { status: "saved"; tripId: string; stops: number; tools: number; warning?: string }
+  | { status: "saved"; tripId: string; stops: number; tools: number; materials?: number; warning?: string }
 
 export const INITIAL_TRIP_DRAFT_STATE: TripDraftState = { status: "idle" }
 
@@ -30,6 +30,11 @@ export type TripRunState =
       skipped: number
       refused: number
       returned: number
+      materialsDropped: number
+      materialsLoaded: number
+      materialsSkipped: number
+      materialsRefused: number
+      materialsReturned: number
       warning?: string
     }
   | { status: "completed"; warning?: string }

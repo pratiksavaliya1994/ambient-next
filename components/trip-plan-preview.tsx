@@ -31,7 +31,7 @@ import { StopTimeBadge } from "@/components/stop-time"
 import { TripStopItems } from "@/components/trip-stop-items"
 import { StopNumber } from "@/components/stop-number"
 import { Button } from "@/components/ui/button"
-import type { PlannedItem, PlannedStop, SplitChoice } from "@/lib/trips/plan-types"
+import type { PlannedItem, PlannedMaterial, PlannedStop, SplitChoice } from "@/lib/trips/plan-types"
 import { violatingStopKeys } from "@/lib/trips/validate"
 import { cn } from "@/lib/utils"
 
@@ -73,16 +73,15 @@ function flipTargetsByLocation(
  * arrange-then-commit shape `DriverTripCard` and `AssignToolsPanel` both use.
  * A drag that breaks precedence (a tool dropped before it is collected) is
  * **flagged, not refused**: blocking a drag mid-gesture feels broken, and the
- * save is guarded anyway, on both this side and the server's.
- *
- * Vertical lock inline rather than pulling in `@dnd-kit/modifiers` for one
- * three-line function — matching `trip-stop-sortable-list.tsx`.
+ * save is guarded anyway, on both this side and the server's. Vertical lock
+ * inline rather than pulling in `@dnd-kit/modifiers` for one function.
  */
 const restrictToVerticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
 export function TripPlanPreview({
   stops,
   items,
+  materials,
   startTime,
   splitChoices,
   onReorder,
@@ -91,6 +90,7 @@ export function TripPlanPreview({
 }: {
   stops: PlannedStop[]
   items: PlannedItem[]
+  materials: PlannedMaterial[]
   /** The trip's `"HH:mm"` departure — every stop's time counts forward from it. */
   startTime: string
   /** Every circular pickup/drop `planTrip` had to resolve by splitting a stop, and what else it could have split. */
@@ -108,7 +108,7 @@ export function TripPlanPreview({
     useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 8 } })
   )
 
-  const flagged = violatingStopKeys(stops, items)
+  const flagged = violatingStopKeys(stops, items, materials)
   const flipTargets = flipTargetsByLocation(stops, splitChoices)
 
   function move(from: number, to: number) {
@@ -141,6 +141,7 @@ export function TripPlanPreview({
               position={index + 1}
               isLast={index === stops.length - 1}
               items={items}
+              materials={materials}
               startTime={startTime}
               flagged={flagged.has(stop.stopKey)}
               disabled={disabled}
@@ -172,6 +173,7 @@ function SortableStop({
   position,
   isLast,
   items,
+  materials,
   startTime,
   flagged,
   disabled,
@@ -184,6 +186,7 @@ function SortableStop({
   position: number
   isLast: boolean
   items: PlannedItem[]
+  materials: PlannedMaterial[]
   startTime: string
   flagged: boolean
   disabled: boolean
@@ -286,6 +289,8 @@ function SortableStop({
         <TripStopItems
           collect={items.filter((item) => item.fromStopKey === stop.stopKey)}
           drop={items.filter((item) => item.toStopKey === stop.stopKey)}
+          collectMaterials={materials.filter((material) => material.fromStopKey === stop.stopKey)}
+          dropMaterials={materials.filter((material) => material.toStopKey === stop.stopKey)}
           kind={stop.kind}
         />
       </div>

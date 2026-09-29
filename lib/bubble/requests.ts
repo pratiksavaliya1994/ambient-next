@@ -115,8 +115,9 @@ export type ToolRequest = {
   materialLines: MaterialLine[]
   /**
    * The legacy free-text note, one entry per line. Empty whenever
-   * `materialLines` isn't: `new-request` also writes the lines' summary as a legacy row,
-   * and showing it beside the lines would list everything twice.
+   * `materialLines` isn't: requests created before 2026-09-25 carry the lines'
+   * summary as a legacy row too, and showing it beside the lines would list
+   * everything twice.
    */
   legacyMaterials: string[]
   /** Phase 2 lifecycle. A row with no `status` is `New`. */
@@ -430,6 +431,55 @@ export async function listRequestStopInfo(ids: readonly string[]): Promise<Reque
   }))
 }
 
+/** Who to ask for at a job site, taken from the job's most recent request. */
+export type SiteContact = {
+  contact: string | null
+  contactPhone: string | null
+}
+
+const jobLastRequestRow = z.looseObject({
+  name: z.string().optional(),
+  lastRequest: z.string().optional(),
+})
+
+/**
+ * Each job site's contact, keyed by job name — for the stops where the
+ * trip's own requests can't say (see `isTransferCollect`).
+ *
+ * Read through `jobs.lastRequest`, which the `new-request` workflow keeps
+ * current, so it is whoever was named on the last request raised for that
+ * site. A site with no `lastRequest`, or whose request names neither a contact
+ * nor a phone, is left out: showing nothing beats showing the wrong person.
+ */
+export async function listSiteContacts(sites: readonly string[]): Promise<Map<string, SiteContact>> {
+  if (sites.length === 0) return new Map()
+
+  const jobs = (
+    await bubbleListAll("jobs", {
+      constraints: [{ key: "name", constraint_type: "in", value: [...sites] }],
+    })
+  ).map((row) => jobLastRequestRow.parse(row))
+
+  // Job names aren't unique in Bubble; the first row that has a request wins.
+  const lastRequestBySite = new Map<string, string>()
+  for (const job of jobs) {
+    const lastRequest = job.lastRequest?.trim()
+    if (job.name && lastRequest && !lastRequestBySite.has(job.name)) lastRequestBySite.set(job.name, lastRequest)
+  }
+
+  const requests = new Map(
+    (await listRequestStopInfo([...new Set(lastRequestBySite.values())])).map((request) => [request.id, request])
+  )
+
+  const contacts = new Map<string, SiteContact>()
+  for (const [site, requestId] of lastRequestBySite) {
+    const request = requests.get(requestId)
+    if (!request || (!request.contact && !request.contactPhone)) continue
+    contacts.set(site, { contact: request.contact, contactPhone: request.contactPhone })
+  }
+  return contacts
+}
+
 /** The second half of every list call: one `in` lookup each for tools and materials. */
 async function withLines(rows: z.infer<typeof requestRow>[]): Promise<ToolRequest[]> {
   const ids = rows.map((row) => row._id)
@@ -561,9 +611,8 @@ function buildRequestPayload(input: RequestPayloadInput): Record<string, unknown
     searchable: `${input.job.description} - ${newYorkStamp(input.now)}`,
     toolsSummary: input.toolsSummary,
     toolsNotes: input.toolsNotes,
-    // The legacy step: `new-request` writes one `requestedmaterials` row from
-    // this whenever it isn't empty, lines or not (5B §1.4). With lines it carries
-    // their summary, so the old Bubble UI still has one readable row.
+    // Feeds `new-request`'s legacy-row step, disabled 2026-09-25 (5B §1.4), so
+    // Bubble ignores it there; `new-pickup-request` still writes its row from it.
     materials: input.materialLines?.length ? formatMaterialsSummary(input.materialLines) : input.materials,
     ...(input.materialLines?.length ? { materialLines: toNewRequestMaterialLines(input.materialLines) } : {}),
     summary: input.summary,
@@ -630,7 +679,9 @@ export async function createToolRequest(
       requestDateEnd: end,
       toolsSummary: formatToolsSummary(values.tools),
       toolsNotes: values.toolsNotes,
-      materials: values.materials,
+      // The delivery form sends lines only since 5C; `buildRequestPayload`
+      // writes their summary as the legacy text.
+      materials: "",
       materialLines,
       summary,
       now,

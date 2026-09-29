@@ -2,6 +2,7 @@
 
 import { ArrowRightIcon, TriangleAlertIcon, TruckIcon } from "lucide-react"
 
+import { CargoKindIcon } from "@/components/cargo-kind"
 import { ToolStateBadges } from "@/components/tool-status-badges"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { OutstandingMovement } from "@/lib/trips/movement-types"
@@ -78,7 +79,7 @@ export function TripMovementRow({
           ? "border-l-destructive bg-destructive/5"
           : checked
             ? "cursor-pointer border-l-primary bg-primary/5"
-            : "cursor-pointer border-l-border hover:bg-muted/60"
+            : "cursor-pointer border-l-foreground/25 bg-background hover:bg-muted/60"
       )}
     >
       {/* Stops a direct hit on the checkbox toggling it a second time via the row. */}
@@ -90,6 +91,7 @@ export function TripMovementRow({
           aria-label={movement.toolName}
         />
       </span>
+      <CargoKindIcon kind="tool" />
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start gap-2">

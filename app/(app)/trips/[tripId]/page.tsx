@@ -10,9 +10,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
-import { listRequestStopInfo } from "@/lib/bubble/requests"
+import { listRequestStopInfo, listSiteContacts, type SiteContact } from "@/lib/bubble/requests"
 import { getTrip } from "@/lib/bubble/trips-read"
-import { stopWork } from "@/lib/bubble/trips-types"
+import { stopWork, transferSites } from "@/lib/bubble/trips-types"
 import { formatClock, minutesOfTime, tripFinishMinutes, tripStartTime } from "@/lib/trips/schedule"
 
 export const metadata: Metadata = { title: "Trip" }
@@ -47,7 +47,8 @@ async function TripBody({ tripId }: { tripId: string }) {
   // carrying a refused tool home grows a yard stop that has no `tripstop` row
   // behind it. The header and the last card's rail are on screen together, so
   // reading the row count here quietly ends the day an hour early.
-  const stops = stopWork(trip).length
+  const work = stopWork(trip)
+  const stops = work.length
   const startTime = tripStartTime(trip.tripDate)
   const finish = tripFinishMinutes(startTime, stops)
   const span = `${formatClock(minutesOfTime(startTime))} – ${formatClock(finish)}`
@@ -58,6 +59,13 @@ async function TripBody({ tripId }: { tripId: string }) {
   const requestIds = [...new Set(trip.items.map((item) => item.requestId).filter((id): id is string => id !== ""))]
   const requestInfo = await listRequestStopInfo(requestIds)
   const requests = new Map(requestInfo.map((request) => [request.id, request]))
+
+  // Who to ask for at a site-to-site transfer's pickup stop, where the tool's
+  // own request names someone at the far end. **Not awaited**: it is two more
+  // Bubble reads the run sheet doesn't need to draw, so the promise streams to
+  // the client and only the popover that shows it waits. A failed read just
+  // means no contact, never a broken page.
+  const siteContacts = listSiteContacts(transferSites(work, requests)).catch(() => new Map<string, SiteContact>())
 
   return (
     <>
@@ -106,7 +114,7 @@ async function TripBody({ tripId }: { tripId: string }) {
 
       {trip.notes && <p className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">{trip.notes}</p>}
 
-      <TripRunSheet trip={trip} requests={requests} />
+      <TripRunSheet trip={trip} requests={requests} siteContacts={siteContacts} />
     </>
   )
 }

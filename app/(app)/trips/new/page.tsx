@@ -33,7 +33,7 @@ export default async function NewTripPage({
         <div>
           <h1 className="text-xl font-medium">New trip</h1>
           <p className="text-sm text-muted-foreground">
-            Pick the tools to move. The route builds itself; drag it into the order you&rsquo;d drive.
+            Pick the tools and materials to move. The route builds itself; drag it into the order you&rsquo;d drive.
           </p>
         </div>
         <Link

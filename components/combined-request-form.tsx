@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { useCombinedRequest } from "@/hooks/use-combined-request"
+import type { MaterialItem } from "@/lib/bubble/material-items-types"
 import type { FieldPm, Job, MaterialDefault, TimeSlot, ToolType } from "@/lib/bubble/reference-types"
 
 /**
@@ -29,12 +30,16 @@ export function CombinedRequestForm({
   fieldPms,
   timeSlots,
   materialDefaults,
+  materialItems,
 }: {
   jobs: Job[]
   toolTypes: ToolType[]
   fieldPms: FieldPm[]
   timeSlots: TimeSlot[]
+  /** The pickup half's free-text starting points — until 5G gives it lines too. */
   materialDefaults: MaterialDefault[]
+  /** The delivery half's material catalogue, read fresh. */
+  materialItems: MaterialItem[]
 }) {
   const combined = useCombinedRequest(timeSlots, fieldPms)
   const { form } = combined
@@ -69,7 +74,7 @@ export function CombinedRequestForm({
           <CombinedDeliveryCard
             form={form}
             toolTypes={toolTypes}
-            materialDefaults={materialDefaults}
+            materialItems={materialItems}
             selected={combined.deliverySelected}
             onChange={combined.updateDeliverySelected}
           />

@@ -144,10 +144,24 @@ otherwise approve an inventory line without drawing stock. Same reason
 Pickup lines (5F) go through this same helper; *holdsStock* is `no` for them, so
 it only sets `assignedQty`. Nothing to add later.
 
+> **Re-plan 2026-09-28: site-to-site transfer.** A delivery line's
+> `assignedQty` stays **warehouse units only**. Nothing here changes. Units
+> coming from a pickup line linked to it are counted *beside* `assignedQty` as
+> coverage, and `assignMaterialsAction`'s bound subtracts them. Both are built
+> in [5F §2.6](./phase-5f-pickup-backend.md#26-transfers-added-2026-09-28).
+> Linking a pickup line approves it through this same helper.
+
 ### 1.4 As built (2026-09-24)
 
 Tasks 1–4 are built and confirmed working. Where this differs from §1.1–1.3,
 **this section wins**.
+
+> **Disabled 2026-09-25.** No one uses the old Bubble UI any more, so the
+> user disabled the legacy-row step in `new-request`: a request created from
+> now on has structured rows only. Next.js still sends the lines' summary as
+> `materials` (Bubble ignores it), and `listMaterialLines` still reads the 373
+> existing legacy rows. `new-pickup-request` is unchanged. The rest of this
+> paragraph is the history.
 
 **`new-request` already wrote a legacy row.** Its step 3 creates one
 `requestedmaterials` row holding the raw `materials` text, with `kind`,
@@ -167,23 +181,27 @@ request created from now on has:
 legacy row when it has any structured line**, else surface its text as
 `legacyMaterials`. Don't try to suppress the legacy row from Next.js.
 
-**`materialLines` items use uppercase `ID`.** The parameter is typed as a list
-of the existing `requestedmaterials` type, not a Detect Data shape, so its item
-fields are that type's fields:
+**`materialLines` is a list of texts** *(revised 2026-09-25)*. It was first
+built as a list of the `requestedmaterials` type, which Bubble reads as row ids
+— every real call failed with `400 Invalid data for key materialLines: object
+with this id does not exist`. Detect Data would have meant moving all of
+`new-request` to *Request data's …*, so it became a text list instead: one
+item per line, fields joined by `::`, in this fixed order:
 
-```json
-"materialLines": [
-  { "kind": "Inventory", "materialID": "…", "name": "…", "unit": "…",
-    "quantity": 5, "materials": "Name: 5 unit" }
-]
+```
+kind::materialID::name::unit::quantity::materials
+["Inventory::1758…x2::Acetone::gal::1::Acetone: 1 gal", "NonInventory::::Rags::::2::Rags: 2"]
 ```
 
-`materialID` for Inventory, blank for NonInventory. Nothing else changes case:
-`adjust-material-stock` still takes `materialId`, and
-`assign-request-materials`' `lines` items are still `{ lineId, targetQty }` —
-both are plain params / a custom shape. **Build the `new-request` wire payload
-in `lib/schemas/material.ts` and nowhere else**, so the mapping lives in one
-file. Get it wrong and the rows are created with a null `materialID`.
+`materialID` and `unit` are empty when a line has none, `quantity` is empty for a
+lot with none. Bubble schedules `create-requested-material` on `materialLines`
+(type text) and maps each field as `This text:split by("::"):item #N`
+(`quantity` also `:converted to number`); the return stays
+`materialLines:count`. Next.js strips `::` and edge colons from every field so a
+free-text name can't shift the columns. **Build it in
+`lib/schemas/material.ts` (`toNewRequestMaterialLines`) and nowhere else.**
+`adjust-material-stock` still takes `materialId`, and `assign-request-materials`'
+`lines` items are still `{ lineId, targetQty }`.
 
 Each structured row gets `jobType` = the request's `toDo` (the `todo` parameter's
 value, e.g. `Grind & Level` — confirmed by the user 2026-09-24) and

@@ -9,7 +9,7 @@ import { AlertCircleIcon, PlusIcon, SendIcon } from "lucide-react"
 import { INITIAL_CREATE_STATE, type CreateRequestState } from "@/app/(app)/requests/action-state"
 import { createRequestAction } from "@/app/(app)/requests/actions"
 import { DateRangePicker } from "@/components/date-range-picker"
-import { MaterialDialog } from "@/components/material-dialog"
+import { MaterialLinesField } from "@/components/material-lines-field"
 import { SelectedTools, ToolPickerDialog, toolLinesOf } from "@/components/tool-picker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -32,17 +32,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { newYorkToday } from "@/lib/bubble/dates"
 import { DEFAULT_WE_ARE, TO_DO, UNFILTERED_TO_DO, WE_ARE } from "@/lib/bubble/enums"
+import type { MaterialItem } from "@/lib/bubble/material-items-types"
 import {
-  defaultMaterialsFor,
   Job,
   toolTypesFor,
   type FieldPm,
-  type MaterialDefault,
   // type JobOption,
   type TimeSlot,
   type ToolType,
 } from "@/lib/bubble/reference-types"
-import { formatToolsSummary } from "@/lib/bubble/tools-summary"
 import { requestFormSchema, type RequestFormValues } from "@/lib/schemas/request"
 
 /**
@@ -64,13 +62,14 @@ export function RequestForm({
   toolTypes,
   fieldPms,
   timeSlots,
-  materialDefaults,
+  materialItems,
 }: {
   jobs: Job[]
   toolTypes: ToolType[]
   fieldPms: FieldPm[]
   timeSlots: TimeSlot[]
-  materialDefaults: MaterialDefault[]
+  /** The active material catalogue, read fresh — stock is shown in the picker. */
+  materialItems: MaterialItem[]
 }) {
   const router = useRouter()
   const [state, setState] = useState<CreateRequestState>(INITIAL_CREATE_STATE)
@@ -102,7 +101,6 @@ export function RequestForm({
       fieldPm: fieldPms[0]?.name ?? "",
       notes: "",
       toolsNotes: "",
-      materials: "",
       materialLines: [],
       tentative: false,
       tools: [],
@@ -112,7 +110,6 @@ export function RequestForm({
   const toDo = useWatch({ control, name: "toDo" })
   const startDate = useWatch({ control, name: "startDate" })
   const endDate = useWatch({ control, name: "endDate" })
-  const materials = useWatch({ control, name: "materials" })
 
   const [job, setJob] = useState<Job | null>(null)
   const [selected, setSelected] = useState<Record<string, number>>({})
@@ -416,7 +413,7 @@ export function RequestForm({
         <Card className="lg:sticky lg:top-18">
           <CardHeader>
             <CardTitle>
-              Tools <span className="text-destructive">*</span>
+              Tools &amp; materials <span className="text-destructive">*</span>
             </CardTitle>
             <CardDescription>
               {tools.length === 0
@@ -446,50 +443,24 @@ export function RequestForm({
                 {errors.tools && <FieldError errors={[errors.tools]} />}
               </Field>
 
-              <Field>
-                <div className="flex items-center justify-between py-2">
-                  <FieldLabel>Materials</FieldLabel>
-                  <div className="flex items-center gap-2">
-                    {materials.trim() && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setValue("materials", "", { shouldValidate: true })}
-                      >
-                        Clear
-                      </Button>
-                    )}
-                    <MaterialDialog
-                      value={materials}
-                      defaultText={defaultMaterialsFor(materialDefaults, toDo)}
-                      onChange={(next) => setValue("materials", next, { shouldValidate: true })}
-                      trigger={
-                        <Button type="button" variant="outline" size="sm">
-                          <PlusIcon data-icon="inline-start" />
-                          Add material
-                        </Button>
-                      }
-                    />
-                  </div>
-                </div>
-                {materials.trim() ? (
-                  <pre className="min-h-32 overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs whitespace-pre-wrap">
-                    {materials}
-                  </pre>
-                ) : (
-                  <FieldDescription>No materials added.</FieldDescription>
+              {/* Controller-managed like the tool selection is pushed in: the
+                  schema refine ("a tool or a material line") is cross-field,
+                  so a change here re-checks `tools`, where its error shows. */}
+              <Controller
+                control={control}
+                name="materialLines"
+                render={({ field }) => (
+                  <MaterialLinesField
+                    lines={field.value}
+                    onChange={(next) => {
+                      field.onChange(next)
+                      void trigger(["materialLines", "tools"])
+                    }}
+                    items={materialItems}
+                    toDo={toDo}
+                  />
                 )}
-              </Field>
-
-              {/* {tools.length > 0 && (
-                <Field>
-                  <FieldLabel>Saved to Bubble as</FieldLabel>
-                  <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs">
-                    {formatToolsSummary(tools)}
-                  </pre>
-                </Field>
-              )} */}
+              />
 
               <Field>
                 <FieldLabel htmlFor="toolsNotes">Tool notes</FieldLabel>

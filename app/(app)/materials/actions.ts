@@ -122,17 +122,9 @@ export async function updateMaterialItemAction(input: unknown): Promise<Material
   }
   const { itemId, ...patch } = parsed.data
 
-  if (!(await getMaterialItem(itemId))) {
+  const item = await getMaterialItem(itemId)
+  if (!item) {
     return { status: "error", message: "That material no longer exists in Bubble." }
-  }
-
-  const clash = await findMaterialNameClash(patch.name, itemId)
-  if (clash) {
-    return {
-      status: "invalid",
-      message: "A material already has that name.",
-      fieldErrors: { name: `"${clash.name}" already exists — pick a different name.` },
-    }
   }
 
   try {
@@ -143,7 +135,7 @@ export async function updateMaterialItemAction(input: unknown): Promise<Material
 
   revalidatePath("/materials")
   revalidatePath(`/materials/${itemId}`)
-  return { status: "saved", itemId, name: patch.name }
+  return { status: "saved", itemId, name: item.name }
 }
 
 /**

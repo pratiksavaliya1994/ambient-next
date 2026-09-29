@@ -15,23 +15,35 @@ into stops next to tools, are loaded, dropped, skipped or refused by the driver,
 and a refused inventory line returns its units to stock when it's unloaded at the
 yard. `request.status` follows.
 
+**Added 2026-09-28: site stock.** An inventory line dropped at a job is also
+credited to that site in the new `materialsitestock` table. Every site change
+is audited in `materialstockhistory` with a `location`, and Next.js gets the
+reads the 5E site view needs. See the master doc's
+[Site stock](./phase-5-materials.md#site-stock).
+
 ## Scope
 
-**In:** additive edits to `create-trip`, `save-trip`, `cancel-trip`,
-`start-trip`, `complete-trip-stop`; two private helpers; the planner, validator,
-pool, trip reads/writes, trip schemas, trip actions, settle poll, request
-progress.
+**In:** the `materialsitestock` table and `materialstockhistory.location`
+(§1.0); additive edits to `create-trip`, `save-trip`, `cancel-trip`,
+`start-trip`, `complete-trip-stop`; four private helpers; the planner,
+validator, pool, trip reads/writes, trip schemas, trip actions, settle poll,
+request progress; site-stock reads (§2.7).
 
-**Out:** pickup lines (5F). In this slice a material line always travels
-`Warehouse → request.job`. Every screen (5E).
+**Out:** pickup lines, including the pickup collect's site debit and transfers
+(5F). In this slice a material line always travels `Warehouse → request.job`.
+Every screen (5E).
 
 ## The rules this slice adds
 
 - **One `tripmaterial` row per line per trip.** Two partial loads of one line on
   one trip are one row with the summed qty. `validatePlan` enforces it
   (`duplicate-line`).
-- **Delivery origin is always `DEFAULT_WAREHOUSE`.** No site-to-site — see the
-  master doc.
+- **A delivery line's own rows always start at `DEFAULT_WAREHOUSE`.**
+  Site-to-site arrives in 5F as **pickup** lines linked to a delivery line.
+  Those rows belong to the pickup line and start at its job, so nothing here
+  changes for them.
+- **An inventory drop at a job credits that site** (`Deliver`). A refusal, a
+  skip or a non-inventory drop writes no site row.
 - **Outstanding** (from `lineProgress`) = `assignedQty − Σ qty` over the line's
   rows in `Planned`/`Loaded`/`Dropped`/`Refused`, where **a `Planned` row counts
   only while its trip is open** (a `Planned` row can in principle outlive a
@@ -53,6 +65,34 @@ An older client sends none of the new parameters; every new step gates off on an
 empty list, and every new return key is ignored by `z.looseObject`. **Save the
 Studio edits before the app ships**, never after — the reverse order throws in
 `stopResult.parse` *after* drops committed (the §8.1 lesson).
+
+### 1.0 Schema additions (added 2026-09-28)
+
+Same conventions as [5A](./phase-5a-material-schema.md#conventions--read-before-building):
+`…ID` fields are text holding a unique id, never links, and `reason`/`location`
+are text, never option sets.
+
+**`materialsitestock` (new)** — one row per catalogue item per job site.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `materialID` | text | `materialitem` unique id |
+| `materialName` | text | Snapshot, so the site view reads after a rename |
+| `unit` | text | Snapshot |
+| `location` | text | The job **name**, exactly as `request.job` holds it. **Never a warehouse name**: warehouse stock stays on `materialitem.stockQty` |
+| `qty` | number | Delivered and not picked up. **Only ever written by workflows** (`adjust-site-stock`) |
+
+Privacy rules copied from `assignedtools`; tick **Enable Data API**. Put
+"written only by adjust-site-stock" in the type's description in Studio.
+
+**`materialstockhistory` (extend)** — add **`location`** (text). Leave it empty
+for the warehouse; every existing row is warehouse, so nothing needs
+backfilling. `stockAfter` on a site row is that site's `qty`. Two new `reason`
+values, **`Deliver`** and **`Collect`**. `reason` is text, so Bubble needs no
+change for them, but Next.js does (§2.7).
+
+Check afterwards: `GET /obj/materialsitestock` returns an empty `results`, not a
+404, and Swagger lists `qty` as a number.
 
 ### 1.1 `create-trip-material` (private)
 
@@ -101,7 +141,7 @@ row's current `state`** — that constraint is what makes a replayed call a no-o
 
 | List | Search `tripmaterial (tripID = tripId, lineID in list, state = …)` | Set |
 | --- | --- | --- |
-| `dropMaterialIds` | `Loaded` | `state = "Dropped"` |
+| `dropMaterialIds` | `Loaded` | → *Schedule on a list* of `drop-material-at-site` (§1.7). **Not** a list change: each inventory row credits a different site row |
 | `loadMaterialIds` | `Planned` | `state = "Loaded"`, `actualQty = qty` |
 | `skipMaterialIds` | `Planned` | `state = "Skipped"` |
 | `refuseMaterialIds` | `Loaded` | `state = "Refused"` |
@@ -111,9 +151,11 @@ Returns gain `materialsDropped`, `materialsLoaded`, `materialsSkipped`,
 `materialsRefused`, `materialsReturned` — each the **list's** `:count`, as the
 tool keys are.
 
-> A `dropMaterialIds` drop at a `Job` stop writes **nothing to stock** — a
-> delivery's stock left the shelf at assignment. 5F adds the one case where a
-> drop does touch stock (a pickup unloaded at the yard), as a separate list.
+> A `dropMaterialIds` drop at a `Job` stop writes **nothing to warehouse
+> stock**, because a delivery's stock left the shelf at assignment. It does
+> credit the **site** (§1.7). 5F adds the one case where a drop touches the
+> warehouse (a pickup unloaded at the yard), as a separate list. 5F's transfer
+> drops at a job reuse `dropMaterialIds` unchanged.
 
 ### 1.6 `return-material-stock` (private)
 
@@ -140,6 +182,60 @@ themselves.
 
 The fan-out is **asynchronous**, so the returned count is what was sent. Next.js
 settle-polls the rows (§2.5) before reporting success.
+
+### 1.7 Site stock helpers (added 2026-09-28) — both private
+
+**`adjust-site-stock`** — the only writer of `materialsitestock`. 5F's collect
+reuses it.
+
+| Parameter | Type |
+| --- | --- |
+| `materialId`, `name`, `unit`, `location` | text |
+| `delta` | number (signed) |
+| `floorAtZero` | yes/no — `yes` on a collect |
+| `reason` | text — `Deliver` or `Collect` |
+| `requestId`, `tripId`, `byName` | text |
+
+Let *S* = `Search for materialsitestock (materialID = materialId, location =
+location)`, sorted by Created Date ascending.
+
+1. *Create a new materialsitestock*: `materialID`, `materialName = name`,
+   `unit`, `location`, `qty = delta` (or `0` when `delta < 0`). Only when `S
+   :count is 0`.
+2. *Make changes* to `S:first item`: `qty = qty + delta`. Only when `Result of
+   step 1 is empty`. When `floorAtZero` and `qty + delta < 0`, set `qty = 0`
+   instead, as two steps with opposite conditions. Don't let a search here
+   decide whether step 1 ran: a search can miss a row made earlier in the same
+   run.
+3. *Create a new materialstockhistory*: `materialID`, `materialName`, `delta`,
+   `stockAfter` (step 1's or step 2's result's `qty` — one step per case, each
+   with its step's condition), `reason`, `location`, `requestID`, `tripID`,
+   `byName`.
+
+**It is not idempotent on its own.** It is only ever *scheduled* by a helper
+that is gated on the row's `state` and flips that state **after** scheduling
+it: `drop-material-at-site` below, and 5F's `load-trip-material`. A replay finds
+the state flipped and schedules nothing. **Never expose it, and never call it
+from Next.js.**
+
+**`drop-material-at-site`** — params `tripMaterialId`, `tripId`, `byName`. Let
+*T* = the row. **Every step is conditioned on `T's state is "Loaded"`**, and the
+flip is last:
+
+1. *Schedule API Workflow* `adjust-site-stock`: `materialId = T's materialID`,
+   `name`, `unit`, `location = T's toLocation`, `delta = T's actualQty`,
+   `floorAtZero = no`, `reason = "Deliver"`, `requestId = T's requestID`,
+   `tripId`, `byName`. Only when `T's kind is "Inventory"`.
+2. *Make changes* to *T*: `state = "Dropped"`.
+
+`actualQty` rather than `qty`: they are equal on a delivery row (`start-trip`
+sets it), and 5F's transfer rows carry the driver's count there.
+
+`complete-trip-stop`'s `dropMaterialIds` step becomes *Schedule on a list* of
+`drop-material-at-site` over `Search for tripmaterial (tripID = tripId, lineID
+in dropMaterialIds, state = "Loaded")`. The parameter, the return key
+`materialsDropped` and the no-op-on-replay behaviour are unchanged. What changes
+is that the flip is now **asynchronous**, hence §2.5's settle.
 
 ---
 
@@ -184,7 +280,7 @@ them. That's the phase 4 guarantee and it doesn't change.
 | `lib/bubble/trip-material-payload.ts` (new) | `materialPayload(PlannedMaterial)` and the five complete-stop lists, so `trips.ts` stays under its cap |
 | `lib/bubble/trips.ts` | `createTrip`/`saveTrip` send `materials` and `assertCounts` checks `materials`; `startTrip(tripId, driver, materialLineIds = [])`; `CompleteStopInput` gains the five material lists and each gets an `assertExact`. Keep the `refused()` empty-response check first, unchanged |
 | `lib/schemas/trip.ts` | `materialSelectionSchema` (`{ lineId, qty ≥ 1 }[]`) on `createTripSchema` / `saveTripSchema`; `plannedMaterialSchema`; `completeStopSchema` gains material `ticked` / `refused` line id lists, mirroring the tool fields |
-| `lib/trips/settle.ts` | `waitForTripPlan` also waits for the expected `tripmaterial` count; new `waitForMaterialReturns(tripId, lineIds)` polls until those rows read `Returned` |
+| `lib/trips/settle.ts` | `waitForTripPlan` also waits for the expected `tripmaterial` count; new **`waitForMaterialRows(tripId, lineIds, state)`** polls until those rows read `state`. It is used for `Returned` (refused units unloaded) **and** `Dropped` (job drops, async since §1.7). This was 5F's generalisation, moved here because 5D needs it first; 5F reuses it for its counts and landings |
 
 ### 2.5 Actions
 
@@ -198,8 +294,9 @@ them. That's the phase 4 guarantee and it doesn't change.
   drops → `dropMaterialIds`, unticked at a `Job` stop → `refuseMaterialIds`. At a
   **warehouse** stop, ticked drops whose **live** row reads `Refused` →
   `returnMaterialIds` — the tool rule of splitting by re-read state, never by what
-  the browser named. Then `waitForMaterialReturns`, then `syncRequestStatuses`
-  with the material rows' request ids added.
+  the browser named. Then `waitForMaterialRows` for the drops (`Dropped`) and
+  the returns (`Returned`), then `syncRequestStatuses` with the material rows'
+  request ids added.
 - **`completeTripAction`** — the "still on the truck" guard names materials too.
 - **`closeRequestAction`** — nothing new: 5B already refuses on
   `Planned`/`Loaded`/`Refused` rows, and now there are some.
@@ -210,22 +307,86 @@ them. That's the phase 4 guarantee and it doesn't change.
 `requestProgress`, so delivery lines can finally be **done** and a request can
 close on its own. No change to `deriveRequestStatus` beyond 5B's.
 
+### 2.7 Site stock reads (added 2026-09-28)
+
+5E's site view is built on these.
+
+| File | Change |
+| --- | --- |
+| `lib/bubble/material-items-types.ts` | `STOCK_REASON` gains **`Deliver`** and **`Collect`**. `StockHistoryEntry` gains `location` (`""` = warehouse). **This must be live before Bubble writes either reason.** The history reader parses `reason` with `z.enum(STOCK_REASON)`, so an unknown value throws and breaks `/materials/[itemId]`. In practice nothing writes them until this slice's trips run, so ship it with the rest of 5D |
+| `lib/bubble/material-items.ts` | The history row Zod gains optional `location`; `listStockHistory(materialId)` returns it. The item page keeps one mixed list, and 5E labels each row's location |
+| `lib/bubble/site-stock-types.ts` (new, client-safe) | `SiteStockRow` (`materialId, materialName, unit, location, qty, modifiedAt`); `groupBySite(rows)` → per-location item lists, **adding up duplicate `(materialId, location)` rows** (master doc, *One helper*), dropping `qty ≤ 0`, newest movement first; `siteTotalsFor(rows, materialId)` for the item page |
+| `lib/bubble/site-stock.ts` (new, `server-only`) | `listSiteStock({ location?, materialIds? })` via `bubbleListMaybeMissing`; `listSiteHistory(location)` (`materialstockhistory` where `location = …`, newest first). **Never memoised**, for the reason `material-items.ts` isn't |
+| `scripts/check-bubble.ts` | Read path for `materialsitestock`: row count, distinct locations, and any `location` with no matching `jobs.name` (the typo guard `tools.location` already has) |
+
 ---
 
 ## Tasks
 
-- [ ] 1. Studio: `create-trip-material`, `return-material-stock` (both **not
-      exposed** — check)
-- [ ] 2. Studio: `create-trip`, `save-trip`, `cancel-trip`, `start-trip`,
-      `complete-trip-stop` additions
-- [ ] 3. `plan-types.ts`, `plan.ts`, `validate.ts`
-- [ ] 4. `material-movement-types.ts`, `movement-types.ts`, `movements.ts`
-- [ ] 5. `trip-materials-types.ts`, `trips-types.ts`
-- [ ] 6. `tripmaterial-read.ts`, `trips-read.ts`
-- [ ] 7. `trip-material-payload.ts`, `trips.ts`, `schemas/trip.ts`, `settle.ts`
-- [ ] 8. Trip actions (create, save, start, complete stop, complete trip)
-- [ ] 9. `sync-request-status.ts` / `movements.ts` pass trip rows to progress
-- [ ] 10. `npm run typecheck` once, at the end
+Tasks 0–2 were built 2026-09-28 and are not yet verified. The as-built record,
+including deviations D1–D6 and the `adjust-site-stock` step-order fix, is
+[`phase-5d-bubble-handoff.md`](./phase-5d-bubble-handoff.md).
+
+- [x] 0. Studio: `materialsitestock` + `materialstockhistory.location` (§1.0);
+      privacy, API tick, empty-`results` check
+- [x] 1. Studio: `create-trip-material`, `return-material-stock`,
+      `adjust-site-stock`, `drop-material-at-site` (all **not exposed** — check)
+- [x] 2. Studio: `create-trip`, `save-trip`, `cancel-trip`, `start-trip`,
+      `complete-trip-stop` additions (`dropMaterialIds` as a fan-out, §1.7)
+- [x] 3. `plan-types.ts`, `plan.ts`, `validate.ts`
+- [x] 4. `material-movement-types.ts`, `movement-types.ts`, `movements.ts`
+- [x] 5. `trip-materials-types.ts`, `trips-types.ts`
+- [x] 6. `tripmaterial-read.ts`, `trips-read.ts`
+- [x] 7. `trip-material-payload.ts`, `trips.ts`, `schemas/trip.ts`, `settle.ts`
+- [x] 8. Trip actions (create, save, start, complete stop, complete trip)
+- [x] 9. `sync-request-status.ts` / `movements.ts` pass trip rows to progress
+- [x] 10. Site stock reads: `STOCK_REASON` + history `location`,
+      `site-stock-types.ts`, `site-stock.ts`, `check-bubble` (§2.7)
+- [x] 11. `npm run typecheck` once, at the end
+
+## Next.js — as built (2026-09-28)
+
+Built and typechecks clean. Not run against Bubble yet. The verification list
+below needs 5E's screens, or hand-built action calls, because nothing in
+today's UI can select a material.
+
+Where the build differs from §2, or adds to it:
+
+- **`startTripAction` sends `materialLineIds` empty.** §1.4/§2.5 had start
+  load the first stop's delivery lines. The code had already stopped loading
+  tools at start, because a pre-loaded first stop is ticked off before the
+  driver has said what went into the van (see `startTrip`'s comment). The same
+  applies to materials, so the driver ticks them at the first stop through
+  `loadMaterialIds`. Bubble's `start-trip` step 4 stays built but unused, and
+  5F's "exclude pickup lines from `materialLineIds`" becomes moot. To switch
+  back, pass the first stop's `outstandingCollectMaterials` line ids to
+  `startTrip`.
+- **Warehouse-bound material drops are refused.** The pool leaves out a
+  delivery line whose `request.job` is a warehouse name, and `completeStopAction`
+  refuses a non-refused material drop at a `Warehouse` stop. Either would send
+  `drop-material-at-site` a warehouse `toLocation`, and site stock never holds
+  the yard. 5F lifts the second guard when pickup unloads arrive.
+- **New count keys are read as 0 when absent** (`materials` on create/save/start,
+  the five `materials…` keys on complete-stop). A missing key with an empty
+  list passes. With a non-empty list it throws, which is the only case that
+  means Bubble ignored the materials.
+- **The open-trip rule lives in `lineProgress`** and applies when a row carries
+  `tripStatus`. `listTripMaterialsForLines` now always sets it (one extra
+  `trip` read, only when rows exist), so the assign page's floor also stops
+  counting a `Planned` row stranded on a completed trip. Close request's
+  in-motion guard is unchanged (§2.5) and still counts one.
+- **Files beyond §2's table:**
+  - `app/(app)/trips/[tripId]/stop-materials.ts`: the material half of
+    `completeStopAction` (validate, split returns, settle).
+  - `trip-material-payload.ts` also holds `assertPlanCounts` and
+    `assertStartCounts`, so `trips.ts` stays under 300 lines.
+  - `material-items.ts` exports `toStockHistoryEntry` for `site-stock.ts`.
+- **Action state:** `TripDraftState.saved` gains `materials?`, and
+  `TripRunState["stop-done"]` gains the five material counts.
+- **Before 5E:** `shownMovements` keeps materials-only groups, so the current
+  builder shows them as request headings with no tool rows. That is harmless,
+  but it looks empty until 5E renders the lines. `MaterialStockHistory` has
+  placeholder chip styles for `Deliver`/`Collect`.
 
 ## Verification
 
@@ -252,3 +413,15 @@ test item and one test request from 5B's verification.
    second trip drops all 5 → line done; the request auto-closes to `Delivered`
    once its tools have landed too.
 9. `complete-trip` refuses while a material row is still `Loaded`, naming it.
+10. **Site credit:**
+    - The drop of 5 in step 8 creates one `materialsitestock` row for that job,
+      with `qty` 5.
+    - It also writes one `Deliver` history row with `location` = the job and
+      `stockAfter` 5.
+    - **Re-send the same `complete-trip-stop` → still one row, still 5.** The
+      state gate is again the thing under test.
+    - A second delivery of 2 to the same job → the same row reads 7. No second
+      row.
+11. The refused run in step 7 wrote **no** site row. A non-inventory line
+    dropped at a job writes none either.
+12. `check-bubble` shows the new table, and no unmatched `location`.

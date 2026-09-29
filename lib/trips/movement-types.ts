@@ -1,5 +1,6 @@
 import type { CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import type { RequestStatus } from "@/lib/bubble/enums"
+import type { OutstandingMaterial } from "@/lib/trips/material-movement-types"
 import type { Movement } from "@/lib/trips/plan-types"
 
 /**
@@ -49,6 +50,8 @@ export type RequestMovements = {
   /** Changing `destination` is meaningful only for a pickup. */
   destinationIsChoosable: boolean
   movements: OutstandingMovement[]
+  /** Material lines with units still to send (5D). Always `Warehouse → job`, never choosable. */
+  materials: OutstandingMaterial[]
   /** Assigned tools that have already arrived — the "3 of 8 still to go" numerator. */
   landed: number
   /** Assigned tools in total, landed included. */
@@ -176,7 +179,8 @@ function oneJourney(legs: readonly Leg[]): Movement[] {
  * something the warehouse manager acts on here. A claim is not. It says only
  * that someone else got there first, and the fix lives on that other trip, so a
  * disabled row with a red edge was pure noise in a list a dispatcher scans
- * twenty tools deep. A request left with nothing movable disappears with them.
+ * twenty tools deep. A request left with nothing movable disappears with them,
+ * unless it still has material lines to send.
  *
  * Deliberately *not* applied inside `listOutstandingMovements`: the save action
  * re-derives from the same pool, and `selectMovements` needs the claimed rows
@@ -188,7 +192,7 @@ export function shownMovements(groups: readonly RequestMovements[]): RequestMove
 
   for (const group of groups) {
     const movements = group.movements.filter((movement) => movement.block?.kind !== "claimed")
-    if (movements.length === 0) continue
+    if (movements.length === 0 && group.materials.length === 0) continue
     shown.push({ ...group, movements })
   }
 

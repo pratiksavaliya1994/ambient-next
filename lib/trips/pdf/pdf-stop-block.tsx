@@ -2,12 +2,13 @@ import "server-only"
 
 import { Text, View } from "@react-pdf/renderer"
 
-import type { RequestStopInfo } from "@/lib/bubble/requests"
+import type { RequestStopInfo, SiteContact } from "@/lib/bubble/requests"
 import { dropOutcome, type StopWork } from "@/lib/bubble/trips-types"
 import { PdfItemSection } from "@/lib/trips/pdf/pdf-item-line"
-import { stopRequests } from "@/lib/trips/pdf/pdf-helpers"
+import { PdfMaterialSection } from "@/lib/trips/pdf/pdf-material-line"
 import { pdfStyles } from "@/lib/trips/pdf/pdf-styles"
 import { formatWindow, stopWindow } from "@/lib/trips/schedule"
+import { stopRequests } from "@/lib/trips/stop-contacts"
 
 /**
  * One stop, laid out the way the on-screen run sheet reads it: a numbered
@@ -19,22 +20,27 @@ export function PdfStopBlock({
   position,
   startTime,
   requests,
+  siteContacts,
 }: {
   work: StopWork
   position: number
   startTime: string
   requests: ReadonlyMap<string, RequestStopInfo>
+  /** Transfer stops' own contacts, by site — see `stopRequests`. */
+  siteContacts: ReadonlyMap<string, SiteContact>
 }) {
   const window = formatWindow(stopWindow(startTime, position - 1))
   const kindLabel = work.stop.kind === "Warehouse" ? "Warehouse" : "Job site"
-  const contacts = stopRequests(work, requests)
+  const contacts = stopRequests(work, requests, siteContacts)
   // Named per line only once a single contact block can no longer say whose
   // tool is whose — the common case (one request per stop) stays uncluttered.
   const namedJob = contacts.length > 1
   // `work.refused` is deliberately left out: it's what a stop turned away, a
   // fact about how the trip actually went rather than the plan, and the PDF
   // never prints it. See `PdfItemTone`.
-  const nothingHere = work.collect.length === 0 && work.drop.length === 0
+  const nothingHere =
+    work.collect.length + work.drop.length + work.collectMaterials.length + work.dropMaterials.length === 0
+  const dropLabel = dropOutcome(work.stop.kind).verb
 
   return (
     <View style={pdfStyles.stopRow} wrap={false}>
@@ -63,10 +69,17 @@ export function PdfStopBlock({
 
         {nothingHere && <Text style={pdfStyles.emptyStop}>Nothing happens here.</Text>}
         <PdfItemSection tone="collect" items={work.collect} requests={requests} namedJob={namedJob} />
-        <PdfItemSection
+        <PdfMaterialSection
+          tone="collect"
+          materials={work.collectMaterials}
+          requests={requests}
+          namedJob={namedJob}
+        />
+        <PdfItemSection tone="drop" label={dropLabel} items={work.drop} requests={requests} namedJob={namedJob} />
+        <PdfMaterialSection
           tone="drop"
-          label={dropOutcome(work.stop.kind).verb}
-          items={work.drop}
+          label={dropLabel}
+          materials={work.dropMaterials}
           requests={requests}
           namedJob={namedJob}
         />

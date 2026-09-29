@@ -92,6 +92,7 @@ async function EditTripBody({ tripId }: { tripId: string }) {
         startTime: tripStartTime(trip.tripDate),
         notes: trip.notes ?? "",
         toolIds: trip.items.map((item) => item.toolId),
+        materials: trip.materials.map((row) => ({ lineId: row.lineId, qty: row.qty })),
         stopOrder: trip.stops.map((stop) => stop.stopKey),
         splitLocations: splitLocationsOf(trip.stops),
       }}

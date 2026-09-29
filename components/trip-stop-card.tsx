@@ -1,11 +1,13 @@
-import { CheckIcon, MapPinIcon, WarehouseIcon } from "lucide-react"
+import { CheckIcon, MapPinIcon, PhoneIcon, UserIcon, WarehouseIcon } from "lucide-react"
+import { Suspense, use } from "react"
 
 import { StopTimeRail } from "@/components/stop-time"
 import { TripStopActions } from "@/components/trip-stop-actions"
 import { TripStopItems } from "@/components/trip-stop-items"
-import type { RequestStopInfo } from "@/lib/bubble/requests"
-import { isStopDone, type StopWork } from "@/lib/bubble/trips-types"
+import type { RequestStopInfo, SiteContact } from "@/lib/bubble/requests"
+import { hasTransferCollect, isStopDone, type StopWork } from "@/lib/bubble/trips-types"
 import type { StopKind } from "@/lib/trips/plan-types"
+import { stopRequests } from "@/lib/trips/stop-contacts"
 import { cn } from "@/lib/utils"
 
 /**
@@ -38,6 +40,7 @@ export function TripStopCard({
   current,
   live,
   requests,
+  siteContacts,
 }: {
   tripId: string
   work: StopWork
@@ -55,6 +58,8 @@ export function TripStopCard({
   live: boolean
   /** Which request each item's `requestId` names — see `TripStopItems`. */
   requests: ReadonlyMap<string, RequestStopInfo>
+  /** Transfer stops' own contacts, by site — see `TripStopItems`. */
+  siteContacts: Promise<ReadonlyMap<string, SiteContact>>
 }) {
   const done = isStopDone(work)
   const Icon = work.stop.kind === "Warehouse" ? WarehouseIcon : MapPinIcon
@@ -79,6 +84,7 @@ export function TripStopCard({
               {work.stop.location}
             </p>
             <p className="truncate text-[11px] text-muted-foreground">{caption(work.stop.kind, current, live)}</p>
+            <StopContacts work={work} requests={requests} siteContacts={siteContacts} />
           </div>
           {done && (
             <span className="flex shrink-0 items-center gap-1 rounded-full bg-status-ok/15 px-2 py-0.5 text-[11px] font-medium text-status-ok-foreground">
@@ -93,8 +99,13 @@ export function TripStopCard({
             collect={work.collect}
             drop={work.drop}
             refused={work.refused}
+            collectMaterials={work.collectMaterials}
+            dropMaterials={work.dropMaterials}
+            refusedMaterials={work.refusedMaterials}
             kind={work.stop.kind}
+            location={work.stop.location}
             requests={requests}
+            siteContacts={siteContacts}
           />
           {live && !done && <TripStopActions tripId={tripId} work={work} />}
         </div>
@@ -147,6 +158,86 @@ function StopRail({
         className="mt-1.5"
       />
       {!last && <span className={cn("mt-1.5 w-0.5 flex-1 rounded-full", done ? "bg-status-ok/40" : "bg-border")} />}
+    </div>
+  )
+}
+
+/**
+ * Who to ask for at a job site, right under its name — the same people the
+ * PDF's contact block names (`stopRequests`), so the driver needn't open a
+ * tool's popover to find out.
+ *
+ * Only a stop with a transfer collect waits on the streamed site contacts;
+ * every other stop's contacts are already in `requests` and draw at once.
+ * Warehouses show nothing: their requests' contacts are at the far end.
+ */
+function StopContacts({
+  work,
+  requests,
+  siteContacts,
+}: {
+  work: StopWork
+  requests: ReadonlyMap<string, RequestStopInfo>
+  siteContacts: Promise<ReadonlyMap<string, SiteContact>>
+}) {
+  if (work.stop.kind !== "Job") return null
+  if (!hasTransferCollect(work, requests)) {
+    return <ContactLines contacts={stopRequests(work, requests, NO_SITE_CONTACTS)} />
+  }
+  return (
+    <Suspense fallback={null}>
+      <StreamedStopContacts work={work} requests={requests} siteContacts={siteContacts} />
+    </Suspense>
+  )
+}
+
+const NO_SITE_CONTACTS: ReadonlyMap<string, SiteContact> = new Map()
+
+function StreamedStopContacts({
+  work,
+  requests,
+  siteContacts,
+}: {
+  work: StopWork
+  requests: ReadonlyMap<string, RequestStopInfo>
+  siteContacts: Promise<ReadonlyMap<string, SiteContact>>
+}) {
+  return <ContactLines contacts={stopRequests(work, requests, use(siteContacts))} />
+}
+
+/**
+ * One line per distinct person. No job name beside each: at a job site every
+ * contact `stopRequests` returns is for that site, which the header already
+ * names. A request with neither a contact nor a phone adds nothing.
+ */
+function ContactLines({ contacts }: { contacts: readonly SiteContact[] }) {
+  const lines = [
+    ...new Map(
+      contacts
+        .filter((entry) => entry.contact || entry.contactPhone)
+        .map((entry) => [`${entry.contact ?? ""}|${entry.contactPhone ?? ""}`, entry])
+    ).values(),
+  ]
+  if (lines.length === 0) return null
+
+  return (
+    <div className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
+      {lines.map((entry) => (
+        <p key={`${entry.contact}|${entry.contactPhone}`} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          {entry.contact && (
+            <span className="flex items-center gap-1.5">
+              <UserIcon className="size-3.5 shrink-0" />
+              {entry.contact}
+            </span>
+          )}
+          {entry.contactPhone && (
+            <span className="flex items-center gap-1.5">
+              <PhoneIcon className="size-3.5 shrink-0" />
+              {entry.contactPhone}
+            </span>
+          )}
+        </p>
+      ))}
     </div>
   )
 }

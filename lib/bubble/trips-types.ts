@@ -12,6 +12,14 @@
  */
 
 import { DEFAULT_WAREHOUSE } from "@/lib/bubble/enums"
+import {
+  isCollectFinished,
+  isCollectOutstanding,
+  isDropFinished,
+  isDropOutstanding,
+  isTurnedAway,
+  type TripMaterialRow,
+} from "@/lib/bubble/trip-materials-types"
 import { isOnTruck, type StopKind, type TripStatus, type TripToolState } from "@/lib/trips/plan-types"
 
 export type Trip = {
@@ -55,10 +63,11 @@ export type TripToolRow = {
   createdAt: string | null
 }
 
-/** A trip with its stops and items attached — what every trip screen renders from. */
+/** A trip with its stops, tools and material lines attached — what every trip screen renders from. */
 export type TripDetail = Trip & {
   stops: TripStop[]
   items: TripToolRow[]
+  materials: TripMaterialRow[]
 }
 
 /**
@@ -81,6 +90,10 @@ export type StopWork = {
    * left to do about it at this address.
    */
   refused: TripToolRow[]
+  /** The same three lists for material lines, split by the same rules. */
+  collectMaterials: TripMaterialRow[]
+  dropMaterials: TripMaterialRow[]
+  refusedMaterials: TripMaterialRow[]
 }
 
 /**
@@ -104,7 +117,7 @@ export function isReturnStop(stop: TripStop): boolean {
  * `Skipped` means the driver reached it and couldn't.
  */
 export function outstandingCollect(work: StopWork): TripToolRow[] {
-  return work.collect.filter((item) => item.state === "Planned")
+  return work.collect.filter(isCollectOutstanding)
 }
 
 /**
@@ -123,7 +136,7 @@ export function outstandingCollect(work: StopWork): TripToolRow[] {
  * available at this stop now.
  */
 export function outstandingDrop(work: StopWork): TripToolRow[] {
-  return work.drop.filter((item) => item.state === "Loaded" || item.state === "Refused")
+  return work.drop.filter(isDropOutstanding)
 }
 
 /**
@@ -158,25 +171,35 @@ export function refusable(work: StopWork): TripToolRow[] {
  * never coming. A stored `status` on `tripstop` would be a second source of
  * truth, and would start lying the moment an item was added to a stop already
  * marked done.
+ *
+ * Material lines are asked the same two questions: a stop is done only when
+ * its tools **and** its materials are.
  */
 export function isStopDone(work: StopWork): boolean {
-  if (work.collect.length + work.drop.length + work.refused.length === 0) return false
-  return (
-    work.collect.every((item) => item.state !== "Planned") &&
-    work.drop.every(
-      (item) => item.state === "Dropped" || item.state === "Skipped" || item.state === "Returned"
-    )
-  )
+  const collects = [...work.collect, ...work.collectMaterials]
+  const drops = [...work.drop, ...work.dropMaterials]
+  if (collects.length + drops.length + work.refused.length + work.refusedMaterials.length === 0) return false
+  return collects.every(isCollectFinished) && drops.every(isDropFinished)
 }
 
-/** Items still on the truck when the trip is about to close — the guard `completeTrip` reports on. */
+/**
+ * Items still on the truck when the trip is about to close — the guard
+ * `completeTrip` reports on. Material lines: `stillLoadedMaterials`.
+ */
 export function stillLoaded(items: readonly TripToolRow[]): TripToolRow[] {
   return items.filter((item) => isOnTruck(item.state))
 }
 
-/** A tool the site turned away — on its way home, wherever its row still points. */
-function turnedAway(item: TripToolRow): boolean {
-  return item.state === "Refused" || item.state === "Returned"
+type Routed = { fromStopKey: string; toStopKey: string; state: TripToolState }
+
+/** One kind of row split across one stop — the rule both kinds share. */
+function atStop<T extends Routed>(rows: readonly T[], stopKey: string, routed: (row: T) => boolean) {
+  const here = rows.filter(routed)
+  return {
+    collect: here.filter((row) => row.fromStopKey === stopKey),
+    drop: here.filter((row) => row.toStopKey === stopKey && !isTurnedAway(row)),
+    refused: here.filter((row) => row.toStopKey === stopKey && isTurnedAway(row)),
+  }
 }
 
 /**
@@ -194,39 +217,50 @@ function turnedAway(item: TripToolRow): boolean {
  * left, and the card would go on offering the drop that just failed. It moves to
  * the stop where the tool actually comes off, and stays visible at the refusing
  * stop through `refused` instead.
+ *
+ * Material lines follow the same rule in the **same pass**, so a trip with a
+ * refused tool and a refused material still synthesises one return stop.
  */
 export function stopWork(trip: TripDetail): StopWork[] {
   const byKey = new Map(trip.stops.map((stop) => [stop.stopKey, stop]))
-  const routed = (item: TripToolRow) => byKey.has(item.fromStopKey) && byKey.has(item.toStopKey)
+  const routed = (row: Routed) => byKey.has(row.fromStopKey) && byKey.has(row.toStopKey)
 
   const work: StopWork[] = [...trip.stops]
     .sort((a, b) => a.seq - b.seq || a.stopKey.localeCompare(b.stopKey))
-    .map((stop) => ({
-      stop,
-      collect: trip.items.filter((item) => item.fromStopKey === stop.stopKey && routed(item)),
-      drop: trip.items.filter((item) => item.toStopKey === stop.stopKey && routed(item) && !turnedAway(item)),
-      refused: trip.items.filter((item) => item.toStopKey === stop.stopKey && routed(item) && turnedAway(item)),
-    }))
+    .map((stop) => {
+      const materials = atStop(trip.materials, stop.stopKey, routed)
+      return {
+        stop,
+        ...atStop(trip.items, stop.stopKey, routed),
+        collectMaterials: materials.collect,
+        dropMaterials: materials.drop,
+        refusedMaterials: materials.refused,
+      }
+    })
 
-  const coming = trip.items.filter((item) => turnedAway(item) && routed(item))
-  if (coming.length === 0) return work
+  const coming = trip.items.filter((item) => isTurnedAway(item) && routed(item))
+  const comingMaterials = trip.materials.filter((row) => isTurnedAway(row) && routed(row))
+  if (coming.length + comingMaterials.length === 0) return work
 
-  // The yard the tool is carried to: the next warehouse the route already
+  // The yard the load is carried to: the next warehouse the route already
   // visits, so one physical stop stays one card, and a fresh terminal one only
   // when the run would otherwise end on a job site.
-  let terminal: StopWork | null = null
-  for (const item of coming) {
+  // A one-slot list rather than a `let`, because it is filled from inside
+  // `hostFor` and TypeScript doesn't track assignments made in a closure.
+  const terminal: StopWork[] = []
+  const hostFor = (row: Routed): StopWork => {
     // `routed` already proved this resolves; `Infinity` is the safe reading if
-    // that ever stops being true — no stop qualifies, so the tool lands on the
+    // that ever stops being true — no stop qualifies, so the load lands on the
     // synthesised terminal rather than on the first warehouse of the route,
     // which the driver may have left hours ago.
-    const refusedAt = byKey.get(item.toStopKey)?.seq ?? Number.POSITIVE_INFINITY
+    const refusedAt = byKey.get(row.toStopKey)?.seq ?? Number.POSITIVE_INFINITY
     const host = work.find((entry) => entry.stop.kind === "Warehouse" && entry.stop.seq > refusedAt)
-    if (host) host.drop.push(item)
-    else (terminal ??= returnStop(trip)).drop.push(item)
+    return host ?? (terminal[0] ??= returnStop(trip))
   }
+  for (const item of coming) hostFor(item).drop.push(item)
+  for (const row of comingMaterials) hostFor(row).dropMaterials.push(row)
 
-  return terminal ? [...work, terminal] : work
+  return [...work, ...terminal]
 }
 
 /** The synthesised yard stop. Derived on every render; nothing in Bubble backs it. */
@@ -244,7 +278,43 @@ function returnStop(trip: TripDetail): StopWork {
     collect: [],
     drop: [],
     refused: [],
+    collectMaterials: [],
+    dropMaterials: [],
+    refusedMaterials: [],
   }
+}
+
+/**
+ * A collect at a job site made for some **other** job — the pickup half of a
+ * site-to-site transfer, or a leg with no request at all.
+ *
+ * `oneJourney` gives a transferred tool the *delivery's* `requestId`, so that
+ * request's contact is someone at the far end, not at this site. Screens asking
+ * "who do I talk to here" for such a collect use the site's own contact
+ * instead (`listSiteContacts`). `request` is the item's request as looked up
+ * by the caller — `undefined` when it has none or it couldn't be found.
+ */
+export function isTransferCollect(
+  stop: Pick<TripStop, "kind" | "location">,
+  request: { job: string } | undefined
+): boolean {
+  return stop.kind === "Job" && request?.job !== stop.location
+}
+
+/** Whether this stop collects anything — tool or material — on behalf of another job. */
+export function hasTransferCollect(work: StopWork, requests: ReadonlyMap<string, { job: string }>): boolean {
+  return [...work.collect, ...work.collectMaterials].some((item) =>
+    isTransferCollect(work.stop, requests.get(item.requestId))
+  )
+}
+
+/** The job sites on a route with at least one transfer collect. */
+export function transferSites(
+  work: readonly StopWork[],
+  requests: ReadonlyMap<string, { job: string }>
+): string[] {
+  const sites = work.filter((entry) => hasTransferCollect(entry, requests)).map((entry) => entry.stop.location)
+  return [...new Set(sites)]
 }
 
 /** What a drop at this stop writes. The one rule that makes pickups and deliveries the same code path. */

@@ -11,52 +11,21 @@ import { TripPlanPreview } from "@/components/trip-plan-preview"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { toast } from "@/components/ui/toast"
+import { useMaterialSelection } from "@/hooks/use-material-selection"
+import { invalidMaterialMessage, selectMaterialMovements } from "@/lib/trips/material-movement-types"
 import type { RequestMovements } from "@/lib/trips/movement-types"
 import { selectMovements } from "@/lib/trips/movement-types"
 import { planTrip } from "@/lib/trips/plan"
-import type { Movement, PlannedStop } from "@/lib/trips/plan-types"
+import type { PlannedStop, TripPlan } from "@/lib/trips/plan-types"
 import { DEFAULT_START_TIME, formatClock, minutesOfTime } from "@/lib/trips/schedule"
+import { deriveInitialSplitPreference, initialMaterialSelection, type TripDraft } from "@/lib/trips/trip-draft"
 import { validatePlan } from "@/lib/trips/validate"
 
-export type TripDraft = {
-  tripId: string
-  driver: string
-  tripDate: string
-  /** `"HH:mm"` — the saved trip's departure time, read back off its `tripDate` instant. */
-  startTime: string
-  notes: string
-  toolIds: string[]
-  stopOrder: string[]
-  /** Locations that appeared twice among the saved trip's stops — i.e. the side of a cycle it split. */
-  splitLocations: string[]
-}
+const EMPTY_PLAN: TripPlan = { stops: [], items: [], materials: [], noop: [], noopMaterials: [], splitChoices: [] }
 
 /**
- * Reconstructs which side of each circular pickup/drop the saved trip split,
- * purely from its stop locations — there is no Bubble field for this, so a
- * location that was visited twice at save time is the only evidence left.
- *
- * Runs once, against a plan seeded with no preference: `SplitChoice.key` only
- * depends on the movement graph, not on which side got picked, so the default
- * plan's `splitChoices` already names every cycle this trip could have split,
- * and `draft.splitLocations` says which one it actually did.
- */
-function deriveInitialSplitPreference(movements: readonly Movement[], splitLocations: readonly string[]) {
-  const preference = new Map<string, string>()
-  if (movements.length === 0 || splitLocations.length === 0) return preference
-
-  const saved = new Set(splitLocations)
-  for (const choice of planTrip(movements).splitChoices) {
-    if (saved.has(choice.chosen)) continue
-    const actual = choice.candidates.find((location) => location !== choice.chosen && saved.has(location))
-    if (actual) preference.set(choice.key, actual)
-  }
-  return preference
-}
-
-/**
- * The trip builder: pick tools on the left, watch the route build itself on the
- * right, drag it into the order you'd actually drive, save.
+ * The trip builder: pick tools and material lines on the left, watch the route
+ * build itself on the right, drag it into the order you'd actually drive, save.
  *
  * **The route is derived, never stored in state.** `planTrip` runs on every
  * tick from the current selection, so there is no second copy of the plan to
@@ -84,7 +53,8 @@ export function TripBuilder({
   /**
    * `?requestId=` — arriving from a request's own "Add to a trip" button, which
    * is the only route into here that already knows what the user wants. Seeds
-   * that request's movable tools; everything else starts unticked.
+   * that request's movable tools and material lines; everything else starts
+   * unticked.
    */
   preselectRequestId?: string
 }) {
@@ -100,6 +70,7 @@ export function TripBuilder({
       .map((movement) => movement.toolId)
     return new Set(seeded)
   })
+  const lines = useMaterialSelection(() => initialMaterialSelection(groups, draft, preselectRequestId))
   const [destinations, setDestinations] = useState<Map<string, string>>(() => new Map())
   const [driver, setDriver] = useState(draft?.driver ?? "")
   const [tripDate, setTripDate] = useState(draft?.tripDate ?? today)
@@ -109,18 +80,23 @@ export function TripBuilder({
   const [splitPreference, setSplitPreference] = useState<Map<string, string>>(() => {
     if (!draft) return new Map()
     const { movements } = selectMovements(groups, selectedIds, destinations)
-    return deriveInitialSplitPreference(movements, draft.splitLocations)
+    const { materials } = selectMaterialMovements(groups, lines.quantities)
+    return deriveInitialSplitPreference(movements, materials, draft.splitLocations)
   })
 
   const selection = useMemo(
     () => selectMovements(groups, selectedIds, destinations),
     [groups, selectedIds, destinations]
   )
+  const materialSelection = useMemo(
+    () => selectMaterialMovements(groups, lines.quantities),
+    [groups, lines.quantities]
+  )
 
   const plan = useMemo(() => {
-    if (selection.movements.length === 0) return { stops: [], items: [], noop: [], splitChoices: [] }
-    return planTrip(selection.movements, { splitPreference })
-  }, [selection, splitPreference])
+    if (selection.movements.length + materialSelection.materials.length === 0) return EMPTY_PLAN
+    return planTrip(selection.movements, { splitPreference }, materialSelection.materials)
+  }, [selection, materialSelection, splitPreference])
 
   // Where each ticked tool is *really* going. Usually its own group's
   // destination, but a tool that a pickup and a delivery both name travels once
@@ -145,11 +121,15 @@ export function TripBuilder({
       .map((stop, index) => ({ ...stop, seq: index + 1 }))
   }, [plan.stops, stopOrder])
 
-  const problems = validatePlan(stops, plan.items)
+  // A draft's saved quantity can exceed what's left once another dispatcher has
+  // planned part of the line; that is refused by name here as on the server.
+  const problems = validatePlan(stops, plan.items, plan.materials)
   const blockingProblem =
     state.status === "error" || state.status === "invalid"
       ? state.message
-      : (problems.find((problem) => problem.kind !== "empty")?.message ?? null)
+      : materialSelection.invalid.length > 0
+        ? invalidMaterialMessage(materialSelection.invalid)
+        : (problems.find((problem) => problem.kind !== "empty")?.message ?? null)
 
   function toggle(toolId: string, checked: boolean) {
     setSelectedIds((current) => {
@@ -170,14 +150,7 @@ export function TripBuilder({
       }
       return next
     })
-  }
-
-  function reorder(next: PlannedStop[]) {
-    setStopOrder(next.map((stop) => stop.stopKey))
-  }
-
-  function flipSplit(key: string, location: string) {
-    setSplitPreference((current) => new Map(current).set(key, location))
+    lines.setAll(group.materials, checked)
   }
 
   function save() {
@@ -194,8 +167,10 @@ export function TripBuilder({
             requestId: group.requestId,
             warehouse: destinations.get(group.requestId) ?? group.destination,
           })),
+        materials: [...lines.quantities].map(([lineId, qty]) => ({ lineId, qty })),
         stops,
         items: plan.items,
+        plannedMaterials: plan.materials,
         splitPreference: plan.splitChoices.map((choice) => ({ key: choice.key, chosen: choice.chosen })),
       }
 
@@ -206,17 +181,12 @@ export function TripBuilder({
       setState(result)
 
       if (result.status === "saved") {
+        const cargo = [`${result.tools} tools`, result.materials ? `${result.materials} materials` : null]
         toast.add({
-          title: result.warning
-            ? draft
-              ? "Trip updated, with a warning"
-              : "Trip saved, with a warning"
-            : draft
-              ? "Trip updated"
-              : "Trip saved",
+          title: `${draft ? "Trip updated" : "Trip saved"}${result.warning ? ", with a warning" : ""}`,
           description:
             result.warning ??
-            `${result.tools} tools over ${result.stops} stops. Nothing has moved yet — start the trip when the driver leaves.`,
+            `${cargo.filter(Boolean).join(", ")} over ${result.stops} stops. Nothing has moved yet — start the trip when the driver leaves.`,
         })
         router.push(`/trips/${result.tripId}`)
       }
@@ -229,18 +199,22 @@ export function TripBuilder({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
       <Card size="sm">
         <CardHeader>
-          <CardTitle>Tools to move</CardTitle>
+          <CardTitle>What to move</CardTitle>
           <CardDescription>
-            Pick individual tools — a request can be split across as many trips as it takes.
+            Pick individual tools and how much of each material — a request can be split across as many trips as it
+            takes.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <TripMovementPool
             groups={groups}
             selectedIds={selectedIds}
+            materialQty={lines.quantities}
             destinations={destinations}
             journeys={journeys}
             onToggle={toggle}
+            onToggleMaterial={lines.toggle}
+            onMaterialQtyChange={lines.setQty}
             onToggleGroup={toggleGroup}
             onDestinationChange={(requestId, warehouse) =>
               setDestinations((current) => new Map(current).set(requestId, warehouse))
@@ -266,17 +240,18 @@ export function TripBuilder({
               <Empty className="border border-dashed py-8">
                 <EmptyHeader>
                   <EmptyTitle>No stops yet</EmptyTitle>
-                  <EmptyDescription>Pick a tool and the route builds itself.</EmptyDescription>
+                  <EmptyDescription>Pick a tool or a material and the route builds itself.</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             ) : (
               <TripPlanPreview
                 stops={stops}
                 items={plan.items}
+                materials={plan.materials}
                 startTime={startTime}
                 splitChoices={plan.splitChoices}
-                onReorder={reorder}
-                onFlipSplit={flipSplit}
+                onReorder={(next: PlannedStop[]) => setStopOrder(next.map((stop) => stop.stopKey))}
+                onFlipSplit={(key, location) => setSplitPreference((current) => new Map(current).set(key, location))}
                 disabled={pending}
               />
             )}
@@ -292,6 +267,7 @@ export function TripBuilder({
               startTime={startTime}
               notes={notes}
               toolCount={plan.items.length}
+              materialCount={plan.materials.length}
               stopCount={stops.length}
               problem={blockingProblem}
               pending={pending}

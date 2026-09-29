@@ -5,9 +5,11 @@ import { buildSlots, type CandidateTool } from "@/lib/bubble/assigned-tools-type
 import { DEFAULT_WAREHOUSE, isPickupRequest, type RequestStatus } from "@/lib/bubble/enums"
 import { listToolTypes } from "@/lib/bubble/reference"
 import { listRequestsByStatus, type ToolRequest } from "@/lib/bubble/requests"
+import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { listToolClaims } from "@/lib/bubble/trips-read"
 import { isAssignable } from "@/lib/bubble/tool-enums"
 import { NO_LOCATION } from "@/lib/bubble/pickup-tools-types"
+import { outstandingMaterialsFor } from "@/lib/trips/material-movement-types"
 import { hasLanded, requestProgress } from "@/lib/trips/request-progress"
 import type { MovementBlock, OutstandingMovement, RequestMovements } from "@/lib/trips/movement-types"
 
@@ -44,21 +46,29 @@ const SOURCE_STATUSES: readonly RequestStatus[] = [
  * Every outstanding movement, grouped by request and sorted by when the request
  * is due.
  *
- * Six reads regardless of how many requests come back: four status queries in
- * parallel, then one `in` for their `assignedtools`, one for the `tools`
- * themselves, and the claim lookup (which is two of its own).
+ * A fixed number of reads however many requests come back: four status
+ * queries in parallel, then one `in` for their `assignedtools` beside the
+ * material lines' trip rows (two of their own), then the `tools` themselves
+ * and the claim lookup (two more).
  *
  * `excludeTripId` is the trip currently being edited. Its own tools are claimed
  * by it, and a draft holding a tool is not a reason that draft can't hold it —
  * without this the edit builder shows every tool on the trip as blocked and
- * plans no route at all.
+ * plans no route at all. Its own material rows are left out of the outstanding
+ * sums for the same reason.
+ *
+ * **There's no early return on "no assigned tools".** A request can be
+ * materials-only, and returning early here would hide every one of them.
  */
 export async function listOutstandingMovements(excludeTripId?: string): Promise<RequestMovements[]> {
   const requests = (await Promise.all(SOURCE_STATUSES.map((status) => listRequestsByStatus(status)))).flat()
   if (requests.length === 0) return []
 
-  const assignedRows = await listAssignedTools(requests.map((request) => request.id))
-  if (assignedRows.length === 0) return []
+  const lineIds = requests.flatMap((request) => request.materialLines.map((line) => line.id))
+  const [assignedRows, materialTripRows] = await Promise.all([
+    listAssignedTools(requests.map((request) => request.id)),
+    listTripMaterialsForLines(lineIds),
+  ])
 
   const toolIds = [...new Set(assignedRows.map((row) => row.toolId))]
   const [tools, toolTypes, claims] = await Promise.all([
@@ -77,7 +87,8 @@ export async function listOutstandingMovements(excludeTripId?: string): Promise<
 
   for (const request of requests) {
     const rows = rowsByRequest.get(request.id) ?? []
-    if (rows.length === 0) continue
+    const materials = outstandingMaterialsFor(request, request.materialLines, materialTripRows, excludeTripId)
+    if (rows.length === 0 && materials.length === 0) continue
 
     const pickup = isPickupRequest(request)
     const destination = pickup ? DEFAULT_WAREHOUSE : request.job
@@ -106,9 +117,14 @@ export async function listOutstandingMovements(excludeTripId?: string): Promise<
       })
     }
 
-    if (movements.length === 0) continue
+    if (movements.length === 0 && materials.length === 0) continue
 
-    const progress = requestProgress(request, rows, toolsById, unfilledSlots)
+    // All of the lines' trip rows, the edited trip's included: progress is
+    // about what has landed, not about what this draft may still claim.
+    const progress = requestProgress(request, rows, toolsById, unfilledSlots, {
+      lines: request.materialLines,
+      tripRows: materialTripRows,
+    })
 
     groups.push({
       requestId: request.id,
@@ -121,6 +137,7 @@ export async function listOutstandingMovements(excludeTripId?: string): Promise<
       destination,
       destinationIsChoosable: pickup,
       movements: movements.sort((a, b) => a.toolName.localeCompare(b.toolName)),
+      materials,
       landed: progress.landed,
       total: progress.assigned,
       unfilledSlots,

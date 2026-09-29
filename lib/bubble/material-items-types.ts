@@ -54,9 +54,23 @@ export function normaliseMaterialName(name: string): string {
  *
  * `Receive` and `Adjust` come from `/materials`; `Assign`, `Unassign` and
  * `Release` from `assign-material-line`; `Return` from the trip workflows (5D,
- * 5F).
+ * 5F). `Deliver` and `Collect` are **site** rows, written by
+ * `adjust-site-stock` when a trip drops at a job (5D) or collects from one
+ * (5F). Their `location` is the job, and `stockAfter` is that site's qty.
+ *
+ * Adding a value here must ship **before** Bubble writes it. The history
+ * reader parses through this list, so an unknown reason breaks the item page.
  */
-export const STOCK_REASON = ["Receive", "Adjust", "Assign", "Unassign", "Return", "Release"] as const
+export const STOCK_REASON = [
+  "Receive",
+  "Adjust",
+  "Assign",
+  "Unassign",
+  "Return",
+  "Release",
+  "Deliver",
+  "Collect",
+] as const
 export type StockReason = (typeof STOCK_REASON)[number]
 
 /** The two reasons `adjust-material-stock` is ever sent. */
@@ -72,6 +86,8 @@ export type StockHistoryEntry = {
   delta: number
   stockAfter: number | null
   reason: StockReason
+  /** The job site whose stock moved. `""` = the warehouse, which every row before 5D is. */
+  location: string
   requestId: string | null
   tripId: string | null
   byName: string | null

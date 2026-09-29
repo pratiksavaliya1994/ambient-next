@@ -46,12 +46,10 @@ export const requestFormSchema = z
     notes: z.string().trim().max(2000),
     toolsNotes: z.string().trim().max(2000),
     /**
-     * The legacy free-text popup — still on the form until 5C swaps it for the
-     * line picker, and sent as the legacy `materials` field only when there are
-     * no `materialLines` (which otherwise supply that text themselves).
+     * Phase 5 structured lines. Resolved against the catalogue server-side
+     * before sending. Since 5C they're the delivery form's only materials: the
+     * legacy `materials` text `new-request` still takes is their summary.
      */
-    materials: z.string().trim().max(2000),
-    /** Phase 5 structured lines. Resolved against the catalogue server-side before sending. */
     materialLines: materialLinesSchema,
     tentative: z.boolean(),
     tools: z.array(toolLineSchema),
@@ -64,7 +62,7 @@ export const requestFormSchema = z
     message: "End date can't be before the start date.",
     path: ["endDate"],
   })
-  .refine((value) => value.tools.length > 0 || value.materialLines.length > 0 || value.materials.trim().length > 3, {
+  .refine((value) => value.tools.length > 0 || value.materialLines.length > 0, {
     message: "Add at least one tool or material.",
     path: ["tools"],
   })

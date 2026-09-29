@@ -11,6 +11,8 @@
  * "request and location vocabulary".
  */
 
+import type { MaterialKind } from "@/lib/bubble/requested-materials-types"
+
 /**
  * `trip.status`. **Text in Bubble, not an option set** — the same call
  * `request.status` makes, so an unexpected value fails loudly in Zod here
@@ -61,6 +63,13 @@ export const TRIP_TOOL_STATE = ["Planned", "Loaded", "Dropped", "Skipped", "Refu
 export type TripToolState = (typeof TRIP_TOOL_STATE)[number]
 
 export const DEFAULT_TRIP_TOOL_STATE: TripToolState = "Planned"
+
+/**
+ * `tripmaterial.state` — the same vocabulary as `triptool.state`, not a copy
+ * of it. The master doc's state table is the tool one applied to both kinds
+ * of row, so one list keeps the two from drifting apart.
+ */
+export type TripMaterialState = TripToolState
 
 /**
  * Whether this row still holds a claim on its tool, blocking another trip from
@@ -175,6 +184,36 @@ export type PlannedItem = Movement & {
 }
 
 /**
+ * One material line's share of this trip, before it has been given stops —
+ * `Movement`'s twin for cargo counted in units, not identified by an id.
+ *
+ * `qty` is how much of the line this trip carries. A line can go out over
+ * several trips, but it has **at most one row per trip** (`duplicate-line` in
+ * `validate.ts`). In 5D `from` is always the warehouse and `to` the request's
+ * job.
+ */
+export type MaterialMovement = {
+  lineId: string
+  requestId: string
+  /** `materialitem._id`. `null` on a non-inventory line. */
+  materialId: string | null
+  name: string
+  unit: string
+  kind: MaterialKind
+  qty: number
+  from: string
+  to: string
+}
+
+/** A material movement with its two stops resolved. Same repair-path reasoning as `PlannedItem`. */
+export type PlannedMaterial = MaterialMovement & {
+  fromStopKey: string
+  fromLocation: string
+  toStopKey: string
+  toLocation: string
+}
+
+/**
  * A record of one cycle `planTrip` had to break by splitting a node into a
  * collect half and a drop half — and which other locations could have been
  * split instead.
@@ -193,8 +232,11 @@ export type SplitChoice = {
 export type TripPlan = {
   stops: PlannedStop[]
   items: PlannedItem[]
+  materials: PlannedMaterial[]
   /** Movements whose origin already equals their destination — the tool is already there, so there is nothing to drive. */
   noop: Movement[]
+  /** `noop`'s material twin. */
+  noopMaterials: MaterialMovement[]
   /** Every cycle this plan resolved by splitting a node, and what else it could have split instead. */
   splitChoices: SplitChoice[]
 }

@@ -76,7 +76,6 @@ export function useCombinedRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): 
       cleanup: false,
       deliveryTools: [],
       deliveryToolsNotes: "",
-      deliveryMaterials: "",
       deliveryMaterialLines: [],
       pickupTools: [],
       pickupToolIds: [],

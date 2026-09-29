@@ -3,7 +3,18 @@ import "server-only"
 import { z } from "zod"
 
 import { bubbleRunWorkflow } from "@/lib/bubble/client"
-import type { PlannedItem, PlannedStop, TripStatus, TripToolState } from "@/lib/trips/plan-types"
+import {
+  assertMaterialStopCounts,
+  assertPlanCounts,
+  assertStartCounts,
+  materialPayload,
+  materialStopPayload,
+  materialStopResultShape,
+  planResultShape,
+  type MaterialStopCounts,
+  type MaterialStopLists,
+} from "@/lib/bubble/trip-material-payload"
+import type { PlannedItem, PlannedMaterial, PlannedStop, TripStatus, TripToolState } from "@/lib/trips/plan-types"
 import type { ToolStatusNew } from "@/lib/bubble/tool-enums"
 
 /**
@@ -34,16 +45,19 @@ const COMPLETE_TRIP_STOP = "complete-trip-stop"
 const COMPLETE_TRIP = "complete-trip"
 const CANCEL_TRIP = "cancel-trip"
 
-const createResult = z.looseObject({ tripId: z.string(), stops: z.number(), items: z.number() })
-const saveResult = z.looseObject({ stops: z.number(), items: z.number() })
+const saveResult = z.looseObject(planResultShape)
+const createResult = saveResult.extend({ tripId: z.string() })
 const stopResult = z.looseObject({
   dropped: z.number(),
   loaded: z.number(),
   skipped: z.number(),
   refused: z.number(),
   returned: z.number(),
+  ...materialStopResultShape,
 })
 const okResult = z.looseObject({ ok: z.boolean() })
+
+type StopCounts = { dropped: number; loaded: number; skipped: number; refused: number; returned: number }
 
 /**
  * Whether Bubble refused the call because the trip was in the wrong state.
@@ -114,17 +128,19 @@ export async function createTrip(
   idempotencyKey: string,
   header: TripHeaderInput,
   stops: readonly PlannedStop[],
-  items: readonly PlannedItem[]
+  items: readonly PlannedItem[],
+  materials: readonly PlannedMaterial[] = []
 ): Promise<{ tripId: string }> {
   const raw = await bubbleRunWorkflow(CREATE_TRIP, {
     idempotencyKey,
     ...header,
     stops: stops.map(stopPayload),
     items: items.map(itemPayload),
+    materials: materials.map(materialPayload),
   })
   const result = createResult.parse(raw)
 
-  assertCounts(result.stops, stops.length, result.items, items.length)
+  assertPlanCounts(result, stops.length, items.length, materials.length)
   return { tripId: result.tripId }
 }
 
@@ -145,20 +161,20 @@ export async function saveTrip(
   tripId: string,
   header: TripHeaderInput,
   stops: readonly PlannedStop[],
-  items: readonly PlannedItem[]
+  items: readonly PlannedItem[],
+  materials: readonly PlannedMaterial[] = []
 ): Promise<void> {
   const raw = await bubbleRunWorkflow(SAVE_TRIP, {
     tripId,
     ...header,
     stops: stops.map(stopPayload),
     items: items.map(itemPayload),
+    materials: materials.map(materialPayload),
   })
   if (refused(raw)) {
     throw new Error("This trip has already started, so its plan is fixed. Reload the page to see where it got to.")
   }
-  const result = saveResult.parse(raw)
-
-  assertCounts(result.stops, stops.length, result.items, items.length)
+  assertPlanCounts(saveResult.parse(raw), stops.length, items.length, materials.length)
 }
 
 /**
@@ -171,16 +187,17 @@ export async function saveTrip(
  * therefore already done, so the driver never got to tick off what they
  * actually put in the van — and a tool left behind at the first stop was
  * recorded as collected. Every collect now happens where it physically
- * happens, through `completeTripStop`.
+ * happens, through `completeTripStop`. `materialLineIds` is sent empty for the same reason.
  */
-export async function startTrip(tripId: string, driver: string): Promise<void> {
-  const raw = await bubbleRunWorkflow(START_TRIP, { tripId, driver, toolIds: [] })
+export async function startTrip(tripId: string, driver: string, materialLineIds: readonly string[] = []): Promise<void> {
+  const raw = await bubbleRunWorkflow(START_TRIP, { tripId, driver, toolIds: [], materialLineIds: [...materialLineIds] })
   if (refused(raw)) {
     throw new Error("This trip has already been started. Reload the page.")
   }
+  assertStartCounts(raw, materialLineIds.length)
 }
 
-export type CompleteStopInput = {
+export type CompleteStopInput = MaterialStopLists & {
   tripId: string
   stopKey: string
   driver: string
@@ -220,13 +237,7 @@ export type CompleteStopInput = {
  * the warehouse stop that was already going to take a planned pickup, and that
  * one call has to write `Dropped` for one tool and `Returned` for the other.
  */
-export async function completeTripStop(input: CompleteStopInput): Promise<{
-  dropped: number
-  loaded: number
-  skipped: number
-  refused: number
-  returned: number
-}> {
+export async function completeTripStop(input: CompleteStopInput): Promise<StopCounts & MaterialStopCounts> {
   const raw = await bubbleRunWorkflow(COMPLETE_TRIP_STOP, {
     tripId: input.tripId,
     stopKey: input.stopKey,
@@ -238,6 +249,7 @@ export async function completeTripStop(input: CompleteStopInput): Promise<{
     skipToolIds: [...input.skipToolIds],
     refuseToolIds: [...input.refuseToolIds],
     returnToolIds: [...input.returnToolIds],
+    ...materialStopPayload(input),
   })
   if (refused(raw)) {
     throw new Error("This trip isn't running — it may already be completed or cancelled. Reload the page.")
@@ -250,7 +262,8 @@ export async function completeTripStop(input: CompleteStopInput): Promise<{
   assertExact(result.refused, input.refuseToolIds.length, "refused")
   assertExact(result.returned, input.returnToolIds.length, "returned")
 
-  return result
+  const { dropped, loaded, skipped, refused: turnedAway, returned } = result
+  return { dropped, loaded, skipped, refused: turnedAway, returned, ...assertMaterialStopCounts(result, input) }
 }
 
 export async function completeTrip(tripId: string): Promise<void> {
@@ -273,15 +286,6 @@ export async function cancelTrip(tripId: string): Promise<void> {
   }
   const result = okResult.parse(raw)
   if (!result.ok) throw new Error("Bubble refused to cancel this trip. Reload the page.")
-}
-
-function assertCounts(stops: number, expectedStops: number, items: number, expectedItems: number): void {
-  if (stops !== expectedStops || items !== expectedItems) {
-    throw new Error(
-      `Bubble saved ${stops} of ${expectedStops} stops and ${items} of ${expectedItems} tools. ` +
-        `Save again — it replaces the whole plan rather than adding to it.`
-    )
-  }
 }
 
 function assertExact(actual: number, expected: number, noun: string): void {

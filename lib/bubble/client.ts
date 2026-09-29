@@ -23,6 +23,25 @@ export class BubbleError extends Error {
   }
 }
 
+/**
+ * The message plus Bubble's own reason, when it gave one — its 4xx bodies are
+ * `{ body: { status, message } }` (workflows) or `{ status, message }`, and the
+ * `message` is what says which parameter it refused.
+ */
+export function describeBubbleError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error)
+  if (!(error instanceof BubbleError) || !error.body) return error.message
+  let reason: string | undefined
+  try {
+    const parsed = JSON.parse(error.body) as { message?: unknown; body?: { message?: unknown } }
+    const message = parsed.body?.message ?? parsed.message
+    if (typeof message === "string") reason = message
+  } catch {
+    reason = error.body.slice(0, 300)
+  }
+  return reason ? `${error.message} — ${reason}` : error.message
+}
+
 export type Constraint = {
   key: string
   constraint_type:
