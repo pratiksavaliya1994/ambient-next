@@ -15,6 +15,12 @@ export type Job = {
   description: string
   gc: string | null
   borough: string | null
+  /** `jobs.details` — the address/notes text `description` is built from. Read-only, for `/sites/[jobId]`. */
+  details: string | null
+  /** `jobs.location` — the full street address, distinct from `borough`. Read-only, for `/sites/[jobId]`. */
+  location: string | null
+  /** `jobs.ongoing` — whether the job is still active. Read-only, for `/sites/[jobId]`. */
+  ongoing: boolean | null
 }
 
 /**
@@ -34,6 +40,9 @@ export function toJobOption(job: Job): Job {
     gc: job.gc,
     borough: job.borough,
     description: job.description,
+    details: job.details,
+    location: job.location,
+    ongoing: job.ongoing,
   }
 }
 

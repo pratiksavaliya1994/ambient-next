@@ -1,16 +1,18 @@
 "use client"
 
-import { PackageIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react"
+import { Maximize2, Minimize2, PackageIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import { MaterialCatalogueCard } from "@/components/material-catalogue-card"
-import { buttonVariants } from "@/components/ui/button"
+import { useFullscreen } from "@/components/tools-dashboard"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { useAutoScroll } from "@/hooks/use-auto-scroll"
 import type { MaterialItem } from "@/lib/bubble/material-items-types"
 
 const ALL_CATEGORIES = "__all__"
@@ -26,6 +28,8 @@ export function MaterialsCatalogue({ items }: { items: MaterialItem[] }) {
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState(ALL_CATEGORIES)
   const [showRetired, setShowRetired] = useState(false)
+  const { ref: fsRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen<HTMLDivElement>()
+  useAutoScroll(fsRef, isFullscreen)
 
   const categories = useMemo(
     () => [...new Set(items.flatMap((item) => (item.category ? [item.category] : [])))].sort((a, b) => a.localeCompare(b)),
@@ -46,15 +50,28 @@ export function MaterialsCatalogue({ items }: { items: MaterialItem[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <CatalogueFilters
-        query={query}
-        onQueryChange={setQuery}
-        categories={categories}
-        category={category}
-        onCategoryChange={setCategory}
-        showRetired={showRetired}
-        onShowRetiredChange={setShowRetired}
-      />
+      <div className="flex items-start gap-2">
+        <div className="flex-1">
+          <CatalogueFilters
+            query={query}
+            onQueryChange={setQuery}
+            categories={categories}
+            category={category}
+            onCategoryChange={setCategory}
+            showRetired={showRetired}
+            onShowRetiredChange={setShowRetired}
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          className="shrink-0"
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        >
+          {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        </Button>
+      </div>
 
       <p className="text-sm text-muted-foreground">
         {visible.length} {visible.length === 1 ? "material" : "materials"}
@@ -68,10 +85,12 @@ export function MaterialsCatalogue({ items }: { items: MaterialItem[] }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {visible.map((item) => (
-            <MaterialCatalogueCard key={item.id} item={item} />
-          ))}
+        <div ref={fsRef} className={isFullscreen ? "h-full w-full overflow-y-auto bg-background p-4" : undefined}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {visible.map((item) => (
+              <MaterialCatalogueCard key={item.id} item={item} />
+            ))}
+          </div>
         </div>
       )}
     </div>

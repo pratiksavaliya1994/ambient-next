@@ -55,7 +55,8 @@ const jobRow = z.looseObject({
   details: z.string().optional(),
   gc: z.string().optional(),
   borough: z.string().optional(),
-  status: z.string().optional(),
+  location: z.string().optional(),
+  ongoing: z.boolean().optional(),
 })
 
 export function listJobs(): Promise<Job[]> {
@@ -70,6 +71,9 @@ export function listJobs(): Promise<Job[]> {
         description: row.description ?? row.name!,
         gc: row.gc ?? null,
         borough: row.borough ?? null,
+        details: row.details ?? null,
+        location: row.location ?? null,
+        ongoing: row.ongoing ?? null,
       }))
       .sort((a, b) => a.name.localeCompare(b.name))
   })

@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { Suspense } from "react"
 
+import { AutoRefresh } from "@/components/auto-refresh"
 import { MaterialsCatalogue } from "@/components/materials-catalogue"
 import { MaterialsCatalogueSkeleton } from "@/components/materials-skeletons"
 import { MaterialsViewSwitch } from "@/components/materials-view-switch"
@@ -34,6 +35,8 @@ export default function MaterialsPage() {
       </div>
 
       <MaterialsViewSwitch active="warehouse" />
+
+      <AutoRefresh />
 
       <Suspense fallback={<MaterialsCatalogueSkeleton />}>
         <MaterialsList />

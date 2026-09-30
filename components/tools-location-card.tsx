@@ -1,3 +1,4 @@
+import Link from "next/link"
 import * as React from "react"
 
 import { groupToolsByType, ToolTypeList } from "@/components/tool-type-list"
@@ -15,10 +16,13 @@ export function LocationCard({
   location,
   tools,
   isExtra,
+  jobId,
 }: {
   location: string
   tools: DashboardTool[]
   isExtra: boolean
+  /** `jobs._id` for this location, when it names a real job — see `siteJobIds`. Undefined renders unlinked. */
+  jobId?: string
 }) {
   const isUnset = location === NO_LOCATION
   const { groups, singles } = React.useMemo(() => groupToolsByType(tools), [tools])
@@ -64,7 +68,13 @@ export function LocationCard({
           className={cn("truncate text-sm text-primary-foreground", isUnset && "italic opacity-70")}
           title={location}
         >
-          {location}
+          {jobId ? (
+            <Link href={`/sites/${jobId}`} className="hover:underline">
+              {location}
+            </Link>
+          ) : (
+            location
+          )}
         </CardTitle>
         {isExtra && <span className="sr-only">Match found outside your selection</span>}
         <CardAction>

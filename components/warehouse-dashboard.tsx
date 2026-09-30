@@ -7,6 +7,7 @@ import { WarehouseDashboardFilters } from "@/components/warehouse-dashboard-filt
 import { WarehouseMasonryGrid } from "@/components/warehouse-masonry-grid"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { useAutoScroll } from "@/hooks/use-auto-scroll"
 import type { WarehouseListParams, WarehouseTypeGroup } from "@/lib/tools/warehouse-filters"
 
 /** Same fullscreen idiom as `ToolsDashboard` — the filter row keeps a
@@ -22,6 +23,7 @@ export function WarehouseDashboard({
   totalTools: number
 }) {
   const { ref: fsRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen<HTMLDivElement>()
+  useAutoScroll(fsRef, isFullscreen)
 
   return (
     <div

@@ -1,9 +1,11 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { AutoRefresh } from "@/components/auto-refresh"
 import { ToolsDashboard } from "@/components/tools-dashboard"
 import { ToolsDashboardSkeleton } from "@/components/tools-skeletons"
 import { listAllTools } from "@/lib/bubble/pickup-tools"
+import { siteJobIds } from "@/lib/bubble/site-stock"
 
 export const metadata: Metadata = { title: "Job Dashboard" }
 export const revalidate = 60
@@ -23,6 +25,8 @@ export default function ToolsPage() {
         <p className="text-xs text-muted-foreground">Every tool, grouped by its current location.</p>
       </div>
 
+      <AutoRefresh />
+
       <Suspense fallback={<ToolsDashboardSkeleton />}>
         <ToolsList />
       </Suspense>
@@ -32,5 +36,6 @@ export default function ToolsPage() {
 
 async function ToolsList() {
   const tools = await listAllTools()
-  return <ToolsDashboard tools={tools} />
+  const jobIds = await siteJobIds(tools.map((tool) => tool.location))
+  return <ToolsDashboard tools={tools} jobIds={Object.fromEntries(jobIds)} />
 }

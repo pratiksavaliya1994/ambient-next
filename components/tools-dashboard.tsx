@@ -5,6 +5,7 @@ import * as React from "react"
 import { ToolsDashboardFilters } from "@/components/tools-dashboard-filters"
 import { LocationCard } from "@/components/tools-location-card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { useAutoScroll } from "@/hooks/use-auto-scroll"
 import { NO_LOCATION, type DashboardTool } from "@/lib/bubble/pickup-tools-types"
 import { Button } from "./ui/button"
 import { Maximize2, Minimize2 } from "lucide-react"
@@ -58,7 +59,14 @@ function writeStoredLocations(locations: string[]) {
   }
 }
 
-export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
+export function ToolsDashboard({
+  tools,
+  jobIds = {},
+}: {
+  tools: DashboardTool[]
+  /** `location → jobs._id`, for each card's title link. A location missing here renders unlinked. */
+  jobIds?: Record<string, string>
+}) {
   const locations = React.useMemo(() => {
     const names = new Set(tools.map((tool) => tool.location))
     const real = [...names].filter((name) => name !== NO_LOCATION).sort()
@@ -68,6 +76,7 @@ export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
   const [selected, setSelected] = React.useState<string[]>([])
   const [committedSearch, setCommittedSearch] = React.useState("")
   const { ref: fsRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen<HTMLDivElement>()
+  useAutoScroll(fsRef, isFullscreen)
 
   // Reading the saved selection needs `localStorage`, which doesn't exist
   // during server rendering — there's no way to know it while rendering, so
@@ -155,7 +164,12 @@ export function ToolsDashboard({ tools }: { tools: DashboardTool[] }) {
           <div className="columns-3xs gap-1.5">
             {grouped.map((group) => (
               <div key={group.location} className="mb-1.5 break-inside-avoid">
-                <LocationCard location={group.location} tools={group.tools} isExtra={group.isExtra} />
+                <LocationCard
+                  location={group.location}
+                  tools={group.tools}
+                  isExtra={group.isExtra}
+                  jobId={jobIds[group.location]}
+                />
               </div>
             ))}
           </div>

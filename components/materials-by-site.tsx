@@ -1,11 +1,14 @@
 "use client"
 
-import { MapPinIcon, SearchIcon, XIcon } from "lucide-react"
+import { MapPinIcon, Maximize2, Minimize2, SearchIcon, XIcon } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { SiteStockCard } from "@/components/site-stock-card"
+import { useFullscreen } from "@/components/tools-dashboard"
+import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { useAutoScroll } from "@/hooks/use-auto-scroll"
 import type { SiteGroup } from "@/lib/bubble/site-stock-types"
 
 /**
@@ -25,6 +28,8 @@ export function MaterialsBySite({
   jobIds: Record<string, string>
 }) {
   const [query, setQuery] = useState("")
+  const { ref: fsRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen<HTMLDivElement>()
+  useAutoScroll(fsRef, isFullscreen)
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -54,23 +59,34 @@ export function MaterialsBySite({
 
   return (
     <div className="flex flex-col gap-3">
-      <InputGroup className="max-w-sm min-w-0">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search sites or materials…"
-        />
-        {query && (
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={() => setQuery("")}>
-              <XIcon />
-            </InputGroupButton>
+      <div className="flex items-start justify-between gap-2">
+        <InputGroup className="max-w-sm min-w-0">
+          <InputGroupAddon>
+            <SearchIcon />
           </InputGroupAddon>
-        )}
-      </InputGroup>
+          <InputGroupInput
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search sites or materials…"
+          />
+          {query && (
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={() => setQuery("")}>
+                <XIcon />
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
+        <Button
+          variant="outline"
+          size="icon"
+          className="shrink-0"
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        >
+          {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        </Button>
+      </div>
 
       <p className="text-sm text-muted-foreground">
         {visible.length} {visible.length === 1 ? "site" : "sites"}
@@ -84,12 +100,14 @@ export function MaterialsBySite({
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="columns-3xs gap-1.5">
-          {visible.map((group) => (
-            <div key={group.location} className="mb-1.5 break-inside-avoid">
-              <SiteStockCard group={group} jobId={jobIds[group.location]} />
-            </div>
-          ))}
+        <div ref={fsRef} className={isFullscreen ? "h-full w-full overflow-y-auto bg-background p-4" : undefined}>
+          <div className="columns-3xs gap-1.5">
+            {visible.map((group) => (
+              <div key={group.location} className="mb-1.5 break-inside-avoid">
+                <SiteStockCard group={group} jobId={jobIds[group.location]} />
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

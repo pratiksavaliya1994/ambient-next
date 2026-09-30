@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { AutoRefresh } from "@/components/auto-refresh"
 import { MaterialsBySite } from "@/components/materials-by-site"
 import { MaterialsBySiteSkeleton } from "@/components/materials-site-skeletons"
 import { MaterialsViewSwitch } from "@/components/materials-view-switch"
@@ -30,6 +31,8 @@ export default function MaterialsBySitePage() {
       </div>
 
       <MaterialsViewSwitch active="sites" />
+
+      <AutoRefresh />
 
       <Suspense fallback={<MaterialsBySiteSkeleton />}>
         <SitesList />

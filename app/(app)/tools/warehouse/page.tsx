@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { AutoRefresh } from "@/components/auto-refresh"
 import { WarehouseDashboard } from "@/components/warehouse-dashboard"
 import { ToolsDashboardSkeleton } from "@/components/tools-skeletons"
 import { listAllTools } from "@/lib/bubble/pickup-tools"
@@ -30,6 +31,8 @@ export default async function WarehousePage({ searchParams }: { searchParams: Pr
         <h1 className="text-lg font-medium">Warehouse</h1>
         <p className="text-xs text-muted-foreground">Every tool on hand at the warehouse, grouped by type.</p>
       </div>
+
+      <AutoRefresh />
 
       <Suspense key={JSON.stringify(params)} fallback={<ToolsDashboardSkeleton />}>
         <WarehouseBody params={params} />
