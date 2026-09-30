@@ -192,6 +192,9 @@ async function loadMaterials(request: ToolRequest): Promise<AssignMaterialsData>
     return {
       lines,
       stock: Object.fromEntries(items.map((item) => [item.id, item.stockQty])),
+      shelves: Object.fromEntries(
+        items.flatMap((item) => (item.warehouseLocation ? [[item.id, item.warehouseLocation]] : []))
+      ),
       floors: Object.fromEntries(lines.map((line) => [line.id, lineProgress(line, tripRows).onTrips])),
       pickup: request.pickup,
       readOnly: !isOpenRequest(request.status),

@@ -81,6 +81,7 @@ export type NewTool = {
   typeId: string
   location: string
   floor: string
+  warehouseLocation: string
   condition: ToolCondition
 }
 
@@ -112,6 +113,7 @@ export async function createTool(tool: NewTool): Promise<string> {
   }
   if (tool.location !== "") data.location = tool.location
   if (tool.floor !== "") data.floor = tool.floor
+  if (tool.warehouseLocation !== "") data.warehouseLocation = tool.warehouseLocation
 
   return bubbleCreate(TOOLS, data)
 }

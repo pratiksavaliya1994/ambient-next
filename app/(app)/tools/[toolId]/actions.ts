@@ -17,6 +17,7 @@ const LANDS_IN: Record<keyof ToolPatch, (tool: ToolDetail) => string> = {
   condition: (tool) => tool.condition,
   location: (tool) => tool.location,
   floor: (tool) => tool.floor,
+  warehouseLocation: (tool) => tool.warehouseLocation,
   currentUser: (tool) => tool.currentUser,
   statusNew: (tool) => tool.status,
 }
@@ -104,6 +105,7 @@ export async function updateToolAction(input: unknown): Promise<ToolEditState> {
   // `""` is "leave it alone" — a blank or legacy condition the select can't
   // represent must not be overwritten just by opening the page. See the schema.
   if (values.condition !== "" && values.condition !== tool.condition) patch.condition = values.condition
+  if (values.warehouseLocation !== tool.warehouseLocation) patch.warehouseLocation = values.warehouseLocation
 
   if (editability.movable) {
     if (values.location !== tool.location) patch.location = values.location
@@ -156,6 +158,7 @@ const FIELD_LABEL: Record<keyof ToolPatch, string> = {
   condition: "Condition",
   location: "Location",
   floor: "Floor",
+  warehouseLocation: "Warehouse location",
   currentUser: "Current holder",
   statusNew: "Release status",
 }

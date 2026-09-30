@@ -62,6 +62,7 @@ export function ToolDetailForm({
       condition: isSelectableCondition(tool.condition) ? tool.condition : "",
       location: tool.location,
       floor: tool.floor,
+      warehouseLocation: tool.warehouseLocation,
       currentUser: tool.currentUser,
       markAvailable: false,
     },

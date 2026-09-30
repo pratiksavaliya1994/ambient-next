@@ -46,6 +46,7 @@ const toolRow = z.looseObject({
   /** `ToolCondition` — split off `statusNew` in phase 3A. See `lib/bubble/enums.ts`. */
   condition: z.string().optional(),
   floor: z.string().optional(),
+  warehouseLocation: z.string().optional(),
   currentUser: z.string().optional(),
 })
 
@@ -123,6 +124,7 @@ export async function listAllTools(): Promise<DashboardTool[]> {
       typeName: row.type ? (typeNameById.get(row.type) ?? null) : null,
       location: row.location?.trim() ? row.location.trim() : NO_LOCATION,
       floor: row.floor ?? null,
+      warehouseLocation: row.warehouseLocation?.trim() || null,
       // `statusNew`, not `status` — see the comment on `toolRow` above.
       status: row.statusNew ?? "",
       condition: row.condition ?? "",

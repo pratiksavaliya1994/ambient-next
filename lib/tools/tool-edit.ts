@@ -37,6 +37,8 @@ export type ToolDetail = {
   /** **Raw and trimmed**, not `NO_LOCATION`: this value gets written back. Empty when unset. */
   location: string
   floor: string
+  /** Static shelf/bin in the warehouse. Not gated by `ToolEditability` — it never moves with the tool. */
+  warehouseLocation: string
   /** `tools.statusNew`. Empty means the phase 2 backfill missed the row. */
   status: string
   condition: string

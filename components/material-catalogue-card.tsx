@@ -1,4 +1,4 @@
-import { TagIcon } from "lucide-react"
+import { MapPinIcon, TagIcon } from "lucide-react"
 import Link from "next/link"
 
 import { MaterialStockBadge } from "@/components/material-stock-badge"
@@ -31,6 +31,12 @@ export function MaterialCatalogueCard({ item }: { item: MaterialItem }) {
             <span className="flex items-center gap-1.5">
               <TagIcon className="size-3.5 shrink-0" />
               {item.category}
+            </span>
+          )}
+          {item.warehouseLocation && (
+            <span className="flex items-center gap-1.5">
+              <MapPinIcon className="size-3.5 shrink-0" />
+              {item.warehouseLocation}
             </span>
           )}
           {!item.active && <Badge variant="outline">Retired</Badge>}

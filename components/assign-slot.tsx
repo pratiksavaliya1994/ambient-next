@@ -24,6 +24,7 @@ import {
   type AssignSlot,
   type CandidateTool,
   type ToolRequestClaim,
+  warehouseSpotOf,
 } from "@/lib/bubble/assigned-tools-types"
 import { cn } from "@/lib/utils"
 
@@ -187,6 +188,7 @@ export function AssignSlotCard({
         <ul className="flex flex-col gap-1.5 border-l-2 border-muted-foreground/25 pl-3">
           {chosen.map((tool) => {
             const locked = lockedIds.has(tool.id)
+            const spot = warehouseSpotOf(tool)
 
             return (
               <li key={tool.id} className="flex items-center gap-3 rounded-md border bg-background px-2.5 py-1.5">
@@ -197,6 +199,7 @@ export function AssignSlotCard({
                   <span className="truncate text-xs text-muted-foreground">
                     {tool.location}
                     {tool.floor && ` · Floor ${tool.floor}`}
+                    {spot && ` · ${spot}`}
                     {` · ${tool.status}`}
                   </span>
                 </div>

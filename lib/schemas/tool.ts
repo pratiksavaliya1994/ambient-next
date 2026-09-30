@@ -46,6 +46,8 @@ export const toolEditSchema = z.object({
    */
   location: z.string().trim().max(200),
   floor: z.string().trim().max(120),
+  /** The tool's shelf/bin in the warehouse — static, ungated, never moved by a request or trip. */
+  warehouseLocation: z.string().trim().max(120),
   /** A display name, not a `user` link — `tools.currentUser` is free text. */
   currentUser: z.string().trim().max(120),
   /**
@@ -101,6 +103,7 @@ export const toolCreateSchema = z.object({
    */
   location: z.string().trim().max(200),
   floor: z.string().trim().max(120),
+  warehouseLocation: z.string().trim().max(120),
   condition: z.enum(TOOL_CONDITION),
 })
 

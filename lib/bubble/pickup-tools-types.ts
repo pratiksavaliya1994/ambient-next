@@ -22,6 +22,8 @@ export type DashboardTool = {
   typeName: string | null
   location: string
   floor: string | null
+  /** Static shelf/bin in the warehouse. */
+  warehouseLocation: string | null
   status: string
   /** `tools.condition` — see `lib/bubble/enums.ts`. Empty when unset. */
   condition: string

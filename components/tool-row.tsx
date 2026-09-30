@@ -5,7 +5,7 @@ import { CheckIcon, PlusIcon, TriangleAlertIcon, XIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
-import type { CandidateTool, ToolRequestClaim } from "@/lib/bubble/assigned-tools-types"
+import { warehouseSpotOf, type CandidateTool, type ToolRequestClaim } from "@/lib/bubble/assigned-tools-types"
 import { cn } from "@/lib/utils"
 
 /**
@@ -60,6 +60,7 @@ export function ToolRow({
   onRemove: () => void
 }) {
   const blocked = usedElsewhere && !picked
+  const spot = warehouseSpotOf(tool)
 
   return (
     <Item
@@ -85,6 +86,7 @@ export function ToolRow({
             <>
               {tool.location}
               {tool.floor && ` · Floor ${tool.floor}`}
+              {spot && ` · ${spot}`}
             </>
           )}
         </ItemDescription>

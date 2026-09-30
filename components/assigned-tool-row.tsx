@@ -3,7 +3,7 @@ import { MapPinIcon, PackageCheckIcon, PackageXIcon, TriangleAlertIcon, TruckIco
 import { LeaveBehindButton } from "@/components/leave-behind-button"
 import { PickupToolButton } from "@/components/pickup-tool-button"
 import { Badge } from "@/components/ui/badge"
-import type { CandidateTool } from "@/lib/bubble/assigned-tools-types"
+import { warehouseSpotOf, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { isWarehouseLocation } from "@/lib/bubble/enums"
 import type { ToolTripState } from "@/lib/dispatch/tool-state"
 import { cn } from "@/lib/utils"
@@ -61,11 +61,12 @@ export function AssignedToolRow({
   // Nothing to flag and no room to spare: name, where it sits and its status
   // on one line. Only a tool with something to say earns a second.
   if (compact && !state) {
+    const where = [tool.location, warehouseSpotOf(tool)].filter(Boolean).join(" · ")
     return (
       <li className={cn("flex items-center gap-2 rounded-md border border-l-4 px-2 py-1", tone)}>
-        <span className="min-w-0 flex-1 truncate text-xs" title={`${tool.name} · ${tool.location}`}>
+        <span className="min-w-0 flex-1 truncate text-xs" title={`${tool.name} · ${where}`}>
           {tool.name}
-          <span className="text-muted-foreground"> · {tool.location}</span>
+          <span className="text-muted-foreground"> · {where}</span>
         </span>
         {badges}
       </li>
@@ -212,8 +213,13 @@ function describe(tool: CandidateTool, state: ToolTripState | null, extra: boole
     flag: null,
     flagTone: "",
     Icon: null,
-    detail: extra
-      ? `${tool.typeName ?? "No type"} · ${tool.location}`
-      : `${tool.location}${tool.floor ? ` · Floor ${tool.floor}` : ""}`,
+    detail: [
+      extra ? (tool.typeName ?? "No type") : null,
+      tool.location,
+      !extra && tool.floor ? `Floor ${tool.floor}` : null,
+      warehouseSpotOf(tool),
+    ]
+      .filter(Boolean)
+      .join(" · "),
   }
 }

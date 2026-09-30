@@ -37,7 +37,15 @@ export function MaterialItemCreateForm() {
 
   const form = useForm<MaterialItemCreateValues>({
     resolver: zodResolver(materialItemCreateSchema),
-    defaultValues: { name: "", unit: "", category: "", relatedTo: [], notes: "", openingStock: 0 },
+    defaultValues: {
+      name: "",
+      unit: "",
+      category: "",
+      warehouseLocation: "",
+      relatedTo: [],
+      notes: "",
+      openingStock: 0,
+    },
   })
   const { check, setCheck } = useMaterialNameCheck(useWatch({ control: form.control, name: "name" }) ?? "")
 
@@ -109,6 +117,7 @@ export function MaterialItemEditForm({ item }: { item: MaterialItem }) {
       itemId: item.id,
       unit: item.unit,
       category: item.category ?? "",
+      warehouseLocation: item.warehouseLocation ?? "",
       relatedTo: item.relatedTo,
       notes: item.notes ?? "",
       active: item.active,

@@ -21,6 +21,8 @@ export type AssignMaterialsData =
   | {
       lines: MaterialLine[]
       stock: Record<string, number>
+      /** Item id → its warehouse location, for items that have one. */
+      shelves: Record<string, string>
       floors: Record<string, number>
       pickup: boolean
       /** Closed requests render read-only, as the tools do. */
@@ -50,7 +52,7 @@ export function AssignMaterialsCard({
     )
   }
 
-  const { lines, stock, pickup, readOnly } = data
+  const { lines, stock, shelves, pickup, readOnly } = data
   const { targetOf, boundsOf, setTarget } = draft
   const full = lines.filter((line) => targetOf(line) >= effectiveQty(line)).length
 
@@ -75,6 +77,7 @@ export function AssignMaterialsCard({
                 target={targetOf(line)}
                 {...boundsOf(line)}
                 stockQty={line.materialId ? (stock[line.materialId] ?? null) : null}
+                warehouseLocation={line.materialId ? (shelves[line.materialId] ?? null) : null}
                 drawsStock={holdsStock(line, { pickup })}
                 onChange={(next) => setTarget(line.id, next)}
               />

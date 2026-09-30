@@ -52,6 +52,9 @@ function WarehouseToolRow({ tool }: { tool: DashboardTool }) {
         className="min-w-0 flex-1 truncate text-xs font-medium hover:text-primary hover:underline"
       >
         {tool.name}
+        {tool.warehouseLocation && (
+          <span className="font-normal text-muted-foreground"> · {tool.warehouseLocation}</span>
+        )}
       </Link>
       <div className="flex shrink-0 flex-wrap justify-end gap-1">
         <ToolStateBadges status={tool.status} condition={tool.condition} />

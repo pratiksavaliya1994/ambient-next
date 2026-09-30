@@ -83,6 +83,8 @@ export const materialItemSchema = z.object({
   name: z.string().trim().min(1, "Give this material a name.").max(120, "That name is too long."),
   unit: z.string().trim().min(1, "Give it a unit — bag, box, gal, each.").max(40),
   category: z.string().trim().max(80),
+  /** Static shelf/bin in the warehouse. Stock movements never touch it. */
+  warehouseLocation: z.string().trim().max(120),
   /** Empty means offered for every job type. */
   relatedTo: z.array(z.enum(TO_DO)),
   notes: z.string().trim().max(2000),

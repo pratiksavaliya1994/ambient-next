@@ -26,6 +26,7 @@ export function AssignMaterialLine({
   min,
   max,
   stockQty,
+  warehouseLocation,
   drawsStock,
   onChange,
 }: {
@@ -35,6 +36,8 @@ export function AssignMaterialLine({
   max: number
   /** The item's stock as the page read it; `null` when there's no item behind the line. */
   stockQty: number | null
+  /** The item's shelf/bin in the warehouse; `null` when unset or there's no item. */
+  warehouseLocation: string | null
   /** Whether assigning this line takes units off the shelf — `holdsStock`. */
   drawsStock: boolean
   onChange: (next: number) => void
@@ -80,6 +83,7 @@ export function AssignMaterialLine({
             {requested} {line.unit?.trim()}
           </RequestedQty>
           {drawsStock && stockQty !== null && <span className="tabular-nums">in stock {stockQty}</span>}
+          {warehouseLocation && <span>· {warehouseLocation}</span>}
           {target >= requested ? (
             <Badge className="border-transparent bg-status-ok/15 text-status-ok-foreground">Full</Badge>
           ) : target > 0 ? (

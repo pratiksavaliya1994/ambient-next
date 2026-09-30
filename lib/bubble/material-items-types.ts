@@ -21,6 +21,8 @@ export type MaterialItem = {
    */
   stockQty: number
   category: string | null
+  /** Static shelf/bin in the warehouse. `null` when unset. */
+  warehouseLocation: string | null
   /** Which job types the item is offered for. Empty means all of them. */
   relatedTo: ToDo[]
   /** Soft delete. Lines point at items by id, so an item is retired, never deleted. */

@@ -41,6 +41,7 @@ const toolRow = z.looseObject({
   statusNew: z.string().optional(),
   condition: z.string().optional(),
   floor: z.string().optional(),
+  warehouseLocation: z.string().optional(),
   currentUser: z.string().optional(),
   /** A Bubble *list of images* — file-manager URLs. Absent, not `[]`, when empty. */
   photos: z.array(z.string()).nullish(),
@@ -68,6 +69,7 @@ export async function getTool(id: string): Promise<ToolDetail | null> {
     typeName: typeId ? (toolTypes.find((type) => type.id === typeId)?.name ?? null) : null,
     location: row.location?.trim() ?? "",
     floor: row.floor?.trim() ?? "",
+    warehouseLocation: row.warehouseLocation?.trim() ?? "",
     status: row.statusNew ?? "",
     condition: row.condition ?? "",
     currentUser: row.currentUser?.trim() ?? "",
@@ -146,6 +148,7 @@ export type ToolPatch = {
   condition?: ToolCondition
   location?: string
   floor?: string
+  warehouseLocation?: string
   currentUser?: string
   statusNew?: typeof TOOL_STATUS_AVAILABLE
 }

@@ -10,6 +10,7 @@ import { Controller, useForm, useWatch } from "react-hook-form"
 import { ToolConditionField, ToolLocationField, ToolTypeField } from "@/components/tool-fields"
 import { ToolNameField } from "@/components/tool-name-field"
 import { ToolPhotoStaging, type StagedPhoto } from "@/components/tool-photo-staging"
+import { WarehouseLocationField } from "@/components/warehouse-location-field"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Field, FieldError, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -59,6 +60,7 @@ export function ToolCreateForm({ toolTypes, locations }: { toolTypes: ToolType[]
       typeId: "",
       location: DEFAULT_WAREHOUSE,
       floor: "",
+      warehouseLocation: "",
       condition: DEFAULT_TOOL_CONDITION,
     },
   })
@@ -109,6 +111,8 @@ export function ToolCreateForm({ toolTypes, locations }: { toolTypes: ToolType[]
             render={({ field }) => <Input id="floor" placeholder="14, ground, Suite 139" {...field} />}
           />
         </Field>
+
+        <WarehouseLocationField control={control} name="warehouseLocation" error={errors.warehouseLocation?.message} />
 
         <FieldSeparator className="sm:col-span-2" />
 

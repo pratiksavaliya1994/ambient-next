@@ -4,6 +4,7 @@ import { CheckIcon } from "lucide-react"
 import type * as React from "react"
 import { Controller, useFormContext } from "react-hook-form"
 
+import { WarehouseLocationField } from "@/components/warehouse-location-field"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -49,6 +50,8 @@ export function MaterialItemFields({ children }: { children?: React.ReactNode })
         <Input id="category" placeholder="Adhesives, mesh, sealers" autoComplete="off" {...register("category")} />
       </Field>
 
+      <WarehouseLocationField control={control} name="warehouseLocation" error={errors.warehouseLocation?.message} />
+
       {children}
 
       <Field className="sm:col-span-2">
@@ -83,7 +86,7 @@ export function MaterialItemFields({ children }: { children?: React.ReactNode })
 
       <Field className="sm:col-span-2">
         <FieldLabel htmlFor="notes">Notes</FieldLabel>
-        <Textarea id="notes" rows={2} placeholder="Supplier, shelf, anything the warehouse should know" {...register("notes")} />
+        <Textarea id="notes" rows={2} placeholder="Supplier, anything the warehouse should know" {...register("notes")} />
       </Field>
     </>
   )

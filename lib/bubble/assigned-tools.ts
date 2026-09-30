@@ -70,6 +70,7 @@ const toolRow = z.looseObject({
   /** `ToolCondition` — split off `statusNew` in phase 3A. See `lib/bubble/enums.ts`. */
   condition: z.string().optional(),
   floor: z.string().optional(),
+  warehouseLocation: z.string().optional(),
   currentUser: z.string().optional(),
 })
 
@@ -202,6 +203,7 @@ function toCandidate(row: z.infer<typeof toolRow>, typeNameById: Map<string, str
     condition: row.condition ?? "",
     location: row.location?.trim() ? row.location.trim() : NO_LOCATION,
     floor: row.floor ?? null,
+    warehouseLocation: row.warehouseLocation?.trim() || null,
     currentUser: row.currentUser?.trim() || null,
   }
 }

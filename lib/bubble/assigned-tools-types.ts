@@ -1,3 +1,4 @@
+import { isWarehouseLocation } from "@/lib/bubble/enums"
 import type { ToolType } from "@/lib/bubble/reference-types"
 import type { ToolLine } from "@/lib/bubble/tools-summary"
 
@@ -61,6 +62,8 @@ export type CandidateTool = {
   condition: string
   location: string
   floor: string | null
+  /** Static shelf/bin in the warehouse — where to find it when it's home. */
+  warehouseLocation: string | null
   currentUser: string | null
 }
 
@@ -136,6 +139,11 @@ export type SlotPlan = {
   slots: AssignSlot[]
   /** Tools assigned to the request that fill no slot — extras, and orphans of a renamed type. */
   extraToolIds: string[]
+}
+
+/** The tool's shelf/bin, but only while it's at a warehouse — on a job site it says nothing useful. */
+export function warehouseSpotOf(tool: Pick<CandidateTool, "location" | "warehouseLocation">): string | null {
+  return tool.warehouseLocation && isWarehouseLocation(tool.location) ? tool.warehouseLocation : null
 }
 
 /** How a `toolsSummary` name and a `toolstype.name` are compared. */

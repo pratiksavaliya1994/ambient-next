@@ -3,6 +3,7 @@
 import { type Control } from "react-hook-form"
 
 import { ToolConditionField, ToolTypeField } from "@/components/tool-fields"
+import { WarehouseLocationField } from "@/components/warehouse-location-field"
 import type { ToolType } from "@/lib/bubble/reference-types"
 import type { ToolEditFormValues } from "@/lib/schemas/tool"
 
@@ -34,6 +35,7 @@ export function ToolCatalogueFields({
     <>
       <ToolTypeField control={control} name="typeId" toolTypes={toolTypes} />
       <ToolConditionField control={control} name="condition" placeholder={currentCondition || "Not set"} />
+      <WarehouseLocationField control={control} name="warehouseLocation" className="sm:col-span-2" />
     </>
   )
 }

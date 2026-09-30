@@ -46,6 +46,7 @@ const materialItemRow = z.looseObject({
   unit: z.string().optional(),
   stockQty: z.number().optional(),
   category: z.string().optional(),
+  warehouseLocation: z.string().optional(),
   relatedTo: z.array(z.string()).optional(),
   active: z.boolean().optional(),
   notes: z.string().optional(),
@@ -59,6 +60,7 @@ function toMaterialItem(raw: BubbleThing): MaterialItem {
     unit: row.unit?.trim() ?? "",
     stockQty: row.stockQty ?? 0,
     category: row.category?.trim() || null,
+    warehouseLocation: row.warehouseLocation?.trim() || null,
     relatedTo: (row.relatedTo ?? []).filter((value): value is ToDo => IS_TO_DO.has(value)),
     // Bubble defaults `active` to yes, so an absent value is a row that
     // predates the default rather than a retired one.
@@ -123,6 +125,7 @@ export type MaterialItemFields = {
   name: string
   unit: string
   category: string
+  warehouseLocation: string
   relatedTo: ToDo[]
   notes: string
 }
