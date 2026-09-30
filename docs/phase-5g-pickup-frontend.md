@@ -137,7 +137,8 @@ For a transfer *(added 2026-09-28)*:
 
 ## 5. Site page (added 2026-09-28)
 
-`/materials/sites/[jobId]` (5E) gains **"Open pickups from this site"**. Each
+`/sites/[jobId]` (5E; moved from `/materials/sites/[jobId]` 2026-09-29 when it
+gained the site's tools) gains **"Open pickups from this site"**. Each
 open pickup line from that job shows its estimate, and where it's going (the
 warehouse, or "→ Site B"), linking to the request. It's read from the same
 `listMaterialLines` over the job's open pickup requests.

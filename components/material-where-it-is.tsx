@@ -40,7 +40,7 @@ export function MaterialWhereItIs({
             <MapPinIcon className="size-4 shrink-0 text-muted-foreground" />
             {jobId ? (
               <Link
-                href={`/materials/sites/${jobId}`}
+                href={`/sites/${jobId}`}
                 className="min-w-0 flex-1 truncate hover:underline"
                 title={site.location}
               >

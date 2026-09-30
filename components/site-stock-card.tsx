@@ -20,7 +20,7 @@ export function SiteStockCard({ group, jobId }: { group: SiteGroup; jobId?: stri
       <CardHeader className="-mt-(--card-spacing) items-center bg-primary py-0.5">
         <CardTitle className="truncate text-sm text-primary-foreground" title={group.location}>
           {jobId ? (
-            <Link href={`/materials/sites/${jobId}`} className="hover:underline">
+            <Link href={`/sites/${jobId}`} className="hover:underline">
               {group.location}
             </Link>
           ) : (

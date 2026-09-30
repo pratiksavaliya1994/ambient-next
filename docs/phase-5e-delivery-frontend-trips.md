@@ -99,7 +99,7 @@ is an upper bound. The page's one-line blurb says so.
 | Route | Server component reads | Client island |
 | --- | --- | --- |
 | `/materials/sites` | `listSiteStock()`, grouped with `groupBySite` | `materials-by-site.tsx`: one card per site, newest movement first. Each card shows its items with qty + unit and "last moved". Search matches site or item name, filtering in the browser as the Job Dashboard does. The card header links to the site page |
-| `/materials/sites/[jobId]` | the job (by `_id`, from the memoised jobs reference list, so the URL never carries a job name), `listSiteStock({ location: job.name })`, `listSiteHistory(job.name)` | the item list, and `material-stock-history.tsx` reused, filtered to that site. 5G adds "open pickups from this site" |
+| `/materials/sites/[jobId]` (now `/sites/[jobId]`, which also lists the tools at the site via `listToolsForJob`; the old path redirects) | the job (by `_id`, from the memoised jobs reference list, so the URL never carries a job name), `listSiteStock({ location: job.name })`, `listSiteHistory(job.name)` | the item list, and `material-stock-history.tsx` reused, filtered to that site. 5G adds "open pickups from this site" |
 | `/materials/[itemId]` | + `listSiteStock({ materialIds: [id] })` | new `material-where-it-is.tsx`: the warehouse (`stockQty`) and then every site with qty > 0, each linking to its site page |
 
 - **`/materials` gets a Warehouse / By site switch** (two links styled as a

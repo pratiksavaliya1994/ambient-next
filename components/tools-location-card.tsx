@@ -1,7 +1,6 @@
-import Link from "next/link"
 import * as React from "react"
 
-import { ToolStatusDots } from "@/components/tool-status-badges"
+import { groupToolsByType, ToolTypeList } from "@/components/tool-type-list"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { NO_LOCATION, type DashboardTool } from "@/lib/bubble/pickup-tools-types"
@@ -11,62 +10,6 @@ import { cn } from "@/lib/utils"
  *  hold hundreds of tools, and because the multi-column layout balances column
  *  heights, one uncapped card would set the height of *every* column. */
 const TOOL_LIST_MAX_HEIGHT = "max-h-80"
-
-type TypeGroup = { typeName: string; tools: DashboardTool[] }
-
-const byName = (a: DashboardTool, b: DashboardTool) => a.name.localeCompare(b.name)
-
-/**
- * A tool type holding two or more units becomes a group with one micro-header,
- * so its name is written once instead of once per unit — the saving this whole
- * density pass is built on.
- *
- * A type holding a single unit gains nothing from that: a header plus one row
- * is the two lines we're trying to remove. Those fall through to `singles`,
- * which render one per line with the type inline instead, and sit after the
- * groups so the card doesn't alternate between headed blocks and bare rows.
- * A tool with no `type` link at all is a single by definition.
- */
-function groupToolsByType(tools: DashboardTool[]): { groups: TypeGroup[]; singles: DashboardTool[] } {
-  const byType = new Map<string, DashboardTool[]>()
-  const singles: DashboardTool[] = []
-
-  for (const tool of tools) {
-    if (!tool.typeName) {
-      singles.push(tool)
-      continue
-    }
-    const bucket = byType.get(tool.typeName)
-    if (bucket) bucket.push(tool)
-    else byType.set(tool.typeName, [tool])
-  }
-
-  const groups: TypeGroup[] = []
-  for (const [typeName, group] of byType) {
-    if (group.length === 1) singles.push(group[0])
-    else groups.push({ typeName, tools: group.sort(byName) })
-  }
-
-  groups.sort((a, b) => a.typeName.localeCompare(b.typeName))
-  singles.sort((a, b) => (a.typeName ?? "").localeCompare(b.typeName ?? "") || byName(a, b))
-
-  return { groups, singles }
-}
-
-/** Everything the one-line row drops, back on hover — floor and holder are
- *  gone from the layout, not from the data. */
-function toolTooltip(tool: DashboardTool): string {
-  return [
-    tool.name,
-    tool.typeName,
-    tool.floor && `Floor ${tool.floor}`,
-    tool.currentUser,
-    tool.status,
-    tool.condition && tool.condition !== "Ok" ? tool.condition : null,
-  ]
-    .filter(Boolean)
-    .join(" · ")
-}
 
 export function LocationCard({
   location,
@@ -90,10 +33,10 @@ export function LocationCard({
       //
       // `border ring-0` swaps `Card`'s faint self-ring for a real 1px `--border`
       // line. In light mode `--card` and `--background` are both pure white, so
-      // the outline is the *only* thing separating one card from the next — and
+      // the outline is the *only* thing separating one card from the next â€” and
       // packed this densely they need to read as distinct boxes.
       className={cn("gap-1 border ring-0 [--card-spacing:--spacing(2)]", isExtra && "ring-2 ring-primary/60")}
-      title={isExtra ? `${location} — match found outside your selection` : undefined}
+      title={isExtra ? `${location} â€” match found outside your selection` : undefined}
     >
       {/* A full-bleed band, not just styled text: `-mt-(--card-spacing)` cancels
           `Card`'s top padding so it reaches the card's top edge, where the
@@ -105,11 +48,11 @@ export function LocationCard({
           `bg-primary` + `text-primary-foreground`: the app's amber, so the band
           carries no colour of its own and the pair is contrast-correct by
           construction in both themes (`--primary` is the same value in each).
-          It's what separates the site name from the tool names beneath it — the
+          It's what separates the site name from the tool names beneath it â€” the
           name itself no longer needs a tint.
 
           `py-0.5`, not the card spacing: at this density the band only needs to
-          clear the text. No `border-b` — the fill already separates it, and the
+          clear the text. No `border-b` â€” the fill already separates it, and the
           slot's `[.border-b]:pb-(--card-spacing)` variant outranks any plain
           `pb-*`, so a border here would silently pin the padding back open. */}
       <CardHeader className="-mt-(--card-spacing) items-center bg-primary py-0.5">
@@ -132,66 +75,19 @@ export function LocationCard({
       </CardHeader>
 
       {/* `overflow-y-auto` makes the used `overflow-x` compute to `auto` too, so
-          a pathological name could raise a horizontal scrollbar — pin it shut.
+          a pathological name could raise a horizontal scrollbar â€” pin it shut.
           No `overscroll-contain` here: most cards hold too few tools to ever
           overflow `max-h-80`, and on a non-scrollable `overflow-y-auto` box
           some mobile browsers let `overscroll-behavior: contain` swallow the
-          touch gesture instead of handing it to the page — a swipe starting
+          touch gesture instead of handing it to the page â€” a swipe starting
           on the card then scrolls nothing at all. Leaving it at the default
           `auto` lets the gesture chain up to the page once this box has
           nowhere left to scroll. */}
       <CardContent
         className={cn(TOOL_LIST_MAX_HEIGHT, "scrollbar-slim gap-0 overflow-x-hidden overflow-y-auto px-1")}
       >
-        {groups.map((group) => (
-          <React.Fragment key={group.typeName}>
-            <TypeHeader typeName={group.typeName} count={group.tools.length} />
-            {group.tools.map((tool) => (
-              <ToolLine key={tool.id} tool={tool} />
-            ))}
-          </React.Fragment>
-        ))}
-        {singles.map((tool) => (
-          <ToolLine key={tool.id} tool={tool} showType />
-        ))}
+        <ToolTypeList groups={groups} singles={singles} />
       </CardContent>
     </Card>
-  )
-}
-
-/** `sticky` so the type you're looking at stays named while a long card
- *  scrolls; `bg-card` rather than a translucent blur, which would cost a
- *  compositing layer on every one of the dozens of cards on screen. */
-function TypeHeader({ typeName, count }: { typeName: string; count: number }) {
-  return (
-    <div className="sticky top-0 z-10 flex items-center gap-1.5 bg-card px-1 pt-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase first:pt-0">
-      <span className="truncate" title={typeName}>
-        {typeName}
-      </span>
-      <span className="h-px flex-1 bg-border" />
-      <span className="tabular-nums opacity-70">{count}</span>
-    </div>
-  )
-}
-
-/**
- * One tool, one line. `min-w-0` + `truncate` on the name is the whole trick —
- * a flex item's automatic `min-width` otherwise refuses to shrink below
- * min-content and the status would be pushed off the row.
- */
-function ToolLine({ tool, showType = false }: { tool: DashboardTool; showType?: boolean }) {
-  return (
-    <div
-      className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-xs hover:bg-muted/60"
-      title={toolTooltip(tool)}
-    >
-      <Link href={`/tools/${tool.id}`} className="min-w-0 flex-1 truncate hover:text-primary hover:underline">
-        {tool.name}
-      </Link>
-      {showType && tool.typeName && (
-        <span className="max-w-[45%] shrink-0 truncate text-[10px] text-muted-foreground">{tool.typeName}</span>
-      )}
-      <ToolStatusDots status={tool.status} condition={tool.condition} />
-    </div>
   )
 }

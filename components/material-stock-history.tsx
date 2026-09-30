@@ -142,7 +142,7 @@ function HistoryLocation({ location, jobId }: { location: string; jobId?: string
     <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
       <MapPinIcon className="size-3.5 shrink-0" />
       {jobId ? (
-        <Link href={`/materials/sites/${jobId}`} className="truncate text-foreground hover:underline" title={location}>
+        <Link href={`/sites/${jobId}`} className="truncate text-foreground hover:underline" title={location}>
           {location}
         </Link>
       ) : (
