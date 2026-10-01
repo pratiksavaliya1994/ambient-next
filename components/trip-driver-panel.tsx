@@ -37,7 +37,7 @@ export function TripDriverPanel({
   onSave,
 }: {
   driver: string
-  driverOptions: string[]
+  driverOptions: Promise<string[]>
   tripDate: string
   /** `"HH:mm"`, New York wall clock. */
   startTime: string

@@ -5,6 +5,7 @@ import { z } from "zod"
 import {
   bubbleCreate,
   bubbleGet,
+  bubbleList,
   bubbleListAll,
   bubblePatch,
   bubbleRunWorkflow,
@@ -17,6 +18,7 @@ import {
   type ManualStockReason,
   type MaterialItem,
   type StockHistoryEntry,
+  type StockHistoryPage,
 } from "@/lib/bubble/material-items-types"
 
 /**
@@ -36,6 +38,7 @@ import {
 
 const MATERIAL_ITEM = "materialitem"
 export const STOCK_HISTORY = "materialstockhistory"
+const STOCK_HISTORY_PAGE_SIZE = 25
 const ADJUST_STOCK_WORKFLOW = "adjust-material-stock"
 
 const IS_TO_DO = new Set<string>(TO_DO)
@@ -205,15 +208,22 @@ export function toStockHistoryEntry(raw: BubbleThing): StockHistoryEntry {
 }
 
 /**
- * One item's stock changes, newest first — warehouse and site rows in one
- * mixed list, each carrying its `location`.
+ * One page of an item's stock changes, newest first — warehouse and site rows
+ * in one mixed list, each carrying its `location`. `cursor` is Bubble's offset;
+ * a row written between two page loads shifts the rest down by one, so the
+ * caller dedupes on `id`.
  */
-export async function listStockHistory(materialId: string): Promise<StockHistoryEntry[]> {
-  const rows = await bubbleListAll(STOCK_HISTORY, {
+export async function listStockHistoryPage(materialId: string, cursor = 0): Promise<StockHistoryPage> {
+  const page = await bubbleList(STOCK_HISTORY, {
     constraints: [{ key: "materialID", constraint_type: "equals", value: materialId }],
     sortField: "Created Date",
     descending: true,
+    limit: STOCK_HISTORY_PAGE_SIZE,
+    cursor,
   })
 
-  return rows.map((raw) => ({ ...toStockHistoryEntry(raw), materialId }))
+  return {
+    entries: page.results.map((raw) => ({ ...toStockHistoryEntry(raw), materialId })),
+    nextCursor: page.remaining > 0 ? cursor + page.results.length : null,
+  }
 }

@@ -48,7 +48,7 @@ function toSiteStockRow(raw: BubbleThing): SiteStockRow | null {
 
 /**
  * Site stock rows, optionally narrowed to one site and/or some items. Raw
- * rows, duplicates and zeros included. `groupBySite` / `siteTotalsFor` shape
+ * rows, duplicates and zeros included. `groupBySite` shapes
  * them for a screen.
  */
 export async function listSiteStock({

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
-import { requireSession } from "@/lib/auth/session"
+import { displayNameOf, requireSession } from "@/lib/auth/session"
 import { bubbleUploadFile } from "@/lib/bubble/client"
 import { getTool, setToolPhotos } from "@/lib/bubble/tool-detail"
 import { toolPhotoRemoveSchema, toolPhotoUploadSchema } from "@/lib/schemas/tool-photos"
@@ -29,7 +29,7 @@ import type { ToolPhotoState } from "@/app/(app)/tools/action-state"
  */
 
 export async function addToolPhotosAction(input: unknown): Promise<ToolPhotoState> {
-  await requireSession()
+  const session = await requireSession()
 
   const parsed = toolPhotoUploadSchema.safeParse(input)
   if (!parsed.success) {
@@ -74,7 +74,7 @@ export async function addToolPhotosAction(input: unknown): Promise<ToolPhotoStat
   const photos = [...fresh, ...uploaded].slice(0, MAX_TOOL_PHOTOS)
 
   try {
-    await setToolPhotos(toolId, photos)
+    await setToolPhotos(toolId, photos, displayNameOf(session))
   } catch (error) {
     return { status: "error", message: saveFailure(error) }
   }
@@ -98,7 +98,7 @@ export async function addToolPhotosAction(input: unknown): Promise<ToolPhotoStat
  * means.
  */
 export async function removeToolPhotoAction(input: unknown): Promise<ToolPhotoState> {
-  await requireSession()
+  const session = await requireSession()
 
   const parsed = toolPhotoRemoveSchema.safeParse(input)
   if (!parsed.success) return { status: "error", message: "That photo reference isn't valid." }
@@ -114,7 +114,7 @@ export async function removeToolPhotoAction(input: unknown): Promise<ToolPhotoSt
   }
 
   try {
-    await setToolPhotos(toolId, photos)
+    await setToolPhotos(toolId, photos, displayNameOf(session))
   } catch (error) {
     return { status: "error", message: saveFailure(error) }
   }

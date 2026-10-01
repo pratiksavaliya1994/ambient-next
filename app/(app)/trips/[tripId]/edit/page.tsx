@@ -8,7 +8,7 @@ import { TripBuilder } from "@/components/trip-builder"
 import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkDayValue, newYorkToday } from "@/lib/bubble/dates"
-import { listFieldPms, listJobs, listUsers } from "@/lib/bubble/reference"
+import { listDriverOptions, listJobs } from "@/lib/bubble/reference"
 import { toStopJob } from "@/lib/bubble/reference-types"
 import { getTrip } from "@/lib/bubble/trips-read"
 import { manualLocationsOf } from "@/lib/trips/manual-stops"
@@ -67,22 +67,22 @@ function splitLocationsOf(stops: readonly { location: string }[]): string[] {
 }
 
 async function EditTripBody({ tripId }: { tripId: string }) {
+  // Everything starts at once: the movement pool only needs the id, not the
+  // trip header, so it doesn't wait behind `getTrip`. Driver names and jobs
+  // stream into their own controls (see the new-trip page).
+  // This trip's own claims are excluded, or its tools would all read as
+  // "already on a trip" — their own — and the route panel would plan nothing.
+  const groupsPromise = listOutstandingMovements(tripId)
+  const driverOptions = listDriverOptions()
+  const jobs = listJobs().then((rows) => rows.map(toStopJob))
+  // Marked handled up front: on the notFound/redirect paths nothing awaits it.
+  groupsPromise.catch(() => {})
+
   const trip = await getTrip(tripId)
   if (!trip) notFound()
   if (trip.status !== "Planned") redirect(`/trips/${tripId}`)
 
-  // This trip's own claims are excluded, or its tools would all read as
-  // "already on a trip" — their own — and the route panel would plan nothing.
-  const [groups, pms, users, jobs] = await Promise.all([
-    listOutstandingMovements(tripId),
-    listFieldPms(),
-    listUsers(),
-    listJobs(),
-  ])
-
-  const driverOptions = [...new Set([...pms.map((pm) => pm.name), ...users.map((user) => user.name)])].sort((a, b) =>
-    a.localeCompare(b)
-  )
+  const groups = await groupsPromise
 
   return (
     <TripBuilder
@@ -104,7 +104,7 @@ async function EditTripBody({ tripId }: { tripId: string }) {
         manualStops: manualLocationsOf(trip.stops),
         splitLocations: splitLocationsOf(trip.stops),
       }}
-      jobs={jobs.map(toStopJob)}
+      jobs={jobs}
     />
   )
 }

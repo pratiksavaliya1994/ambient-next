@@ -74,8 +74,3 @@ export function groupBySite(rows: readonly SiteStockRow[]): SiteGroup[] {
     }))
     .sort((a, b) => (b.modifiedAt ?? "").localeCompare(a.modifiedAt ?? "") || a.location.localeCompare(b.location))
 }
-
-/** Where one item is, site by site — the item page's "where it is" card. Duplicates summed, `qty ≤ 0` dropped. */
-export function siteTotalsFor(rows: readonly SiteStockRow[], materialId: string): SiteItem[] {
-  return sumRows(rows.filter((row) => row.materialId === materialId))
-}

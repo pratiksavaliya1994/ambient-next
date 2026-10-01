@@ -10,7 +10,7 @@
  * `server-only`, which throws under plain Node.
  */
 import { bubbleList, type Constraint } from "@/lib/bubble/client"
-import { listMaterialItems, listStockHistory } from "@/lib/bubble/material-items"
+import { listMaterialItems, listStockHistoryPage } from "@/lib/bubble/material-items"
 import { listRecentRequests, listRequestsByStatus } from "@/lib/bubble/requests"
 import { listAllTools, listToolLocations, listToolsForJob } from "@/lib/bubble/pickup-tools"
 import { listFieldPms, listJobs, listTimeSlots, listToolTypes, listUsers } from "@/lib/bubble/reference"
@@ -96,8 +96,9 @@ async function main() {
   console.log(`tripmaterial          ${tripMaterials}`)
   console.log(`requestedmaterials    ${structured} structured · ${legacy} legacy`)
   if (firstItem) {
-    const entries = await listStockHistory(firstItem.id)
-    console.log(`  history for ${firstItem.name}: ${entries.length} rows, latest ${entries[0]?.reason ?? "—"}`)
+    const { entries, nextCursor } = await listStockHistoryPage(firstItem.id)
+    const more = nextCursor === null ? "" : " (first page)"
+    console.log(`  history for ${firstItem.name}: ${entries.length} rows${more}, latest ${entries[0]?.reason ?? "—"}`)
   }
 
   // Phase 5D: site stock. `location` is a job name matched with `equals`, the

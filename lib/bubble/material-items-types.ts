@@ -95,3 +95,6 @@ export type StockHistoryEntry = {
   byName: string | null
   notes: string | null
 }
+
+/** One page of an item's history, newest first. `nextCursor` is `null` on the last page. */
+export type StockHistoryPage = { entries: StockHistoryEntry[]; nextCursor: number | null }

@@ -40,3 +40,14 @@ export function MaterialDetailSkeleton() {
     </div>
   )
 }
+
+/** The item page's history column while its first page loads. */
+export function MaterialHistorySkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      {Array.from({ length: 4 }, (_, index) => (
+        <Skeleton key={index} className="h-24 w-full" />
+      ))}
+    </div>
+  )
+}

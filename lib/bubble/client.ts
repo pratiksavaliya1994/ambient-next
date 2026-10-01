@@ -1,5 +1,7 @@
 import "server-only"
 
+import { currentActor } from "@/lib/auth/session"
+
 /**
  * The single entry point to the Bubble Data API.
  *
@@ -148,20 +150,42 @@ export async function bubbleList(type: string, options: ListOptions = {}): Promi
   }
 }
 
-/** Every matching row, following the cursor until Bubble reports none remaining. */
+/**
+ * How many pages of one list are fetched at once. Bounded so a big table (e.g.
+ * `jobs`, ~15 pages) doesn't fire every page at a low-tier rate limit together.
+ * A 429 is still retried by `request` if it happens.
+ */
+const PAGE_CONCURRENCY = 4
+
+/**
+ * Every matching row.
+ *
+ * The first page reports `remaining`, and Bubble's cursor is a plain offset, so
+ * the other pages are known up front and fetched in parallel. Following the
+ * cursor one page at a time made a 15-page table cost 15 round trips back to back.
+ */
 export async function bubbleListAll(
   type: string,
   options: Omit<ListOptions, "cursor" | "limit"> = {}
 ): Promise<BubbleThing[]> {
-  const all: BubbleThing[] = []
-  let cursor = 0
+  const first = await bubbleList(type, { ...options, cursor: 0 })
+  const pageSize = first.results.length
+  if (first.remaining <= 0 || pageSize === 0) return first.results
 
-  for (;;) {
-    const page = await bubbleList(type, { ...options, cursor })
-    all.push(...page.results)
-    if (page.remaining <= 0 || page.results.length === 0) return all
-    cursor += page.results.length
+  const cursors: number[] = []
+  for (let cursor = pageSize; cursor < pageSize + first.remaining; cursor += pageSize) cursors.push(cursor)
+
+  const pages: BubbleThing[][] = new Array(cursors.length)
+  let next = 0
+  const worker = async () => {
+    while (next < cursors.length) {
+      const index = next++
+      pages[index] = (await bubbleList(type, { ...options, cursor: cursors[index] })).results
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(PAGE_CONCURRENCY, cursors.length) }, worker))
+
+  return [first.results, ...pages].flat()
 }
 
 /**
@@ -228,11 +252,18 @@ export async function bubbleCreate(type: string, data: Record<string, unknown>):
  * key on the Data API, but that isn't independently confirmed for every
  * workflow response shape — this falls back to the raw body if `response`
  * isn't present, so a caller's own schema is what actually enforces the shape.
+ *
+ * **Every call also carries `actor`**, the signed-in person's display name.
+ * Workflows that write `tools` stamp it onto `tools.lastEditedBy` so
+ * `DB - Tools Change Log` can credit the person rather than the API token (see
+ * `currentActor`). It is added here rather than at each call site so a new
+ * workflow can't forget it; Bubble ignores the key on workflows that don't
+ * declare the parameter.
  */
 export async function bubbleRunWorkflow(name: string, data: Record<string, unknown>): Promise<unknown> {
   const res = await request(`/wf/${name}`, {
     method: "POST",
-    body: JSON.stringify(data),
+    body: JSON.stringify({ ...data, actor: await currentActor() }),
   })
   const json = (await res.json()) as { response?: unknown }
   return json.response ?? json

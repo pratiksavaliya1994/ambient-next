@@ -47,9 +47,10 @@ export function TripBuilder({
   jobs,
 }: {
   groups: RequestMovements[]
-  driverOptions: string[]
-  /** Every job on file — what the "Add stop" popup picks from. */
-  jobs: StopJob[]
+  /** Streamed in by its own control, so it never holds up the builder. */
+  driverOptions: Promise<string[]>
+  /** Every job on file — what the "Add stop" popup picks from. Streamed like `driverOptions`. */
+  jobs: Promise<StopJob[]>
   /** `yyyy-mm-dd` in New York — the server knows "today", the browser shouldn't guess. */
   today: string
   /** Present when editing an existing `Planned` trip. */

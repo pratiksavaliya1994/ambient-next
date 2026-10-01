@@ -153,8 +153,13 @@ export type ToolPatch = {
   statusNew?: typeof TOOL_STATUS_AVAILABLE
 }
 
-export async function updateTool(id: string, patch: ToolPatch): Promise<void> {
-  await bubblePatch(TOOLS, id, patch)
+/**
+ * `actor` goes to `tools.lastEditedBy`, which `DB - Tools Change Log` copies
+ * into the history row's `doneBy`. Kept out of `ToolPatch` because it's
+ * stamped on every write rather than being a field the form edits.
+ */
+export async function updateTool(id: string, patch: ToolPatch, actor: string): Promise<void> {
+  await bubblePatch(TOOLS, id, { ...patch, lastEditedBy: actor })
 }
 
 /**
@@ -175,6 +180,6 @@ export async function updateTool(id: string, patch: ToolPatch): Promise<void> {
  * `ToolHistoryTimeline`'s `isMeaningful` already filters it out of the
  * timeline — photo edits cost an audit row but add no noise to the screen.
  */
-export async function setToolPhotos(id: string, photos: string[]): Promise<void> {
-  await bubblePatch(TOOLS, id, { photos })
+export async function setToolPhotos(id: string, photos: string[], actor: string): Promise<void> {
+  await bubblePatch(TOOLS, id, { photos, lastEditedBy: actor })
 }

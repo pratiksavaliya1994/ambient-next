@@ -30,6 +30,7 @@ const historyRow = z.looseObject({
   tool: z.string().optional(),
   "Created Date": z.string().optional(),
   "Created By": z.string().optional(),
+  doneBy: z.string().optional(),
   prevLocation: z.string().optional(),
   newLocation: z.string().optional(),
   prevLocationFloor: z.string().optional(),
@@ -46,7 +47,7 @@ export type ToolHistoryEntry = {
   id: string
   /** ISO timestamp, or `null` if Bubble somehow omitted `Created Date`. */
   at: string | null
-  /** Resolved `user.displayName`, or `"System"` for the API token / a user row with none. */
+  /** `doneBy` if stamped, else the resolved `Created By` user, else `"System"`. */
   by: string
   prevLocation: string | null
   newLocation: string | null
@@ -68,11 +69,15 @@ function orNull(value: string | undefined): string | null {
 /**
  * Every `toolshistory` row for one tool, newest first.
  *
- * `Created By` resolves against `listUsers()` — the same cached list the
- * Dispatch board uses — because most rows this app produces were written under
- * the API token's own user, which carries no `displayName` and so is filtered
- * out of that list entirely; such an id (or any other not found) reads as
- * `"System"` rather than a raw Bubble id.
+ * **Who made the change comes from `doneBy` first.** Every write reaches Bubble
+ * under the API token, so `Created By` is the token's own user on anything
+ * this app produced. Instead, each writer stamps the person's name on
+ * `tools.lastEditedBy`, and `DB - Tools Change Log` copies it into `doneBy`
+ * (see `currentActor`). Rows logged before that, or by a writer that clears
+ * the field, fall back to `Created By`, resolved against `listUsers()` (the
+ * same cached list the Dispatch board uses). That still names a real person
+ * on old-Bubble-UI rows. The API token's user has no `displayName`, so it is
+ * filtered out of that list and reads as `"System"` rather than a raw id.
  */
 export async function listToolHistory(toolId: string): Promise<ToolHistoryEntry[]> {
   const [rows, users] = await Promise.all([
@@ -91,7 +96,7 @@ export async function listToolHistory(toolId: string): Promise<ToolHistoryEntry[
     .map((row) => ({
       id: row._id,
       at: row["Created Date"] ?? null,
-      by: (row["Created By"] && nameById.get(row["Created By"])) || "System",
+      by: orNull(row.doneBy) ?? ((row["Created By"] && nameById.get(row["Created By"])) || "System"),
       prevLocation: orNull(row.prevLocation),
       newLocation: orNull(row.newLocation),
       prevFloor: orNull(row.prevLocationFloor),

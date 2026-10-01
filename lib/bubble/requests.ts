@@ -357,6 +357,24 @@ export async function listRequestsByStatus(status: RequestStatus, driver?: strin
 }
 
 /**
+ * `listRequestsByStatus` over several statuses as **one** `in` query and one
+ * `withLines`. Per-status calls each pay their own `requestedtools` and
+ * `requestedmaterials` reads, so four statuses cost twelve paginated queries
+ * instead of three. On a low Bubble tier that difference shows up as 429 backoff.
+ */
+export async function listRequestsByStatuses(statuses: readonly RequestStatus[]): Promise<ToolRequest[]> {
+  if (statuses.length === 0) return []
+
+  const rows = await bubbleListAll(REQUEST, {
+    constraints: [{ key: "status", constraint_type: "in", value: [...statuses] }],
+    sortField: "Created Date",
+    descending: true,
+  })
+
+  return withLines(rows.map((row: BubbleThing) => requestRow.parse(row)))
+}
+
+/**
  * Just enough of a request to *name* it — no `requestedtools` or
  * `requestedmaterials` read, which is the entire reason this exists beside
  * `withLines`.

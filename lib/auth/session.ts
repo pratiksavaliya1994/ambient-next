@@ -39,3 +39,16 @@ export async function requireSessionOrRedirect(returnTo: string) {
 export function displayNameOf(session: { user?: { name?: string | null; email?: string | null } }): string {
   return session.user?.name || session.user?.email || "Unknown"
 }
+
+/**
+ * Who is making the current write, for `tools.lastEditedBy`.
+ *
+ * Every write reaches Bubble under the API token, so `Created By` on the
+ * `toolshistory` row `DB - Tools Change Log` produces is always the token's
+ * user. The only thing that log can see is the `tools` row before and after,
+ * so the person's name has to ride along *on* that row — this is the value
+ * that goes there, and the log copies it into `toolshistory.doneBy`.
+ */
+export async function currentActor(): Promise<string> {
+  return displayNameOf((await auth()) ?? {})
+}

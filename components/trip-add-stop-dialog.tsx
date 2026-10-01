@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { use, useState } from "react"
 import { MapPinPlusIcon, PlusIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -41,7 +41,8 @@ export function TripAddStopDialog({
   disabled,
   onAdd,
 }: {
-  jobs: readonly StopJob[]
+  /** Unwrapped here; the caller wraps this in `Suspense`. */
+  jobs: Promise<StopJob[]>
   /** Job names already added by hand — not offered twice. */
   taken: ReadonlySet<string>
   disabled: boolean
@@ -49,7 +50,7 @@ export function TripAddStopDialog({
 }) {
   const [open, setOpen] = useState(false)
   const [job, setJob] = useState<StopJob | null>(null)
-  const available = jobs.filter((entry) => !taken.has(entry.name))
+  const available = use(jobs).filter((entry) => !taken.has(entry.name))
 
   function changeOpen(next: boolean) {
     setOpen(next)

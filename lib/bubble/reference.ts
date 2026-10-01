@@ -194,6 +194,18 @@ export function listUsers(): Promise<AppUser[]> {
   })
 }
 
+/**
+ * `pms` and `user` names merged into one sorted quick-pick list. Neither is an
+ * actual driver roster (no such table exists in Bubble), so this only saves
+ * typing and `trip.driver` stays free text either way.
+ */
+export async function listDriverOptions(): Promise<string[]> {
+  const [pms, users] = await Promise.all([listFieldPms(), listUsers()])
+  return [...new Set([...pms.map((pm) => pm.name), ...users.map((user) => user.name)])].sort((a, b) =>
+    a.localeCompare(b)
+  )
+}
+
 // ---------------------------------------------------------- time slots
 
 /**

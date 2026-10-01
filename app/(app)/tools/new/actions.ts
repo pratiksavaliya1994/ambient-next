@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
-import { requireSession } from "@/lib/auth/session"
+import { displayNameOf, requireSession } from "@/lib/auth/session"
 import { bubbleUploadFile } from "@/lib/bubble/client"
 import { isKnownToolLocation, listToolTypes } from "@/lib/bubble/reference"
 import { createTool, findToolNameClash } from "@/lib/bubble/tool-create"
@@ -48,7 +48,8 @@ export async function checkToolNameAction(input: unknown): Promise<ToolNameCheck
 }
 
 export async function createToolAction(input: unknown): Promise<ToolCreateState> {
-  await requireSession()
+  const session = await requireSession()
+  const actor = displayNameOf(session)
 
   const parsed = createInputSchema.safeParse(input)
   if (!parsed.success) {
@@ -97,7 +98,7 @@ export async function createToolAction(input: unknown): Promise<ToolCreateState>
 
   let toolId: string
   try {
-    toolId = await createTool(values)
+    toolId = await createTool(values, actor)
   } catch (error) {
     return {
       status: "error",
@@ -108,7 +109,7 @@ export async function createToolAction(input: unknown): Promise<ToolCreateState>
 
   const [unapplied, photoWarning] = await Promise.all([
     unappliedWarning(toolId, values.typeId, values.condition),
-    attachPhotos(toolId, photos),
+    attachPhotos(toolId, photos, actor),
   ])
 
   revalidatePath("/tools")
@@ -161,7 +162,7 @@ async function unappliedWarning(toolId: string, typeId: string, condition: strin
  * `addToolPhotosAction` does it: Bubble rate-limits by plan and this app is on
  * a low tier.
  */
-async function attachPhotos(toolId: string, photos: Blob[]): Promise<string | undefined> {
+async function attachPhotos(toolId: string, photos: Blob[], actor: string): Promise<string | undefined> {
   if (photos.length === 0) return undefined
 
   const uploaded: string[] = []
@@ -180,7 +181,7 @@ async function attachPhotos(toolId: string, photos: Blob[]): Promise<string | un
   }
 
   try {
-    await setToolPhotos(toolId, uploaded)
+    await setToolPhotos(toolId, uploaded, actor)
   } catch {
     return "The tool was created, but its photos couldn't be attached. Add them from the tool's page."
   }

@@ -103,9 +103,10 @@ export type NewTool = {
  * Empty `location`/`floor` are omitted rather than sent as `""`, so a new row
  * looks like an untouched one instead of one someone cleared.
  */
-export async function createTool(tool: NewTool): Promise<string> {
+export async function createTool(tool: NewTool, actor: string): Promise<string> {
   const data: Record<string, unknown> = {
     name: tool.name,
+    lastEditedBy: actor,
     type: tool.typeId,
     condition: tool.condition,
     statusNew: TOOL_STATUS_AVAILABLE,

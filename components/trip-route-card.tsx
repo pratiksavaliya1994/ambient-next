@@ -1,7 +1,11 @@
 "use client"
 
+import { Suspense } from "react"
+import { MapPinPlusIcon } from "lucide-react"
+
 import { TripAddStopDialog } from "@/components/trip-add-stop-dialog"
 import { TripPlanPreview } from "@/components/trip-plan-preview"
+import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import type { StopJob } from "@/lib/bubble/reference-types"
@@ -34,7 +38,7 @@ export function TripRouteCard({
   materials: PlannedMaterial[]
   startTime: string
   splitChoices: SplitChoice[]
-  jobs: readonly StopJob[]
+  jobs: Promise<StopJob[]>
   manualStops: readonly string[]
   pending: boolean
   onReorder: (stops: PlannedStop[]) => void
@@ -54,7 +58,16 @@ export function TripRouteCard({
           and the times follow.
         </CardDescription>
         <CardAction>
-          <TripAddStopDialog jobs={jobs} taken={new Set(manualStops)} disabled={pending} onAdd={onAddStop} />
+          <Suspense
+            fallback={
+              <Button variant="outline" size="sm" disabled>
+                <MapPinPlusIcon />
+                Add stop
+              </Button>
+            }
+          >
+            <TripAddStopDialog jobs={jobs} taken={new Set(manualStops)} disabled={pending} onAdd={onAddStop} />
+          </Suspense>
         </CardAction>
       </CardHeader>
       <CardContent>

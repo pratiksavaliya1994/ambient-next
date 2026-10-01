@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
-import { requireSession } from "@/lib/auth/session"
+import { displayNameOf, requireSession } from "@/lib/auth/session"
 import { isKnownToolLocation } from "@/lib/bubble/reference"
 import { getTool, readToolHold, updateTool, type ToolPatch } from "@/lib/bubble/tool-detail"
 import { TOOL_STATUS_AVAILABLE } from "@/lib/bubble/tool-enums"
@@ -53,7 +53,7 @@ function holdRefusal(hold: ToolHold): string {
  * `statusNew` are both option sets.
  */
 export async function updateToolAction(input: unknown): Promise<ToolEditState> {
-  await requireSession()
+  const session = await requireSession()
 
   const parsed = toolEditSchema.safeParse(input)
   if (!parsed.success) {
@@ -131,7 +131,7 @@ export async function updateToolAction(input: unknown): Promise<ToolEditState> {
   }
 
   try {
-    await updateTool(tool.id, patch)
+    await updateTool(tool.id, patch, displayNameOf(session))
   } catch (error) {
     return {
       status: "error",

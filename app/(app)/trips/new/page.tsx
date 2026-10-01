@@ -7,7 +7,7 @@ import { TripBuilder } from "@/components/trip-builder"
 import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { newYorkToday } from "@/lib/bubble/dates"
-import { listFieldPms, listJobs, listUsers } from "@/lib/bubble/reference"
+import { listDriverOptions, listJobs } from "@/lib/bubble/reference"
 import { toStopJob } from "@/lib/bubble/reference-types"
 import { shownMovements } from "@/lib/trips/movement-types"
 import { listOutstandingMovements } from "@/lib/trips/movements"
@@ -53,20 +53,15 @@ export default async function NewTripPage({
   )
 }
 
+/**
+ * Only the movement pool gates the builder. Driver names and the job list feed
+ * one control each, so they go down as promises and stream into those controls
+ * on their own instead of holding the whole page until the slowest read lands.
+ */
 async function NewTripBody({ preselectRequestId }: { preselectRequestId?: string }) {
-  const [groups, pms, users, jobs] = await Promise.all([
-    listOutstandingMovements(),
-    listFieldPms(),
-    listUsers(),
-    listJobs(),
-  ])
-
-  // `pms` and `user` merged, as the dispatch board did: neither is an actual
-  // driver roster — no such table exists in Bubble — so this is a quick-pick
-  // convenience and `trip.driver` stays free text either way.
-  const driverOptions = [...new Set([...pms.map((pm) => pm.name), ...users.map((user) => user.name)])].sort((a, b) =>
-    a.localeCompare(b)
-  )
+  const driverOptions = listDriverOptions()
+  const jobs = listJobs().then((rows) => rows.map(toStopJob))
+  const groups = await listOutstandingMovements()
 
   return (
     <TripBuilder
@@ -74,7 +69,7 @@ async function NewTripBody({ preselectRequestId }: { preselectRequestId?: string
       driverOptions={driverOptions}
       today={newYorkToday()}
       preselectRequestId={preselectRequestId}
-      jobs={jobs.map(toStopJob)}
+      jobs={jobs}
     />
   )
 }

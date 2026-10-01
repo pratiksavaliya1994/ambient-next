@@ -4,7 +4,7 @@ import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { buildSlots, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { DEFAULT_WAREHOUSE, isPickupRequest, type RequestStatus } from "@/lib/bubble/enums"
 import { listToolTypes } from "@/lib/bubble/reference"
-import { listRequestsByStatus, type ToolRequest } from "@/lib/bubble/requests"
+import { listRequestsByStatuses, type ToolRequest } from "@/lib/bubble/requests"
 import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { listToolClaims } from "@/lib/bubble/trips-read"
 import { isAssignable } from "@/lib/bubble/tool-enums"
@@ -46,10 +46,10 @@ const SOURCE_STATUSES: readonly RequestStatus[] = [
  * Every outstanding movement, grouped by request and sorted by when the request
  * is due.
  *
- * A fixed number of reads however many requests come back: four status
- * queries in parallel, then one `in` for their `assignedtools` beside the
- * material lines' trip rows (two of their own), then the `tools` themselves
- * and the claim lookup (two more).
+ * A fixed number of reads however many requests come back: one `in` query
+ * over the statuses (plus its line reads), then their `assignedtools`, then the
+ * `tools` themselves and the claim lookup (two more). The material lines' trip
+ * rows (two reads of their own) run alongside the tool chain, not ahead of it.
  *
  * `excludeTripId` is the trip currently being edited. Its own tools are claimed
  * by it, and a draft holding a tool is not a reason that draft can't hold it —
@@ -61,20 +61,23 @@ const SOURCE_STATUSES: readonly RequestStatus[] = [
  * materials-only, and returning early here would hide every one of them.
  */
 export async function listOutstandingMovements(excludeTripId?: string): Promise<RequestMovements[]> {
-  const requests = (await Promise.all(SOURCE_STATUSES.map((status) => listRequestsByStatus(status)))).flat()
+  // Needs nothing from the requests, so it starts now rather than two waves in.
+  const toolTypesPromise = listToolTypes()
+  const requests = await listRequestsByStatuses(SOURCE_STATUSES)
   if (requests.length === 0) return []
 
+  // The material chain (rows, then their trips) is two reads deep and the tool
+  // chain doesn't need it, so the tool reads below start without waiting for it.
   const lineIds = requests.flatMap((request) => request.materialLines.map((line) => line.id))
-  const [assignedRows, materialTripRows] = await Promise.all([
-    listAssignedTools(requests.map((request) => request.id)),
-    listTripMaterialsForLines(lineIds),
-  ])
+  const materialTripRowsPromise = listTripMaterialsForLines(lineIds)
+  const assignedRows = await listAssignedTools(requests.map((request) => request.id))
 
   const toolIds = [...new Set(assignedRows.map((row) => row.toolId))]
-  const [tools, toolTypes, claims] = await Promise.all([
+  const [tools, toolTypes, claims, materialTripRows] = await Promise.all([
     listToolsByIds(toolIds),
-    listToolTypes(),
+    toolTypesPromise,
     listToolClaims(toolIds, excludeTripId),
+    materialTripRowsPromise,
   ])
   const toolsById = new Map(tools.map((tool) => [tool.id, tool]))
 
