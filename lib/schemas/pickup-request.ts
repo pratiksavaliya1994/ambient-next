@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import { TO_DO, WE_ARE } from "@/lib/bubble/enums"
 import { TOOL_CONDITION } from "@/lib/bubble/tool-enums"
+import { materialLinesSchema } from "@/lib/schemas/material"
 import { toolLineSchema } from "@/lib/schemas/request"
 
 /**
@@ -29,8 +30,14 @@ export const pickupRequestFormSchema = z
     fieldPm: z.string().trim().max(120),
     notes: z.string().trim().max(2000),
     toolsNotes: z.string().trim().max(2000),
-    /** Free text, no separate selection — sent as-is, empty is valid. */
-    materials: z.string().trim().max(2000),
+    /**
+     * Structured lines to collect — the only materials a pickup carries since
+     * 5G retired the free-text popup. A quantity here is the PM's
+     * **estimate** — the driver's count at the stop is the truth. Inventory
+     * lines are resolved against a fresh catalogue read, so a retired item
+     * refuses the submit (`resolveMaterialLines`).
+     */
+    materialLines: materialLinesSchema,
     tentative: z.boolean(),
     /** Auto-selects the job's tools in the UI; has no Bubble field of its own. */
     cleanup: z.boolean(),
@@ -52,8 +59,8 @@ export const pickupRequestFormSchema = z
     /** Only tools whose condition the PM actually changed in the picker — see `lib/bubble/tool-status-updates.ts`. */
     toolConditionUpdates: z.array(z.object({ toolId: z.string(), condition: z.enum(TOOL_CONDITION) })),
   })
-  .refine((value) => value.tools.length > 0 || value.materials.trim().length > 3, {
-    message: "Add at least one tool or enter materials.",
+  .refine((value) => value.tools.length > 0 || value.materialLines.length > 0, {
+    message: "Add at least one tool or material.",
     path: ["tools"],
   })
   // `tools` and `toolIds` are two projections of one picker selection, so a

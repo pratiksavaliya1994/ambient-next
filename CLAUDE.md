@@ -134,7 +134,7 @@ The 14 half-hour slots the Bubble calendar lays requests out on (`06:00 a.m. to 
 
 ### `materials`
 
-6 rows, one per job type with a default list ("Fast Request" and "Simple Grind" have none). `List` is the default free text (newline-separated `Concrete:`, `6x6 welded wire:` …); `realtedTo` is the same misspelled option-set-list shape. A _starting point_ for the form's Materials popup, not a picker — PMs type free text; there's no material catalogue.
+6 rows, one per job type with a default list ("Fast Request" and "Simple Grind" have none). `List` is the default free text (newline-separated `Concrete:`, `6x6 welded wire:` …); `realtedTo` is the same misspelled option-set-list shape. **No longer read by this app since phase 5G**: every form now picks structured lines from the `materialitem` catalogue (see [`docs/phase-5-materials.md`](docs/phase-5-materials.md)). The table stays in Bubble.
 
 ### `tools`
 
@@ -252,7 +252,7 @@ Run from `next-ambient/`: `npm run dev`, `build`, `typecheck` (`tsc --noEmit`), 
 
 Built against live data: the Bubble modules (`client.ts` — retry/backoff, cursor pagination, plus `bubbleRunWorkflow` for `/wf/{name}`; `enums.ts`; `dates.ts` — NY wall-clock via a two-pass `Intl` conversion, correct across DST; `reference.ts`/`reference-types.ts`; `tools-summary.ts`; `requests.ts`), `lib/notify.ts`, `app/(app)/requests` (list + create pages, create action), the signed-in shell, the form components, and flag-gated Auth.js with a login page.
 
-Two non-obvious bits: the shell's sidebar open/collapsed state round-trips through the `sidebar_state` cookie, read in the layout so it renders server-side; and `hooks/use-mobile.ts` was reworked to `useSyncExternalStore` because the shipped version set state in an effect and failed `react-hooks/set-state-in-effect`. The form is two-column (fields left, tools right, stacked below `lg`) with the 112-row catalogue behind a dialog, keeping `/requests/new` at ~290KB; materials is one free-text popup, pre-filled from `defaultMaterialsFor` the first time it opens for a given `toDo` and left alone on every reopen.
+Two non-obvious bits: the shell's sidebar open/collapsed state round-trips through the `sidebar_state` cookie, read in the layout so it renders server-side; and `hooks/use-mobile.ts` was reworked to `useSyncExternalStore` because the shipped version set state in an effect and failed `react-hooks/set-state-in-effect`. The form is two-column (fields left, tools right, stacked below `lg`) with the 112-row catalogue behind a dialog, keeping `/requests/new` at ~290KB; materials are structured lines picked from the `materialitem` catalogue (phase 5 — the free-text popup and `defaultMaterialsFor` were removed in 5G).
 
 **The write path is built on both sides but not yet exercised end-to-end.** The Bubble workflow is built (see `bubble-new-request-workflow-summary.md`), was renamed to `new-request` partway through (this app matches), and adds steps beyond the original spec (`jobs.lastRequest`, a `Notifications` row, ClickUp, Outlook Calendar). `requestDateStart` carries the delivery instant precisely so the ClickUp and Calendar steps keep working unmodified now that `requestDateStart`/`requestDateEnd` span a date range rather than a one-hour slot — no Bubble-side change, only how `lib/bubble/requests.ts` computes it. Every read path is exercised; a create puts a real row in the live database, so the write path is a testing task, not a build one.
 

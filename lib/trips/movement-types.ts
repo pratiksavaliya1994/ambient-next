@@ -50,7 +50,11 @@ export type RequestMovements = {
   /** Changing `destination` is meaningful only for a pickup. */
   destinationIsChoosable: boolean
   movements: OutstandingMovement[]
-  /** Material lines with units still to send (5D). Always `Warehouse → job`, never choosable. */
+  /**
+   * Material lines with units still to send. Delivery (5D): `Warehouse → job`.
+   * Pickup (5F): `job → destination`, following the group's choice, except a
+   * linked transfer, whose `to` is fixed (`fixedDestination`).
+   */
   materials: OutstandingMaterial[]
   /** Assigned tools that have already arrived — the "3 of 8 still to go" numerator. */
   landed: number

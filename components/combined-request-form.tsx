@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { useCombinedRequest } from "@/hooks/use-combined-request"
 import type { MaterialItem } from "@/lib/bubble/material-items-types"
-import type { FieldPm, Job, MaterialDefault, TimeSlot, ToolType } from "@/lib/bubble/reference-types"
+import type { FieldPm, Job, TimeSlot, ToolType } from "@/lib/bubble/reference-types"
 
 /**
  * Delivery + Pickup in one pass. A **utility page**, not a third kind of
@@ -29,16 +29,13 @@ export function CombinedRequestForm({
   toolTypes,
   fieldPms,
   timeSlots,
-  materialDefaults,
   materialItems,
 }: {
   jobs: Job[]
   toolTypes: ToolType[]
   fieldPms: FieldPm[]
   timeSlots: TimeSlot[]
-  /** The pickup half's free-text starting points — until 5G gives it lines too. */
-  materialDefaults: MaterialDefault[]
-  /** The delivery half's material catalogue, read fresh. */
+  /** The material catalogue, read fresh — both halves pick their lines from it. */
   materialItems: MaterialItem[]
 }) {
   const combined = useCombinedRequest(timeSlots, fieldPms)
@@ -68,7 +65,8 @@ export function CombinedRequestForm({
             selected={combined.pickupSelected}
             onChange={combined.updatePickupSelected}
             onLoadTools={combined.loadToolsForJob}
-            materialDefaults={materialDefaults}
+            materialItems={materialItems}
+            siteHint={combined.siteHint}
           />
 
           <CombinedDeliveryCard

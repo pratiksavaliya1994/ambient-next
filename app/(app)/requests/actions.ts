@@ -71,8 +71,6 @@ export async function createRequestAction(input: unknown): Promise<CreateRequest
     notes: values.notes,
     tools: values.tools,
     toolsNotes: values.toolsNotes,
-    // No free text on the delivery form since 5C — the lines are the materials.
-    materials: "",
     materialLines: resolved.lines,
   })
 

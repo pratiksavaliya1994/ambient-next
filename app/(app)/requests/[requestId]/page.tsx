@@ -26,8 +26,9 @@ import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { assignedLabel, buildSlots, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
 import { isOpenRequest, isPickupRequest, requestSteps, type RequestStatus } from "@/lib/bubble/enums"
-import { effectiveQty } from "@/lib/bubble/requested-materials-types"
+import { effectiveQty, pickupLineStatus } from "@/lib/bubble/requested-materials-types"
 import { lineTripFlags, listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
+import { listLinkedPickupSources } from "@/lib/bubble/material-transfers"
 import { listTripFlags } from "@/lib/bubble/triptool-read"
 import { outstandingMaterialsFor } from "@/lib/trips/material-movement-types"
 import { listToolClaims } from "@/lib/bubble/trips-read"
@@ -65,10 +66,12 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   // tools can be spread across several — and what the last trip made of each,
   // which is what the amber "Not picked up" and "Refused" rows are read off.
   // The material lines' trip rows too — one read feeds both their progress and their flags.
-  const [claims, flagsByRequest, lineRows] = await Promise.all([
+  // A delivery's lines can be fed by transfers from other sites (5F).
+  const [claims, flagsByRequest, lineRows, linked] = await Promise.all([
     listToolClaims(toolIds),
     listTripFlags(toolIds),
     listTripMaterialsForLines(request.materialLines.map((line) => line.id)),
+    isPickupRequest(request) ? null : listLinkedPickupSources(request.materialLines.map((line) => line.id)),
   ])
 
   // Every status but `New` wants this — `Assigned` to review which tools the
@@ -95,7 +98,10 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   // `docs/phase-4-trips.md`.
   const hasLegacyTrip = request.status === "In Transit" && claims.size === 0
   const outstandingSlots = incompleteSlots.reduce((sum, slot) => sum + (slot.requested - slot.toolIds.length), 0)
-  const unassignedLines = request.materialLines.filter((line) => line.assignedQty < effectiveQty(line)).length
+  // A pickup's lines need no approval, so only a delivery's can be short.
+  const unassignedLines = isPickupRequest(request)
+    ? 0
+    : request.materialLines.filter((line) => line.assignedQty < effectiveQty(line)).length
 
   // Assigned tools a trip could still take: not yet where this request was
   // sending them (`hasLanded`, via `deriveTripStatus`'s two landed states — the
@@ -112,6 +118,9 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   // Lines with units still to send — the builder's own pool rule — so "Add to
   // a trip" shows for a request whose tools have all gone but whose materials haven't.
   const linesToSend = outstandingMaterialsFor(request, request.materialLines, lineRows).length
+  // Transfers feeding this delivery that no trip holds yet: they ride on their
+  // pickup's line, and the builder preselects them from here too.
+  const transfersToSend = linked?.lines.filter((line) => pickupLineStatus(line, linked.tripRows) === "idle").length ?? 0
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -209,7 +218,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                   undeliverableCount={undeliverableCount}
                   outstandingSlots={outstandingSlots}
                   unassignedLines={unassignedLines}
-                  movableCount={movableCount + linesToSend}
+                  movableCount={movableCount + linesToSend + transfersToSend}
                   hasLegacyTrip={hasLegacyTrip}
                 />
               </div>
@@ -262,8 +271,10 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
           <RequestMaterialsCard
             lines={request.materialLines}
             legacy={request.legacyMaterials}
-            tripRows={lineRows}
+            tripRows={[...lineRows, ...(linked?.tripRows ?? [])]}
+            context={{ pickup: isPickupRequest(request), linked: linked?.lines }}
             flags={lineTripFlags(lineRows).get(request.id)}
+            sourceJobs={linked?.jobs}
           />
         </div>
       </div>
@@ -337,7 +348,7 @@ function NextAction({
   undeliverableCount: number
   /** Requested units never assigned — what makes "Close request" meaningful. */
   outstandingSlots: number
-  /** Material lines assigned (or approved) short of what was asked — they send you to the assign page too. */
+  /** A delivery's material lines assigned short of what was asked — they send you to the assign page too. Always 0 on a pickup. */
   unassignedLines: number
   /** Assigned tools not yet where this request was sending them, plus material lines left to send — what a trip would carry. */
   movableCount: number
@@ -365,10 +376,10 @@ function NextAction({
   const dispatched = request.status !== "New" && request.status !== "Assigned"
   const legacy = request.status === "In Transit" && hasLegacyTrip
 
-  // A pickup names its tools at creation, so there is no type-and-quantity
-  // assignment to edit. Once a request is on the road the link narrows to the
-  // one job still worth doing from here — filling the slots that went out
-  // short; swapping tools around a load already moving is not it.
+  // A pickup names its tools at creation and its material lines need no
+  // approval, so there is nothing to assign. Once a request is on the road the
+  // link narrows to the one job still worth doing from here — filling the slots
+  // that went out short; swapping tools around a load already moving is not it.
   const canAssign = !pickup && (!dispatched || outstandingSlots > 0 || unassignedLines > 0)
   const assignLabel = dispatched
     ? "Assign remaining"

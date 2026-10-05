@@ -3,15 +3,16 @@
 import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { ShoppingCartIcon } from "lucide-react"
 
-import { MaterialsField } from "@/components/materials-field"
-import { PickupToolPicker, selectionOfTools, type PickupSelection } from "@/components/pickup-tool-picker"
-import { Button } from "@/components/ui/button"
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { MaterialLinesField } from "@/components/material-lines-field"
+import { PickupToolPicker, type PickupSelection } from "@/components/pickup-tool-picker"
+import { CleanupSiteSwitch, PickupToolsActions } from "@/components/pickup-tools-controls"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
-import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import type { SiteStockHint } from "@/hooks/use-site-stock-hint"
+import type { MaterialItem } from "@/lib/bubble/material-items-types"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
-import { defaultMaterialsFor, type Job, type MaterialDefault } from "@/lib/bubble/reference-types"
+import type { Job } from "@/lib/bubble/reference-types"
 import type { CombinedRequestFormValues } from "@/lib/schemas/combined-request"
 
 /**
@@ -19,6 +20,9 @@ import type { CombinedRequestFormValues } from "@/lib/schemas/combined-request"
  * job, fetched live when the job is picked, exactly as `/requests/new/pickup`
  * picks them. Checking a tool keeps whatever condition Bubble holds; the picker
  * then lets it be changed deliberately.
+ *
+ * Its materials are lines to collect, entered by hand as estimates, with the
+ * job's site figures as a hint (5G) — the pickup form's field exactly.
  */
 export function CombinedPickupCard({
   form,
@@ -28,7 +32,8 @@ export function CombinedPickupCard({
   selected,
   onChange,
   onLoadTools,
-  materialDefaults,
+  materialItems,
+  siteHint,
 }: {
   form: UseFormReturn<CombinedRequestFormValues>
   job: Job | null
@@ -37,16 +42,17 @@ export function CombinedPickupCard({
   selected: Map<string, PickupSelection>
   onChange: (next: Map<string, PickupSelection>) => void
   onLoadTools: (target: Job) => Promise<PickupTool[]>
-  materialDefaults: MaterialDefault[]
+  materialItems: MaterialItem[]
+  siteHint: SiteStockHint
 }) {
   const {
     control,
     register,
     setValue,
+    trigger,
     formState: { errors },
   } = form
-  const toDo = useWatch({ control, name: "toDo" })
-  const materials = useWatch({ control, name: "pickupMaterials" })
+  const [toDo, cleanup] = useWatch({ control, name: ["toDo", "cleanup"] })
 
   return (
     <Card>
@@ -58,22 +64,7 @@ export function CombinedPickupCard({
         <CardDescription>
           {!job ? "Pick a job to see its tools." : loading ? "Loading tools…" : `${selected.size} of ${tools.length} selected`}
         </CardDescription>
-        <CardAction className="flex items-center gap-1">
-          {selected.size > 0 && (
-            <Button type="button" variant="ghost" size="sm" onClick={() => onChange(new Map())}>
-              Clear all
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={tools.length === 0 || selected.size === tools.length}
-            onClick={() => onChange(selectionOfTools(tools))}
-          >
-            Select all
-          </Button>
-        </CardAction>
+        <PickupToolsActions tools={tools} selected={selected} onChange={onChange} />
       </CardHeader>
       <CardContent>
         <FieldGroup className="gap-6">
@@ -88,38 +79,34 @@ export function CombinedPickupCard({
             {errors.pickupTools && <FieldError errors={[errors.pickupTools]} />}
           </Field>
 
-          <Field orientation="horizontal">
-            <Controller
-              control={control}
-              name="cleanup"
-              render={({ field }) => (
-                <Switch
-                  id="cleanup"
-                  checked={field.value}
-                  disabled={!job}
-                  onCheckedChange={(next) => {
-                    const checked = next === true
-                    field.onChange(checked)
-                    if (!checked || !job) return
-                    // The job-select fetch usually landed already — select what
-                    // is on screen rather than reloading the same list. If it
-                    // hasn't (toggled mid-flight, or it came back empty), fetch
-                    // first so the toggle can't select nothing.
-                    if (tools.length > 0) return onChange(selectionOfTools(tools))
-                    void onLoadTools(job).then((fetched) => onChange(selectionOfTools(fetched)))
-                  }}
-                />
-              )}
-            />
-            <FieldLabel htmlFor="cleanup">Cleanup the Site — take everything on file</FieldLabel>
-          </Field>
+          <CleanupSiteSwitch
+            checked={cleanup}
+            onCheckedChange={(next) => setValue("cleanup", next)}
+            job={job}
+            tools={tools}
+            onSelect={onChange}
+            onLoadTools={onLoadTools}
+          />
 
-          <MaterialsField
-            label="Materials to pick up"
-            emptyText="No pickup materials added."
-            value={materials}
-            defaultText={defaultMaterialsFor(materialDefaults, toDo)}
-            onChange={(next) => setValue("pickupMaterials", next, { shouldValidate: true })}
+          {/* The refine is "a tool or a material line", reported on
+              `pickupTools` — so a line change re-checks that too. */}
+          <Controller
+            control={control}
+            name="pickupMaterialLines"
+            render={({ field }) => (
+              <MaterialLinesField
+                mode="pickup"
+                label="Materials to collect"
+                lines={field.value}
+                onChange={(next) => {
+                  field.onChange(next)
+                  void trigger(["pickupMaterialLines", "pickupTools"])
+                }}
+                items={materialItems}
+                toDo={toDo}
+                site={siteHint}
+              />
+            )}
           />
 
           <Field>
@@ -136,3 +123,4 @@ export function CombinedPickupCard({
     </Card>
   )
 }
+

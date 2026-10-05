@@ -3,13 +3,14 @@
 import { PackageIcon, PlusIcon, XIcon } from "lucide-react"
 import * as React from "react"
 
-import { MaterialLineRow } from "@/components/material-line-row"
-import { MaterialPickerDialog } from "@/components/material-picker-dialog"
+import { MaterialLineRow, quantityLabel } from "@/components/material-line-row"
+import { MaterialPickerDialog, type MaterialLinesMode } from "@/components/material-picker-dialog"
 import { QuantityStepper } from "@/components/quantity-stepper"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { ItemGroup } from "@/components/ui/item"
+import type { SiteStockHint } from "@/hooks/use-site-stock-hint"
 import type { ToDo } from "@/lib/bubble/enums"
 import type { MaterialItem } from "@/lib/bubble/material-items-types"
 import { setInventoryQty, toLineDisplay } from "@/lib/materials/line-inputs"
@@ -17,9 +18,13 @@ import type { MaterialLineInput } from "@/lib/schemas/material"
 
 /**
  * The material lines on a request form: the chosen lines, each with its kind
- * and quantity, a remove control, and the "Add materials" picker. Replaces the
- * free-text `MaterialsField` on the delivery form and the combined page's
- * delivery card; the pickup side keeps that one until 5G.
+ * and quantity, a remove control, and the "Add materials" picker. Every form
+ * that carries materials uses it — delivery, pickup and both halves of the
+ * combined page.
+ *
+ * `mode="pickup"` (5G): quantities read as estimates ("about 10 bag"), the
+ * picker offers every active item with the site hint, and nothing is
+ * pre-filled.
  *
  * Controlled — the form owns the array (`materialLines` /
  * `deliveryMaterialLines`) and this only proposes the next one.
@@ -31,6 +36,8 @@ export function MaterialLinesField({
   toDo,
   label = "Materials",
   error,
+  mode = "delivery",
+  site,
 }: {
   lines: MaterialLineInput[]
   onChange: (next: MaterialLineInput[]) => void
@@ -39,7 +46,11 @@ export function MaterialLinesField({
   toDo: ToDo
   label?: string
   error?: string
+  mode?: MaterialLinesMode
+  /** Pickup only: the picked job's site figures, passed to the picker. */
+  site?: SiteStockHint
 }) {
+  const pickup = mode === "pickup"
   const itemsById = React.useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
 
   return (
@@ -57,6 +68,8 @@ export function MaterialLinesField({
             toDo={toDo}
             lines={lines}
             onChange={onChange}
+            mode={mode}
+            site={site}
             trigger={
               <Button type="button" variant="outline" size="sm">
                 <PlusIcon data-icon="inline-start" />
@@ -68,15 +81,7 @@ export function MaterialLinesField({
       </div>
 
       {lines.length === 0 ? (
-        <Empty className="border border-dashed py-6">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <PackageIcon />
-            </EmptyMedia>
-            <EmptyTitle className="text-sm">No materials yet</EmptyTitle>
-          </EmptyHeader>
-          <EmptyDescription>Pick from stock, or describe something the warehouse doesn&rsquo;t carry.</EmptyDescription>
-        </Empty>
+        <NoLines pickup={pickup} />
       ) : (
         <ItemGroup className="scrollbar-slim max-h-88 gap-1 overflow-y-auto rounded-lg border p-1">
           {lines.map((line, index) => {
@@ -85,6 +90,7 @@ export function MaterialLinesField({
               <MaterialLineRow
                 key={line.kind === "Inventory" ? line.materialId : `other-${index}`}
                 line={display}
+                meta={pickup && display.quantity !== null ? <span>about {quantityLabel(display)}</span> : undefined}
                 className="border-transparent bg-muted/50"
                 actions={
                   <>
@@ -114,5 +120,23 @@ export function MaterialLinesField({
       )}
       {error && <FieldError>{error}</FieldError>}
     </Field>
+  )
+}
+
+function NoLines({ pickup }: { pickup: boolean }) {
+  return (
+    <Empty className="border border-dashed py-6">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <PackageIcon />
+        </EmptyMedia>
+        <EmptyTitle className="text-sm">No materials yet</EmptyTitle>
+      </EmptyHeader>
+      <EmptyDescription>
+        {pickup
+          ? "Add what’s on site to bring back."
+          : "Pick from stock, or describe something the warehouse doesn’t carry."}
+      </EmptyDescription>
+    </Empty>
   )
 }

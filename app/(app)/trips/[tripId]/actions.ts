@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache"
 
 import { requireSession } from "@/lib/auth/session"
-import { stillLoadedMaterials } from "@/lib/bubble/trip-materials-types"
 import { completeTrip, completeTripStop, startTrip } from "@/lib/bubble/trips"
 import { getTrip, listToolClaims } from "@/lib/bubble/trips-read"
 import {
@@ -11,14 +10,14 @@ import {
   outstandingCollect,
   outstandingDrop,
   refusable,
-  stillLoaded,
   stopWork,
   type TripDetail,
 } from "@/lib/bubble/trips-types"
+import { finishBlocker } from "@/lib/trips/finish-guard"
 import { syncRequestStatuses } from "@/lib/trips/sync-request-status"
 import { completeStopSchema, completeTripSchema, startTripSchema } from "@/lib/schemas/trip"
 import type { TripRunState } from "@/app/(app)/trips/action-state"
-import { settleStopMaterials, stopMaterialLists } from "@/app/(app)/trips/[tripId]/stop-materials"
+import { settleStopMaterials, stopMaterialLists, touchedMaterialLines } from "@/app/(app)/trips/[tripId]/stop-materials"
 
 /**
  * Running a trip: the three moments that actually move inventory.
@@ -191,7 +190,7 @@ export async function completeStopAction(input: unknown): Promise<TripRunState> 
     }
   }
 
-  const materialLists = stopMaterialLists(work, materialChoice)
+  const materialLists = await stopMaterialLists(work, materialChoice)
   if ("error" in materialLists) return { status: "error", message: materialLists.error }
 
   const outcome = dropOutcome(work.stop.kind)
@@ -231,7 +230,7 @@ export async function completeStopAction(input: unknown): Promise<TripRunState> 
   const materialWarning = await settleStopMaterials(tripId, materialLists)
 
   const touched = [...dropToolIds, ...loadToolIds, ...skipToolIds, ...refuseToolIds]
-  const touchedLines = new Set(Object.values(materialChoice).flat())
+  const touchedLines = touchedMaterialLines(materialChoice)
   const { warning } = await syncRequestStatuses(
     [
       ...trip.items.filter((item) => touched.includes(item.toolId)).map((item) => item.requestId),
@@ -248,9 +247,10 @@ export async function completeStopAction(input: unknown): Promise<TripRunState> 
 /**
  * Closes the trip.
  *
- * The "anything still on the truck?" guard lives here rather than in Bubble
- * precisely so the message can name the tools — a workflow that merely
- * terminated would leave the driver guessing.
+ * The guard (`finishBlocker` — every stop recorded, nothing left on the truck)
+ * lives here rather than in Bubble precisely so the message can name the stop
+ * or the tools — a workflow that merely terminated would leave the driver
+ * guessing.
  */
 export async function completeTripAction(input: unknown): Promise<TripRunState> {
   await requireSession()
@@ -264,20 +264,8 @@ export async function completeTripAction(input: unknown): Promise<TripRunState> 
     return { status: "error", message: `This trip is ${trip.status}, not under way. Reload the page.` }
   }
 
-  const onboard = [
-    ...stillLoaded(trip.items).map((item) => item.toolName),
-    ...stillLoadedMaterials(trip.materials).map((row) => row.name),
-  ]
-  if (onboard.length > 0) {
-    const names = onboard.slice(0, 3).join(", ")
-    return {
-      status: "error",
-      message:
-        onboard.length === 1
-          ? `${names} is still on the truck. Record its stop before finishing.`
-          : `${onboard.length} items are still on the truck (${names}${onboard.length > 3 ? ", …" : ""}). Record their stops before finishing.`,
-    }
-  }
+  const blocker = finishBlocker(trip)
+  if (blocker) return { status: "error", message: blocker }
 
   try {
     await completeTrip(trip.id)

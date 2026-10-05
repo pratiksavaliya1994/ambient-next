@@ -24,8 +24,7 @@ import type { PickupRequestFormValues } from "@/lib/schemas/pickup-request"
  * - tools — delivery picks `toolstype` *types with quantities*, pickup picks
  *   individual `tools` rows already on the job. Two pickers, two lists.
  * - materials — what a crew wants brought to site is not what they want taken
- *   off it, so each half carries its own: structured lines on the delivery
- *   half (phase 5C), free text on the pickup half until 5G.
+ *   off it, so each half carries its own structured lines (5C, 5G).
  * - tool notes — likewise, the warehouse instruction for an outbound load is
  *   not the one for an inbound load.
  *
@@ -61,7 +60,7 @@ export const combinedRequestFormSchema = z
     /** Tool *types* with quantities, from the `toolstype` catalogue. */
     deliveryTools: z.array(toolLineSchema),
     deliveryToolsNotes: z.string().trim().max(2000),
-    /** Phase 5 structured lines, delivery half only — the pickup half stays free text until 5G. */
+    /** Phase 5 structured lines to deliver. The pickup half has its own, below. */
     deliveryMaterialLines: materialLinesSchema,
 
     /** Individual physical `tools` rows currently at the job. */
@@ -70,19 +69,20 @@ export const combinedRequestFormSchema = z
     pickupToolIds: z.array(z.string().min(1)),
     pickupToolConditionUpdates: z.array(z.object({ toolId: z.string(), condition: z.enum(TOOL_CONDITION) })),
     pickupToolsNotes: z.string().trim().max(2000),
-    pickupMaterials: z.string().trim().max(2000),
+    /** Phase 5F lines to collect, the pickup half's own — see `pickupRequestFormSchema.materialLines`. */
+    pickupMaterialLines: materialLinesSchema,
   })
   // Both halves have to be worth writing. The single-purpose pages already
   // cover "just a delivery" and "just a pickup"; a combined submit that leaves
   // one side empty would write an empty request row rather than saving anyone a
-  // step. The `> 3` threshold matches the two schemas this projects into, so a
-  // value that passes here can't fail their own refine afterwards.
+  // step. Each refine matches the schema its half projects into, so a value
+  // that passes here can't fail their own refine afterwards.
   .refine((value) => value.deliveryTools.length > 0 || value.deliveryMaterialLines.length > 0, {
     message: "Add at least one tool or material to deliver.",
     path: ["deliveryTools"],
   })
-  .refine((value) => value.pickupTools.length > 0 || value.pickupMaterials.trim().length > 3, {
-    message: "Add at least one tool to pick up, or enter pickup materials.",
+  .refine((value) => value.pickupTools.length > 0 || value.pickupMaterialLines.length > 0, {
+    message: "Add at least one tool or material to pick up.",
     path: ["pickupTools"],
   })
   // Two projections of one picker selection — a mismatch means the form wired
@@ -144,7 +144,7 @@ export function toPickupValues(values: CombinedRequestFormValues): PickupRequest
     fieldPm: values.fieldPm,
     notes: values.notes,
     toolsNotes: values.pickupToolsNotes,
-    materials: values.pickupMaterials,
+    materialLines: values.pickupMaterialLines,
     tentative: values.tentative,
     cleanup: values.cleanup,
     tools: values.pickupTools,

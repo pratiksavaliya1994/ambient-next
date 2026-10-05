@@ -7,7 +7,9 @@ import { listToolsForJob, type PickupTool } from "@/lib/bubble/pickup-tools"
 import { newYorkInstant } from "@/lib/bubble/dates"
 import { buildSummary } from "@/lib/notify"
 import { requireSession } from "@/lib/auth/session"
+import { resolveMaterialLines } from "@/lib/bubble/requested-materials"
 import { pickupRequestFormSchema } from "@/lib/schemas/pickup-request"
+import { settleNewPickup } from "./settle-pickup"
 import type { CreateRequestState } from "@/app/(app)/requests/action-state"
 
 /** The client component can't call server-only Bubble code directly — this is that seam. */
@@ -45,6 +47,11 @@ export async function createPickupRequestAction(input: unknown): Promise<CreateR
     return { status: "error", message: "That job no longer exists in Bubble." }
   }
 
+  // As on the delivery form: inventory lines take their name and unit from a
+  // fresh catalogue read, and a retired item refuses the submit.
+  const resolved = await resolveMaterialLines(values.materialLines)
+  if (!resolved.ok) return { status: "error", message: resolved.message }
+
   const summary = buildSummary({
     requestedBy: values.fieldPm,
     job: job.name,
@@ -64,12 +71,12 @@ export async function createPickupRequestAction(input: unknown): Promise<CreateR
     notes: values.notes,
     tools: values.tools,
     toolsNotes: values.toolsNotes,
-    materials: values.materials,
+    materialLines: resolved.lines,
   })
 
   let created
   try {
-    created = await createPickupToolRequest(values, job, summary)
+    created = await createPickupToolRequest(values, job, summary, resolved.lines)
   } catch (error) {
     return {
       status: "error",
@@ -78,11 +85,14 @@ export async function createPickupRequestAction(input: unknown): Promise<CreateR
     }
   }
 
+  const warning = await settleNewPickup(created.requestId, resolved.lines.length)
+
   revalidatePath("/requests")
 
   return {
     status: "created",
     requestId: created.requestId,
     job: created.job,
+    warning,
   }
 }

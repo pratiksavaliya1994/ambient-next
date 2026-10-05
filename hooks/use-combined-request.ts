@@ -16,6 +16,7 @@ import {
   type PickupSelection,
 } from "@/components/pickup-tool-picker"
 import { toast } from "@/components/ui/toast"
+import { useSiteStockHint, type SiteStockHint } from "@/hooks/use-site-stock-hint"
 import { newYorkToday } from "@/lib/bubble/dates"
 import { DEFAULT_WE_ARE, UNFILTERED_TO_DO } from "@/lib/bubble/enums"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
@@ -49,6 +50,8 @@ export type CombinedRequestController = {
   /** The physical tools Bubble says are at the chosen job, fetched on job select. */
   toolsForJob: PickupTool[]
   loadToolsForJob: (target: Job) => Promise<PickupTool[]>
+  /** What the job has been sent and not sent back — the pickup half's materials hint (5G). */
+  siteHint: SiteStockHint
   onSubmit: FormEventHandler<HTMLFormElement>
 }
 
@@ -57,6 +60,7 @@ export function useCombinedRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): 
   const [state, setState] = useState<CombinedRequestState>(INITIAL_COMBINED_STATE)
   const [pending, startTransition] = useTransition()
   const [toolsPending, startToolsTransition] = useTransition()
+  const site = useSiteStockHint()
 
   const form = useForm<CombinedRequestFormValues>({
     resolver: zodResolver(combinedRequestFormSchema),
@@ -81,7 +85,7 @@ export function useCombinedRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): 
       pickupToolIds: [],
       pickupToolConditionUpdates: [],
       pickupToolsNotes: "",
-      pickupMaterials: "",
+      pickupMaterialLines: [],
     },
   })
   const { setValue, clearErrors, setError, handleSubmit } = form
@@ -130,6 +134,7 @@ export function useCombinedRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): 
     clearErrors("pickupTools")
     setValue("jobId", next?.id ?? "", { shouldValidate: true })
     if (next) void loadToolsForJob(next)
+    site.load(next?.name ?? null)
   }
 
   function updateDeliverySelected(next: Record<string, number>) {
@@ -141,9 +146,11 @@ export function useCombinedRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): 
     setPickupSelected(next)
     // Three projections of one selection, set together so they can't drift:
     // names for the summary, ids for the `assignedtools` rows, the condition diff.
-    setValue("pickupTools", toolLinesOfPickup(next), { shouldValidate: true })
+    // `pickupTools` goes last so its validation pass sees the new ids — see
+    // `usePickupRequest.updateSelected`.
     setValue("pickupToolIds", toolIdsOfPickup(next))
     setValue("pickupToolConditionUpdates", changedConditionLines(next))
+    setValue("pickupTools", toolLinesOfPickup(next), { shouldValidate: true })
   }
 
   const onSubmit = handleSubmit((values) => {
@@ -188,6 +195,7 @@ export function useCombinedRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): 
     updatePickupSelected,
     toolsForJob,
     loadToolsForJob,
+    siteHint: site.hint,
     onSubmit,
   }
 }

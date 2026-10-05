@@ -13,8 +13,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 import type { RequestStopInfo, SiteContact } from "@/lib/bubble/requests"
-import { stillLoadedMaterials } from "@/lib/bubble/trip-materials-types"
-import { isStopDone, stillLoaded, stopWork, type TripDetail } from "@/lib/bubble/trips-types"
+import { isStopDone, stopWork, type TripDetail } from "@/lib/bubble/trips-types"
+import { finishBlocker } from "@/lib/trips/finish-guard"
 import { tripStartTime } from "@/lib/trips/schedule"
 
 /**
@@ -49,8 +49,8 @@ export function TripRunSheet({
   const work = stopWork(trip)
   const [first] = work
   const startTime = tripStartTime(trip.tripDate)
-  const onboard = [...stillLoaded(trip.items), ...stillLoadedMaterials(trip.materials)]
   const live = trip.status === "In Transit"
+  const blocker = live ? finishBlocker(trip) : null
   // Hand-added stops alone make a draft, not a trip — `startTripAction` refuses it too.
   const nothingToCarry = trip.items.length + trip.materials.length === 0
   // Where the driver has got to: the first stop with anything still outstanding.
@@ -182,33 +182,35 @@ export function TripRunSheet({
         </div>
       )}
 
+      {/* Finish only appears once there is nothing left to do — before that
+          the line says what is, rather than offering a button that can't
+          honestly be pressed. */}
       {live && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
-            {onboard.length === 0
-              ? trip.materials.length > 0
+            {blocker ??
+              (trip.materials.length > 0
                 ? "Every tool and material has been dealt with."
-                : "Every tool has been dealt with."
-              : trip.materials.length > 0
-                ? `${onboard.length} ${onboard.length === 1 ? "item is" : "items are"} still on the truck.`
-                : `${onboard.length} ${onboard.length === 1 ? "tool is" : "tools are"} still on the truck.`}
+                : "Every tool has been dealt with.")}
           </p>
-          <TripActionConfirm
-            open={finishOpen}
-            onOpenChange={setFinishOpen}
-            trigger={
-              <Button disabled={pending || onboard.length > 0}>
-                <FlagIcon />
-                Finish trip
-              </Button>
-            }
-            title="Finish this trip?"
-            description="This marks the trip complete. There's no undo from here — only do this once every stop is recorded."
-            confirmLabel="Finish trip"
-            confirmIcon={<FlagIcon />}
-            pending={pending}
-            onConfirm={finish}
-          />
+          {!blocker && (
+            <TripActionConfirm
+              open={finishOpen}
+              onOpenChange={setFinishOpen}
+              trigger={
+                <Button disabled={pending}>
+                  <FlagIcon />
+                  Finish trip
+                </Button>
+              }
+              title="Finish this trip?"
+              description="This marks the trip complete. There's no undo from here."
+              confirmLabel="Finish trip"
+              confirmIcon={<FlagIcon />}
+              pending={pending}
+              onConfirm={finish}
+            />
+          )}
         </div>
       )}
     </div>

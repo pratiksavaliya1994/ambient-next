@@ -1,5 +1,5 @@
 import { DEFAULT_WAREHOUSE, isPickupRequest, isWarehouseDestination } from "@/lib/bubble/enums"
-import { lineProgress, type MaterialLine } from "@/lib/bubble/requested-materials-types"
+import { isLinkedTransfer, lineProgress, type MaterialLine } from "@/lib/bubble/requested-materials-types"
 import type { LineTripRow } from "@/lib/bubble/trip-materials-types"
 import type { MaterialMovement } from "@/lib/trips/plan-types"
 
@@ -17,10 +17,27 @@ import type { MaterialMovement } from "@/lib/trips/plan-types"
 
 /** One line with units still to plan. `qty` is left to the selection; `outstanding` is its ceiling. */
 export type OutstandingMaterial = Omit<MaterialMovement, "qty"> & {
-  /** `requestedmaterials.assignedQty` — what the warehouse allocated. */
+  /** What the warehouse allocated (`assignedQty`); on a pickup, the whole estimate — it needs no approval. */
   assigned: number
   /** Assigned but on no open trip yet. Always ≥ 1 here. */
   outstanding: number
+  /**
+   * 5F pickup lines go on **one trip, whole**: the qty must be all of
+   * `outstanding`, the estimate. There's nothing to split an unknown quantity
+   * by; the driver's count replaces it at the stop.
+   */
+  fixedQty: boolean
+  /**
+   * A linked transfer's `to` is its delivery's job. The group's warehouse
+   * choice never moves it.
+   */
+  fixedDestination: boolean
+  /**
+   * A linked transfer's delivery request — `transferToRequestId`, `""`
+   * otherwise. "Add to a trip" from that delivery preselects it, since the
+   * delivery's materials are coming on the pickup's line.
+   */
+  feedsRequestId: string
 }
 
 type PoolRequest = { id: string; job: string; delivery: boolean; pickup: boolean }
@@ -28,10 +45,12 @@ type PoolRequest = { id: string; job: string; delivery: boolean; pickup: boolean
 /**
  * A request's lines with something left to send.
  *
- * **Delivery lines only, `Warehouse → request.job`.** Pickup lines and
- * transfers are 5F. A delivery "to" a warehouse name is left out as well. Its
- * drop would credit a site row to the yard, and site stock never holds the
- * warehouse.
+ * - **Delivery:** `Warehouse → request.job`, any part of what's assigned.
+ * - **Pickup (5F):** `request.job → the group's warehouse`, or a linked
+ *   transfer's `→ transferToLocation`, the whole estimate.
+ *
+ * A request whose job is a warehouse name is left out: a delivery's drop would
+ * credit a site row to the yard, and a pickup's collect would debit one.
  *
  * `excludeTripId` is the trip being edited: its own rows aren't a claim on
  * itself — the same rule `listToolClaims` applies to tools, applied to
@@ -43,14 +62,18 @@ export function outstandingMaterialsFor(
   tripRows: readonly LineTripRow[],
   excludeTripId?: string
 ): OutstandingMaterial[] {
-  if (isPickupRequest(request) || isWarehouseDestination(request.job)) return []
+  if (isWarehouseDestination(request.job)) return []
+  const pickup = isPickupRequest(request)
 
   const counted = excludeTripId ? tripRows.filter((row) => row.tripId !== excludeTripId) : tripRows
   const pool: OutstandingMaterial[] = []
   for (const line of lines) {
-    if (line.assignedQty <= 0) continue
-    const { outstanding } = lineProgress(line, counted)
+    // A delivery line waits for the warehouse to assign it. A pickup line needs
+    // no approval, like a pickup's tools, so it's in the pool from creation.
+    if (!pickup && line.assignedQty <= 0) continue
+    const { assigned, outstanding } = lineProgress(line, counted, { pickup })
     if (outstanding <= 0) continue
+    const linked = pickup && isLinkedTransfer(line)
     pool.push({
       lineId: line.id,
       requestId: request.id,
@@ -58,17 +81,39 @@ export function outstandingMaterialsFor(
       name: line.name,
       unit: line.unit ?? "",
       kind: line.kind,
-      from: DEFAULT_WAREHOUSE,
-      to: request.job,
-      assigned: line.assignedQty,
+      from: pickup ? request.job : DEFAULT_WAREHOUSE,
+      to: linked ? line.transferToLocation : pickup ? DEFAULT_WAREHOUSE : request.job,
+      assigned,
       outstanding,
+      fixedQty: pickup,
+      fixedDestination: !pickup || linked,
+      feedsRequestId: linked ? line.transferToRequestId : "",
     })
   }
   return pool.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** A requested quantity outside `1..outstanding`. `outstanding` is 0 for a line no longer in the pool at all. */
-export type InvalidMaterial = { lineId: string; name: string; qty: number; outstanding: number; unit: string }
+/**
+ * A requested quantity outside `1..outstanding`, or — for a pickup line
+ * (`whole`) — anything but all of it. `outstanding` is 0 for a line no longer
+ * in the pool at all.
+ */
+export type InvalidMaterial = {
+  lineId: string
+  name: string
+  qty: number
+  outstanding: number
+  unit: string
+  whole?: boolean
+}
+
+/** The pool groups as `selectMaterialMovements` reads them. `RequestMovements` is one. */
+type MaterialGroup = {
+  requestId: string
+  destination: string
+  destinationIsChoosable: boolean
+  materials: readonly OutstandingMaterial[]
+}
 
 /**
  * Turns a selection — line id → quantity for this trip — back into
@@ -77,24 +122,39 @@ export type InvalidMaterial = { lineId: string; name: string; qty: number; outst
  * A quantity outside `1..outstanding` is **refused by name, never clamped**.
  * Quietly sending 8 when the dispatcher typed 12 would plan a trip nobody
  * chose, the same reason `selectMovements` returns blocked tools rather than
- * skipping them.
+ * skipping them. A pickup line takes all of `outstanding` or nothing.
+ *
+ * `destinationByRequest` is the pickup groups' warehouse choice, as
+ * `selectMovements` takes it: an unlinked pickup line follows its request's
+ * tools to the same yard. A linked transfer never moves.
  */
 export function selectMaterialMovements(
-  groups: readonly { materials: readonly OutstandingMaterial[] }[],
-  selection: ReadonlyMap<string, number>
+  groups: readonly MaterialGroup[],
+  selection: ReadonlyMap<string, number>,
+  destinationByRequest: ReadonlyMap<string, string> = new Map()
 ): { materials: MaterialMovement[]; invalid: InvalidMaterial[] } {
-  const byLine = new Map(groups.flatMap((group) => group.materials.map((material) => [material.lineId, material])))
+  const byLine = new Map(
+    groups.flatMap((group) => {
+      const to = destinationByRequest.get(group.requestId) ?? group.destination
+      return group.materials.map((material) => [
+        material.lineId,
+        { material, to: group.destinationIsChoosable && !material.fixedDestination ? to : material.to },
+      ])
+    })
+  )
 
   const materials: MaterialMovement[] = []
   const invalid: InvalidMaterial[] = []
   for (const [lineId, qty] of selection) {
-    const line = byLine.get(lineId)
-    if (!line) {
+    const entry = byLine.get(lineId)
+    if (!entry) {
       invalid.push({ lineId, name: "A material", qty, outstanding: 0, unit: "" })
       continue
     }
-    if (!Number.isInteger(qty) || qty < 1 || qty > line.outstanding) {
-      invalid.push({ lineId, name: line.name, qty, outstanding: line.outstanding, unit: line.unit })
+    const { material: line, to } = entry
+    const wrongQty = line.fixedQty ? qty !== line.outstanding : !Number.isInteger(qty) || qty < 1 || qty > line.outstanding
+    if (wrongQty) {
+      invalid.push({ lineId, name: line.name, qty, outstanding: line.outstanding, unit: line.unit, whole: line.fixedQty })
       continue
     }
     materials.push({
@@ -106,7 +166,7 @@ export function selectMaterialMovements(
       kind: line.kind,
       qty,
       from: line.from,
-      to: line.to,
+      to,
     })
   }
   return { materials, invalid }
@@ -115,10 +175,13 @@ export function selectMaterialMovements(
 /** The sentence the builder and the action both show for the first refused line. */
 export function invalidMaterialMessage(invalid: readonly InvalidMaterial[]): string {
   const [first] = invalid
+  const units = `${first.outstanding}${first.unit ? ` ${first.unit}` : ""}`
   const reason =
     first.outstanding === 0
       ? `${first.name} has nothing left to send`
-      : `only ${first.outstanding}${first.unit ? ` ${first.unit}` : ""} of ${first.name} left to send`
+      : first.whole
+        ? `${first.name} is a pickup and goes on one trip whole (${units})`
+        : `only ${units} of ${first.name} left to send`
   const rest = invalid.length > 1 ? ` (and ${invalid.length - 1} more)` : ""
   return `${reason[0].toUpperCase()}${reason.slice(1)}${rest}. Reload the builder.`
 }

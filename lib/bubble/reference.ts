@@ -4,10 +4,10 @@ import { z } from "zod"
 
 import { bubbleListAll } from "@/lib/bubble/client"
 import { TO_DO, WAREHOUSE_JOB_NAMES, type ToDo } from "@/lib/bubble/enums"
-import type { AppUser, FieldPm, Job, MaterialDefault, TimeSlot, ToolType } from "@/lib/bubble/reference-types"
+import type { AppUser, FieldPm, Job, TimeSlot, ToolType } from "@/lib/bubble/reference-types"
 
-export type { AppUser, FieldPm, Job, MaterialDefault, TimeSlot, ToolType }
-export { defaultMaterialsFor, toolTypesFor } from "@/lib/bubble/reference-types"
+export type { AppUser, FieldPm, Job, TimeSlot, ToolType }
+export { toolTypesFor } from "@/lib/bubble/reference-types"
 
 /**
  * The four read-only lookup lists the request form needs: jobs, tool types,
@@ -111,32 +111,6 @@ export function listToolTypes(): Promise<ToolType[]> {
         relatedTo: (row.realtedTo ?? []).filter((value): value is ToDo => IS_TO_DO.has(value)),
       }))
       .sort((a, b) => a.name.localeCompare(b.name))
-  })
-}
-
-// ----------------------------------------------------- material defaults
-
-/**
- * The `materials` table: `List` is the default free-text material list,
- * `realtedTo` which job types it's the default for — same misspelling, same
- * shape as `toolstype.realtedTo`.
- */
-const materialRow = z.looseObject({
-  _id: z.string(),
-  List: z.string().optional(),
-  realtedTo: z.array(z.string()).optional(),
-})
-
-export function listMaterialDefaults(): Promise<MaterialDefault[]> {
-  return cached("materials", async () => {
-    const rows = await bubbleListAll("materials")
-    return rows
-      .map((row) => materialRow.parse(row))
-      .map((row) => ({
-        id: row._id,
-        list: row.List ?? "",
-        relatedTo: (row.realtedTo ?? []).filter((value): value is ToDo => IS_TO_DO.has(value)),
-      }))
   })
 }
 

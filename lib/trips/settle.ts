@@ -69,26 +69,29 @@ export const PLAN_STILL_LANDING =
   "Saved, but Bubble is still writing the stops. The run sheet may look short for a moment — reload it."
 
 /**
- * Waits until every one of these lines' rows on this trip reads `state`.
+ * Waits until every one of these lines' rows on this trip reads `state` (or
+ * one of them, given a list).
  *
- * `complete-trip-stop` hands job drops to `drop-material-at-site` and yard
- * unloads to `return-material-stock`, both through *Schedule API Workflow on
- * a list*. So the `Dropped` / `Returned` flip, and the stock or site write
- * that comes before it, lands **after** the call returns. `true` once all of
- * them read `state`; `false` if some still didn't after the last try. Like
+ * `complete-trip-stop` hands job drops to `drop-material-at-site`, yard
+ * returns to `return-material-stock`, and 5F's counts and yard unloads to
+ * `load-trip-material` / `land-material-stock`, all through *Schedule API
+ * Workflow on a list*. So the flip, and the stock or site write that comes
+ * before it, lands **after** the call returns. `true` once all of them read
+ * `state`; `false` if some still didn't after the last try. Like
  * `waitForTripPlan`, not settling is a warning, not a failure.
  */
 export async function waitForMaterialRows(
   tripId: string,
   lineIds: readonly string[],
-  state: TripMaterialState
+  state: TripMaterialState | readonly TripMaterialState[]
 ): Promise<boolean> {
   if (lineIds.length === 0) return true
   const wanted = new Set(lineIds)
+  const done: readonly TripMaterialState[] = typeof state === "string" ? [state] : state
 
   for (let attempt = 0; ; attempt++) {
     const rows = (await listTripMaterials([tripId])).filter((row) => wanted.has(row.lineId))
-    if (rows.length > 0 && rows.every((row) => row.state === state)) return true
+    if (rows.length > 0 && rows.every((row) => done.includes(row.state))) return true
     if (attempt === RETRY_DELAYS_MS.length) return false
     await sleep(RETRY_DELAYS_MS[attempt])
   }

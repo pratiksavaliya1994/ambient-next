@@ -1,20 +1,24 @@
-import { CheckIcon } from "lucide-react"
-
-import { MaterialLineRow, quantityLabel } from "@/components/material-line-row"
-import { MaterialLineTripProgress } from "@/components/material-line-trip-progress"
-import { Badge } from "@/components/ui/badge"
+import { RequestMaterialLine } from "@/components/request-material-line"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ItemGroup } from "@/components/ui/item"
-import { effectiveQty, lineProgress, type MaterialLine } from "@/lib/bubble/requested-materials-types"
+import {
+  effectiveQty,
+  lineProgress,
+  type LineContext,
+  type MaterialLine,
+} from "@/lib/bubble/requested-materials-types"
 import type { LineTripRow } from "@/lib/bubble/trip-materials-types"
 import type { TripFlag } from "@/lib/trips/plan-types"
 
 /**
  * A request's materials on its detail page: each structured line as requested
- * · assigned · how far it has got on trips, and below them the legacy
- * free-text note when the request has one. `listMaterialLines` never returns
- * both for one request — the legacy row `new-request` writes beside new lines
- * is dropped on read — so in practice this shows one or the other.
+ * · assigned · how far it has got on trips (`RequestMaterialLine`), and below
+ * them the legacy free-text note when the request has one. `listMaterialLines`
+ * never returns both for one request — the legacy row beside new lines is
+ * dropped on read — so in practice this shows one or the other.
+ *
+ * A pickup's lines are "Materials to collect". They need no approval, so the
+ * header just counts them (5G).
  *
  * Renders nothing when the request has no materials at all.
  */
@@ -22,26 +26,37 @@ export function RequestMaterialsCard({
   lines,
   legacy,
   tripRows = [],
+  context,
   flags,
+  sourceJobs,
 }: {
   lines: MaterialLine[]
   legacy: string[]
-  /** The lines' `tripmaterial` rows, from `listTripMaterialsForLines` — what `lineProgress` counts. */
+  /** The lines' `tripmaterial` rows, from `listTripMaterialsForLines` — what `lineProgress` counts. Linked transfers' rows too. */
   tripRows?: readonly LineTripRow[]
+  /** The request's direction, and the transfers feeding a delivery's lines (5F). */
+  context?: LineContext
   /** `lineId → what the last trip decided`, from `lineTripFlags`. */
   flags?: ReadonlyMap<string, TripFlag>
+  /** Pickup request id → job, naming the sites a delivery's linked transfers come from. */
+  sourceJobs?: ReadonlyMap<string, string>
 }) {
   if (lines.length === 0 && legacy.length === 0) return null
 
-  const assigned = lines.filter((line) => line.assignedQty >= effectiveQty(line)).length
+  const pickup = context?.pickup ?? false
+  const full = lines.filter(
+    (line) => line.assignedQty + lineProgress(line, tripRows, context).linkedCoverage >= effectiveQty(line)
+  ).length
 
   return (
     <Card data-size="sm">
       <CardHeader>
-        <CardTitle className="text-base">Materials</CardTitle>
+        <CardTitle className="text-base">{pickup ? "Materials to collect" : "Materials"}</CardTitle>
         <span className="text-sm text-muted-foreground tabular-nums">
           {lines.length > 0
-            ? `${assigned} of ${lines.length} ${lines.length === 1 ? "line" : "lines"} fully assigned`
+            ? pickup
+              ? `${lines.length} ${lines.length === 1 ? "line" : "lines"}`
+              : `${full} of ${lines.length} ${lines.length === 1 ? "line" : "lines"} fully assigned`
             : `${legacy.length} ${legacy.length === 1 ? "line" : "lines"}`}
         </span>
       </CardHeader>
@@ -49,15 +64,13 @@ export function RequestMaterialsCard({
         {lines.length > 0 && (
           <ItemGroup className="gap-1.5">
             {lines.map((line) => (
-              <MaterialLineRow
+              <RequestMaterialLine
                 key={line.id}
                 line={line}
-                meta={
-                  <>
-                    <AssignedMeta line={line} />
-                    <MaterialLineTripProgress progress={lineProgress(line, tripRows)} flag={flags?.get(line.id)} />
-                  </>
-                }
+                tripRows={tripRows}
+                context={context}
+                flag={flags?.get(line.id)}
+                sourceJobs={sourceJobs}
               />
             ))}
           </ItemGroup>
@@ -79,50 +92,5 @@ export function RequestMaterialsCard({
         )}
       </CardContent>
     </Card>
-  )
-}
-
-/**
- * `12 of 20 bag`, plus how it stands: "short" once some but not all is
- * assigned, "not assigned" before anything is. A non-inventory line is
- * approved whole or not at all, so it reads as approved or awaiting.
- */
-export function AssignedMeta({ line }: { line: MaterialLine }) {
-  const requested = effectiveQty(line)
-  const full = line.assignedQty >= requested
-
-  if (line.kind === "NonInventory") {
-    return (
-      <>
-        <span className="tabular-nums">{quantityLabel(line)}</span>
-        {full ? <ApprovedBadge /> : <Badge variant="outline">Awaiting approval</Badge>}
-      </>
-    )
-  }
-
-  return (
-    <>
-      <span className="tabular-nums">
-        {line.assignedQty} of {requested} {line.unit ?? ""}
-      </span>
-      {full ? (
-        <ApprovedBadge label="Assigned" />
-      ) : line.assignedQty > 0 ? (
-        <Badge className="border-transparent bg-status-attention/15 text-status-attention-foreground">
-          {requested - line.assignedQty} short
-        </Badge>
-      ) : (
-        <Badge variant="outline">Not assigned</Badge>
-      )}
-    </>
-  )
-}
-
-function ApprovedBadge({ label = "Approved" }: { label?: string }) {
-  return (
-    <Badge className="border-transparent bg-status-ok/15 text-status-ok-foreground">
-      <CheckIcon />
-      {label}
-    </Badge>
   )
 }

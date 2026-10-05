@@ -2,9 +2,10 @@ import "server-only"
 
 import { listAssignedTools, listOpenRequestIdsForTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { buildSlots } from "@/lib/bubble/assigned-tools-types"
-import type { RequestStatus } from "@/lib/bubble/enums"
+import { isPickupRequest, type RequestStatus } from "@/lib/bubble/enums"
+import { listLinkedPickupLines } from "@/lib/bubble/material-transfers"
 import { listToolTypes } from "@/lib/bubble/reference"
-import { getRequest } from "@/lib/bubble/requests"
+import { getRequest, type ToolRequest } from "@/lib/bubble/requests"
 import { setRequestStatuses } from "@/lib/bubble/request-status"
 import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { deriveRequestStatus, requestProgress } from "@/lib/trips/request-progress"
@@ -46,37 +47,42 @@ export async function syncRequestStatuses(
   touchedToolIds: readonly string[] = []
 ): Promise<{ updated: number; warning?: string }> {
   try {
-    const ids = [
+    const named = [
       ...new Set([...requestIds, ...(await listOpenRequestIdsForTools([...new Set(touchedToolIds)]))].filter(Boolean)),
     ]
-    if (ids.length === 0) return { updated: 0 }
+    if (named.length === 0) return { updated: 0 }
 
-    const [requests, assignedRows, toolTypes] = await Promise.all([
-      Promise.all(ids.map((id) => getRequest(id))),
-      listAssignedTools(ids),
-      listToolTypes(),
-    ])
+    const toolTypesPromise = listToolTypes()
+    const requests = await withTransferTargets(await Promise.all(named.map((id) => getRequest(id))))
+    const ids = requests.map((request) => request.id)
 
     // `getRequest` already carries each request's material lines; one `in`
-    // query more fetches every trip row naming any of them.
-    const lineIds = requests.flatMap((request) => request?.materialLines.map((line) => line.id) ?? [])
-    const [tools, materialTripRows] = await Promise.all([
-      listToolsByIds([...new Set(assignedRows.map((row) => row.toolId))]),
+    // query more fetches every trip row naming any of them, and one more the
+    // pickup lines linked to the delivery lines, with their own rows.
+    const lineIds = requests.flatMap((request) => request.materialLines.map((line) => line.id))
+    const deliveryLineIds = requests
+      .filter((request) => !isPickupRequest(request))
+      .flatMap((request) => request.materialLines.filter((line) => line.kind === "Inventory").map((line) => line.id))
+    const [assignedRows, toolTypes, ownTripRows, linked] = await Promise.all([
+      listAssignedTools(ids),
+      toolTypesPromise,
       listTripMaterialsForLines(lineIds),
+      listLinkedPickupLines(deliveryLineIds),
     ])
+    const tools = await listToolsByIds([...new Set(assignedRows.map((row) => row.toolId))])
     const toolsById = new Map(tools.map((tool) => [tool.id, tool]))
+    // A pickup synced beside the delivery it feeds brings its rows in twice.
+    const materialTripRows = [...new Map([...ownTripRows, ...linked.tripRows].map((row) => [row.id, row])).values()]
 
     const byStatus = new Map<RequestStatus, string[]>()
 
     for (const request of requests) {
-      if (!request) continue
-
       const rows = assignedRows.filter((row) => row.requestId === request.id)
       const { slots } = buildSlots(request.tools, rows, toolTypes)
       const unfilledSlots = slots.filter((slot) => !slot.consumable && slot.toolIds.length < slot.requested).length
 
-      // `lineProgress` matches trip rows by line id, so the whole list is fine.
-      const materials = { lines: request.materialLines, tripRows: materialTripRows }
+      // `lineProgress` matches trip rows and linked lines by line id, so the whole lists are fine.
+      const materials = { lines: request.materialLines, tripRows: materialTripRows, linked: linked.lines }
       const next = deriveRequestStatus(
         requestProgress(request, rows, toolsById, unfilledSlots, materials),
         request.status
@@ -104,4 +110,26 @@ export async function syncRequestStatuses(
           : "Tools moved, but request statuses didn't update.",
     }
   }
+}
+
+/**
+ * The requests read, plus every delivery a linked pickup line among them feeds
+ * (5F §2.6). A `tripmaterial` row names only the pickup's request, so a
+ * transfer dropped at B would otherwise leave B's delivery on its old status
+ * until something unrelated touched it — the lesson `touchedToolIds` learned
+ * for tools. Done here rather than by each caller, so none can forget it.
+ */
+async function withTransferTargets(read: readonly (ToolRequest | null)[]): Promise<ToolRequest[]> {
+  const requests = read.filter((request): request is ToolRequest => request !== null)
+  const have = new Set(requests.map((request) => request.id))
+  const targets = [
+    ...new Set(
+      requests.flatMap((request) =>
+        request.materialLines.map((line) => line.transferToRequestId).filter((id) => id && !have.has(id))
+      )
+    ),
+  ]
+  if (targets.length === 0) return requests
+  const extra = await Promise.all(targets.map((id) => getRequest(id)))
+  return [...requests, ...extra.filter((request): request is ToolRequest => request !== null)]
 }

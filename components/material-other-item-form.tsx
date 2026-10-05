@@ -6,6 +6,7 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import type { MaterialLinesMode } from "@/components/material-picker-dialog"
 import type { MaterialLineInput } from "@/lib/schemas/material"
 
 /**
@@ -17,8 +18,18 @@ import type { MaterialLineInput } from "@/lib/schemas/material"
  * the request form's React tree, and a submit here would bubble through the
  * portal to the request form's `onSubmit`. Enter in any field adds the line
  * instead, by hand.
+ *
+ * On a pickup the quantity is an estimate ("about how many"), as everywhere
+ * else on that form.
  */
-export function MaterialOtherItemForm({ onAdd }: { onAdd: (line: MaterialLineInput) => void }) {
+export function MaterialOtherItemForm({
+  onAdd,
+  mode = "delivery",
+}: {
+  onAdd: (line: MaterialLineInput) => void
+  mode?: MaterialLinesMode
+}) {
+  const pickup = mode === "pickup"
   const [name, setName] = React.useState("")
   const [quantity, setQuantity] = React.useState("")
   const [unit, setUnit] = React.useState("")
@@ -49,19 +60,19 @@ export function MaterialOtherItemForm({ onAdd }: { onAdd: (line: MaterialLineInp
   return (
     <FieldGroup className="gap-4">
       <Field data-invalid={error ? true : undefined}>
-        <FieldLabel htmlFor="otherName">What&rsquo;s needed</FieldLabel>
+        <FieldLabel htmlFor="otherName">{pickup ? "What’s coming back" : "What’s needed"}</FieldLabel>
         <Input
           id="otherName"
           value={name}
           maxLength={200}
-          placeholder="Rental scissor lift, special-order grout"
+          placeholder={pickup ? "Leftover tile, empty pails" : "Rental scissor lift, special-order grout"}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={onEnter}
         />
       </Field>
       <div className="grid grid-cols-2 gap-4">
         <Field>
-          <FieldLabel htmlFor="otherQuantity">Quantity</FieldLabel>
+          <FieldLabel htmlFor="otherQuantity">{pickup ? "About how many" : "Quantity"}</FieldLabel>
           <Input
             id="otherQuantity"
             type="number"
@@ -88,7 +99,11 @@ export function MaterialOtherItemForm({ onAdd }: { onAdd: (line: MaterialLineInp
       {error ? (
         <FieldError>{error}</FieldError>
       ) : (
-        <FieldDescription>Not from stock, so the warehouse approves it rather than drawing it.</FieldDescription>
+        <FieldDescription>
+          {pickup
+            ? "Not a catalogue item, so it doesn’t go back into stock. The driver counts what comes back."
+            : "Not from stock, so the warehouse approves it rather than drawing it."}
+        </FieldDescription>
       )}
       <Button type="button" variant="secondary" onClick={add}>
         <PlusIcon />

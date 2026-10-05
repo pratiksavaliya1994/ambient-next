@@ -1,13 +1,14 @@
 "use client"
 
 import { useMemo, useState, useTransition } from "react"
-import { AlertCircleIcon, LockIcon, RotateCcwIcon, SaveIcon, XIcon } from "lucide-react"
+import { AlertCircleIcon, LockIcon, XIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { INITIAL_CREATE_STATE, type CreateRequestState } from "@/app/(app)/requests/action-state"
 import { saveAssignmentAction } from "@/app/(app)/requests/[requestId]/assign/actions"
 import { AssignLockNotice } from "@/components/assign-lock-notice"
 import { AssignMaterialsCard, type AssignMaterialsData } from "@/components/assign-materials-panel"
+import { AssignSaveBar } from "@/components/assign-save-bar"
 import { AssignSlotCard } from "@/components/assign-slot"
 import { ExtraToolsPicker } from "@/components/extra-tools-picker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -15,7 +16,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
-import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { useMaterialTargets } from "@/hooks/use-material-targets"
 import {
@@ -105,6 +105,7 @@ export function AssignToolsPanel({
     lines: editableMaterials?.lines ?? [],
     stock: editableMaterials?.stock ?? {},
     floors: editableMaterials?.floors ?? {},
+    coverage: editableMaterials?.coverage ?? {},
     pickup: editableMaterials?.pickup ?? false,
   })
   const materialsChanged = materialDraft.changed.length
@@ -399,30 +400,18 @@ export function AssignToolsPanel({
 
       {materials && <AssignMaterialsCard data={materials} draft={materialDraft} />}
 
-      {/* Sticky, because the slot list is as long as the request is big and the
-          count is the thing a PM checks before saving. */}
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card/95 p-3 backdrop-blur">
-        <span className="text-sm text-muted-foreground tabular-nums">
-          {assignedLabel(filled, requested)}
-          {extraTools.length > 0 && ` · ${extraTools.length} extra`}
-          {materialsChanged > 0 &&
-            ` · ${materialsChanged} material ${materialsChanged === 1 ? "line" : "lines"} changed`}
-          {dirty && " · unsaved"}
-        </span>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" disabled={!dirty || pending} onClick={reset}>
-            <RotateCcwIcon />
-            Reset
-          </Button>
-          {/* `dirty` is derived from the props each render, and the action
-              revalidates this route — so a successful save re-renders the page
-              with the saved values and this falls back to disabled on its own. */}
-          <Button size="sm" disabled={!dirty || pending} onClick={save}>
-            {pending ? <Spinner /> : <SaveIcon />}
-            Save assignment
-          </Button>
-        </div>
-      </div>
+      <AssignSaveBar
+        requestId={requestId}
+        filled={filled}
+        requested={requested}
+        extras={extraTools.length}
+        materialsChanged={materialsChanged}
+        hasMaterials={materials !== null}
+        dirty={dirty}
+        pending={pending}
+        onReset={reset}
+        onSave={save}
+      />
     </div>
   )
 }

@@ -16,6 +16,9 @@ import { cn } from "@/lib/utils"
  * and material line by name, split exactly the way the action is about to
  * split them, rather than trusting a count on the button to have been read
  * carefully. A line reads with its quantity first: "20 bag Level-Flor".
+ *
+ * A row's `note` says what its outcome means (5G): a pickup count above the
+ * estimate, a count of 0, a transfer's next site, what goes back into stock.
  */
 export function TripStopConfirmDialog({
   open,
@@ -102,16 +105,28 @@ function ConfirmSection({
       </header>
       <ul className="divide-y">
         {items.map((item) => (
-          <li key={item.id} className="flex items-center gap-2 px-2 py-1.5 text-xs">
-            <span className="min-w-0 flex-1 truncate font-medium" title={item.label}>
-              {item.label}
-            </span>
-            {item.detail && (
+          <li key={item.id} className="flex flex-col gap-0.5 px-2 py-1.5 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate font-medium" title={item.label}>
+                {item.label}
+              </span>
+              {item.detail && (
+                <span
+                  className="hidden min-w-0 shrink truncate text-[11px] text-muted-foreground sm:inline"
+                  title={item.detail}
+                >
+                  {item.detail}
+                </span>
+              )}
+            </div>
+            {item.note && (
               <span
-                className="hidden min-w-0 shrink truncate text-[11px] text-muted-foreground sm:inline"
-                title={item.detail}
+                className={cn(
+                  "text-[11px]",
+                  item.note.tone === "warn" ? "font-medium text-status-attention-foreground" : "text-muted-foreground"
+                )}
               >
-                {item.detail}
+                {item.note.text}
               </span>
             )}
           </li>

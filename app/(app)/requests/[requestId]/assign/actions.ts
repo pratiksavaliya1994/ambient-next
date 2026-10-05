@@ -11,7 +11,7 @@ import {
 } from "@/lib/bubble/assigned-tools"
 import type { AssignmentEntry, CandidateTool, ToolRequestClaim } from "@/lib/bubble/assigned-tools-types"
 import { isFreeToAssign, isLockedToTrip, TOOL_STATUS_ASSIGNED } from "@/lib/bubble/tool-enums"
-import type { RequestStatus } from "@/lib/bubble/enums"
+import { isPickupRequest, type RequestStatus } from "@/lib/bubble/enums"
 import { getRequest, markToolsAssigned, releaseToolsToAvailable, type ToolRequest } from "@/lib/bubble/requests"
 import { listToolClaims } from "@/lib/bubble/trips-read"
 import { displayNameOf, requireSession } from "@/lib/auth/session"
@@ -91,6 +91,13 @@ export async function saveAssignmentAction(input: unknown): Promise<CreateReques
   const request = await getRequest(requestId)
   if (!request) {
     return { status: "error", message: "That request no longer exists in Bubble." }
+  }
+
+  // A pickup names its physical tools when it's created and its material lines
+  // need no approval, so there is nothing to assign. A tool save would replace
+  // its `assignedtools` rows wholesale, and the page redirects a pickup away.
+  if (isPickupRequest(request)) {
+    return { status: "error", message: "A pickup's tools and materials are set when it's created. There's nothing to assign." }
   }
 
   const tools = assignments ? await prepareToolSave(request, assignments) : null

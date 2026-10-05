@@ -54,6 +54,10 @@ type OutcomeCounts = {
   materialsSkipped?: number
   materialsRefused?: number
   materialsReturned?: number
+  /** Pickup lines counted at their collect (5F) — collected, like `materialsLoaded`. */
+  materialsCounted?: number
+  /** Pickup lines unloaded at the yard (5F) — dropped there, like `materialsDropped`. */
+  materialsLanded?: number
 }
 
 /**
@@ -70,9 +74,11 @@ export function stopToastDescription(counts: OutcomeCounts, verb: StopVerb): str
     return count && `${count} ${words}`
   }
 
+  const sum = (a?: number, b?: number) => (a ?? 0) + (b ?? 0)
+
   return [
-    phrase(counts.loaded, counts.materialsLoaded, "collected"),
-    phrase(counts.dropped, counts.materialsDropped, verb.toLowerCase()),
+    phrase(counts.loaded, sum(counts.materialsLoaded, counts.materialsCounted), "collected"),
+    phrase(counts.dropped, sum(counts.materialsDropped, counts.materialsLanded), verb.toLowerCase()),
     phrase(counts.returned, counts.materialsReturned, "back in the yard"),
     phrase(counts.skipped, counts.materialsSkipped, "left behind"),
     phrase(counts.refused, counts.materialsRefused, "refused"),

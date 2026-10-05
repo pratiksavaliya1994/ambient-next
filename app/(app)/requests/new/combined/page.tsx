@@ -5,24 +5,23 @@ import Link from "next/link"
 import { CombinedRequestForm } from "@/components/combined-request-form"
 import { buttonVariants } from "@/components/ui/button"
 import { listMaterialItems } from "@/lib/bubble/material-items"
-import { listFieldPms, listJobs, listMaterialDefaults, listTimeSlots, listToolTypes } from "@/lib/bubble/reference"
+import { listFieldPms, listJobs, listTimeSlots, listToolTypes } from "@/lib/bubble/reference"
 import { toJobOption } from "@/lib/bubble/reference-types"
 
 export const metadata: Metadata = { title: "New delivery + pickup request" }
 
 export default async function NewCombinedRequestPage() {
-  // The union of what the two single-purpose pages load: the `toolstype` and
-  // material catalogues for the delivery half, the free-text material defaults
-  // for the pickup half (until 5G), and everything shared. The pickup half's
-  // physical `tools` are fetched live once a job is chosen, not from here.
-  // All but the material catalogue are memoised in `reference.ts`; that one is
-  // read fresh because the picker shows its stock.
-  const [jobs, toolTypes, fieldPms, timeSlots, materialDefaults, materialItems] = await Promise.all([
+  // The union of what the two single-purpose pages load: the `toolstype`
+  // catalogue for the delivery half, the material catalogue both halves pick
+  // from, and everything shared. The pickup half's physical `tools` are fetched
+  // live once a job is chosen, not from here. All but the material catalogue
+  // are memoised in `reference.ts`; that one is read fresh because the picker
+  // shows its stock.
+  const [jobs, toolTypes, fieldPms, timeSlots, materialItems] = await Promise.all([
     listJobs(),
     listToolTypes(),
     listFieldPms(),
     listTimeSlots(),
-    listMaterialDefaults(),
     listMaterialItems(),
   ])
 
@@ -49,7 +48,6 @@ export default async function NewCombinedRequestPage() {
         toolTypes={toolTypes}
         fieldPms={fieldPms}
         timeSlots={timeSlots}
-        materialDefaults={materialDefaults}
         materialItems={materialItems}
       />
     </div>

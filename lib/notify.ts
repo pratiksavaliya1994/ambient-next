@@ -28,9 +28,7 @@ export type NotificationInput = {
   notes: string
   tools: readonly ToolLine[]
   toolsNotes: string
-  /** The legacy free text. Ignored when `materialLines` has any. */
-  materials: string
-  /** Phase 5 lines, formatted with the same codec as the `requestedmaterials` rows. */
+  /** Phase 5 lines, formatted with the same codec as the `requestedmaterials` rows. The only materials since 5G. */
   materialLines?: readonly Pick<MaterialLine, "name" | "quantity" | "unit">[]
 }
 
@@ -45,7 +43,9 @@ export function buildSummary(input: NotificationInput): string {
   const endDay = newYorkWeekday(input.end)
   const dateLine = startDay === endDay ? startDay : `${startDay} – ${endDay}`
 
-  const materials = input.materialLines?.length ? formatMaterialsSummary(input.materialLines) : input.materials
+  const materials = input.materialLines?.length ? formatMaterialsSummary(input.materialLines) : ""
+  // A pickup's lines are what the driver brings back, and its quantities are estimates.
+  const materialsHeading = input.delivery ? "material :" : "material to collect :"
 
   const lines = [
     `New ${input.delivery ? "Delivery" : "Pickup"} Request from ${input.requestedBy}`,
@@ -64,7 +64,7 @@ export function buildSummary(input: NotificationInput): string {
     "Tools:",
     ...input.tools.map((tool) => ` ${tool.name}: ${tool.quantity}`),
     input.toolsNotes ? `\nTool notes: ${input.toolsNotes}` : null,
-    materials ? `\nmaterial :\n ${materials}` : null,
+    materials ? `\n${materialsHeading}\n ${materials}` : null,
   ]
 
   return lines.filter((line) => line !== null).join("\n")

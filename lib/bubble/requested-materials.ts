@@ -2,7 +2,7 @@ import "server-only"
 
 import { z } from "zod"
 
-import { bubbleListAll, bubbleRunWorkflow } from "@/lib/bubble/client"
+import { bubbleListAll, bubbleRunWorkflow, type Constraint } from "@/lib/bubble/client"
 import { listMaterialItemsByIds } from "@/lib/bubble/material-items"
 import {
   MATERIAL_KIND,
@@ -32,7 +32,7 @@ import { RETRY_DELAYS_MS, sleep } from "@/lib/trips/settle"
  * Split out of `lib/bubble/requests.ts`, which is far past the 300-line cap.
  */
 
-const REQUESTED_MATERIALS = "requestedmaterials"
+export const REQUESTED_MATERIALS = "requestedmaterials"
 const ASSIGN_MATERIALS_WORKFLOW = "assign-request-materials"
 
 const requestedMaterialsRow = z.looseObject({
@@ -46,6 +46,10 @@ const requestedMaterialsRow = z.looseObject({
   unit: z.string().optional(),
   quantity: z.number().optional(),
   assignedQty: z.number().optional(),
+  // 5F transfers. Text ids and a job name, written only by `setTransferLink`.
+  transferToLineID: z.string().optional(),
+  transferToRequestID: z.string().optional(),
+  transferToLocation: z.string().optional(),
 })
 
 /** The legacy `materials` field is one line per item, free text — no `Name: qty` structure to lean on. */
@@ -114,7 +118,23 @@ function toMaterialLine(
     // can only mean "one lot", never "none wanted".
     quantity: row.quantity && row.quantity > 0 ? row.quantity : null,
     assignedQty: row.assignedQty ?? 0,
+    transferToLineId: row.transferToLineID?.trim() ?? "",
+    transferToRequestId: row.transferToRequestID?.trim() ?? "",
+    transferToLocation: row.transferToLocation?.trim() ?? "",
   }
+}
+
+/**
+ * Structured lines matching `constraints`, oldest first — legacy rows dropped.
+ * For reads that aren't by request: the transfer sources (by item) and the
+ * linked pickup lines (by `transferToLineID`).
+ */
+export async function readStructuredLines(constraints: Constraint[]): Promise<MaterialLine[]> {
+  const rows = await bubbleListAll(REQUESTED_MATERIALS, { constraints, sortField: "Created Date", descending: false })
+  return rows.flatMap((raw) => {
+    const row = requestedMaterialsRow.parse(raw)
+    return row.kind && row.requestID ? [toMaterialLine(row, row.requestID, row.kind)] : []
+  })
 }
 
 export type ResolveResult = { ok: true; lines: ResolvedMaterialLine[] } | { ok: false; message: string }

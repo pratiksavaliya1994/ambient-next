@@ -42,7 +42,14 @@ export function stopRequests(
 
   const site = transfer ? siteContacts.get(work.stop.location) : undefined
   if (site && !list.some((request) => request.job === work.stop.location)) {
-    list.push({ id: `site:${work.stop.location}`, job: work.stop.location, ...site, floor: null })
+    list.push({
+      id: `site:${work.stop.location}`,
+      job: work.stop.location,
+      ...site,
+      floor: null,
+      delivery: false,
+      pickup: false,
+    })
   }
   return list
 }

@@ -3,6 +3,7 @@
 import { CargoKindIcon, CargoSectionLabel } from "@/components/cargo-kind"
 import { MaterialKindBadge } from "@/components/material-line-row"
 import { QuantityStepper } from "@/components/quantity-stepper"
+import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { OutstandingMaterial } from "@/lib/trips/material-movement-types"
 import { cn } from "@/lib/utils"
@@ -11,8 +12,8 @@ import { cn } from "@/lib/utils"
  * A request's material lines in the builder's pool, under its tools.
  *
  * Kept apart from `TripMovementRow`, which is tool-shaped: a line has no
- * origin to show (it always leaves the warehouse) and no condition to block
- * on, but it has a quantity, and part of it can go on this trip.
+ * condition to block on, but it has a quantity, and part of a delivery line
+ * can go on this trip. A pickup line goes whole (5F).
  */
 export function TripMaterialList({
   materials,
@@ -50,6 +51,11 @@ export function TripMaterialList({
  * One line: checkbox · name · kind · "**8** of 12 left", and a stepper once
  * ticked. The stepper runs `1..outstanding` and starts at all of it.
  *
+ * A **pickup** line (`fixedQty`) has no stepper: it goes on one trip whole,
+ * its estimate reading "about 10 bag", and the driver counts it at the stop.
+ * A **linked** one also carries a "→ Site B" badge — its destination is fixed
+ * by the transfer, whatever the group's warehouse says.
+ *
  * The whole row toggles, as `TripMovementRow` does, so the checkbox and the
  * stepper stop their clicks reaching it.
  */
@@ -67,6 +73,7 @@ export function TripMaterialRow({
 }) {
   const checked = qty !== undefined
   const unit = line.unit ? ` ${line.unit}` : ""
+  const transfer = line.fixedQty && line.fixedDestination
 
   return (
     <li
@@ -88,15 +95,27 @@ export function TripMaterialRow({
           <p className="min-w-0 flex-1 truncate text-xs font-medium" title={line.name}>
             {line.name}
           </p>
+          {transfer && (
+            <Badge variant="outline" className="max-w-[45%] shrink-0 truncate px-1.5 py-0 text-[10px]" title={line.to}>
+              → {line.to}
+            </Badge>
+          )}
           <MaterialKindBadge kind={line.kind} className="shrink-0 px-1.5 py-0 text-[10px] font-normal" />
         </div>
 
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
-          <span className="tabular-nums">
-            <span className="font-semibold text-foreground">{line.outstanding}</span> of {line.assigned}
-            {unit} left
-          </span>
-          {checked && (
+          {line.fixedQty ? (
+            <span className="tabular-nums">
+              about <span className="font-semibold text-foreground">{line.outstanding}</span>
+              {unit} · goes whole
+            </span>
+          ) : (
+            <span className="tabular-nums">
+              <span className="font-semibold text-foreground">{line.outstanding}</span> of {line.assigned}
+              {unit} left
+            </span>
+          )}
+          {checked && !line.fixedQty && (
             <span onClick={(event) => event.stopPropagation()}>
               <QuantityStepper value={qty} min={1} max={line.outstanding} onChange={onQtyChange} label={line.name} />
             </span>

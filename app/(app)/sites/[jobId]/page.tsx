@@ -6,6 +6,7 @@ import { Suspense } from "react"
 
 import { JobDetailsCard } from "@/components/job-details-card"
 import { SiteMaterialsCard } from "@/components/site-materials-card"
+import { SiteOpenPickupsSection } from "@/components/site-open-pickups-card"
 import { SiteToolsCard } from "@/components/site-tools-card"
 import { buttonVariants } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -21,7 +22,8 @@ const CARD_SKELETON = <Skeleton className="h-48 w-full rounded-xl" />
 /**
  * One job site: its `jobs` record on the left (read-only — this app doesn't
  * own `jobs` rows, only what moves through them), the tools there now and the
- * materials it has been sent and not sent back on the right. No movement
+ * materials it has been sent and not sent back on the right, with the
+ * material pickups still waiting to leave it below them (5G). No movement
  * history — it read as noise beside the two lists; an item's own page still
  * has its history.
  *
@@ -63,6 +65,10 @@ export default async function JobSitePage({ params }: { params: Promise<{ jobId:
 
           <Suspense fallback={CARD_SKELETON}>
             <MaterialsSection jobName={job.name} />
+          </Suspense>
+
+          <Suspense fallback={CARD_SKELETON}>
+            <SiteOpenPickupsSection jobName={job.name} />
           </Suspense>
         </div>
       </div>

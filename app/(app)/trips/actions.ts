@@ -74,7 +74,11 @@ async function buildPlan(
   const wanted = new Set(toolIds)
   const destinationByRequest = new Map(destinations.map((entry) => [entry.requestId, entry.warehouse]))
 
-  const picked = selectMaterialMovements(groups, new Map(selection.materials.map((line) => [line.lineId, line.qty])))
+  const picked = selectMaterialMovements(
+    groups,
+    new Map(selection.materials.map((line) => [line.lineId, line.qty])),
+    destinationByRequest
+  )
   if (picked.invalid.length > 0) return { error: invalidMaterialMessage(picked.invalid) }
 
   const { movements, blocked } = selectMovements(groups, wanted, destinationByRequest)

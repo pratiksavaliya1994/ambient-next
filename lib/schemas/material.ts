@@ -147,3 +147,12 @@ export const materialTargetsSchema = z
   .refine((lines) => new Set(lines.map((line) => line.lineId)).size === lines.length, "A line appears twice.")
 
 export type MaterialTargetValues = z.infer<typeof materialTargetsSchema>
+
+/** 5F: link a pickup line at another site to a delivery line for the same item. */
+export const linkTransferSchema = z.object({
+  deliveryLineId: z.string().min(1),
+  pickupLineId: z.string().min(1),
+})
+
+/** 5F: clear a pickup line's link. It heads for the warehouse instead. */
+export const unlinkTransferSchema = z.object({ pickupLineId: z.string().min(1) })

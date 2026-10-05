@@ -20,7 +20,8 @@ import { cn } from "@/lib/utils"
  * Shared rather than local because the two halves of a stop now fail the same
  * way and must look identical doing it: a collect that couldn't be taken, and a
  * drop the site turned away. Only the flag differs, so only the flag is a prop.
- * Material lines are rows here like any tool — tick-only, no quantity.
+ * Material lines are rows here like any tool — tick-only, no quantity — except
+ * a pickup line at its collect, which is counted in `TripStopCountList`.
  */
 export function TripStopChecklist({
   items,

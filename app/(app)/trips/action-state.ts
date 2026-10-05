@@ -35,6 +35,8 @@ export type TripRunState =
       materialsSkipped: number
       materialsRefused: number
       materialsReturned: number
+      materialsCounted: number
+      materialsLanded: number
       warning?: string
     }
   | { status: "stop-marked" }

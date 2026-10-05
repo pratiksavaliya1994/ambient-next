@@ -1,3 +1,4 @@
+import { isWarehouseLocation } from "@/lib/bubble/enums"
 import type { MaterialKind } from "@/lib/bubble/requested-materials-types"
 import type { StopWork } from "@/lib/bubble/trips-types"
 import { isOnTruck, type TripMaterialState, type TripStatus, type TripToolState } from "@/lib/trips/plan-types"
@@ -79,6 +80,29 @@ export function refusableMaterials(work: StopWork): TripMaterialRow[] {
 /** `20 bag` — what was actually loaded once it was, else what was planned. */
 export function materialQtyLabel(row: { qty: number; actualQty?: number | null; unit: string }): string {
   return [row.actualQty ?? row.qty, row.unit.trim()].filter(Boolean).join(" ")
+}
+
+/**
+ * Whether a row is a **pickup** line (5F) — collected from a job site rather
+ * than the warehouse. A delivery line always leaves a warehouse and a pickup
+ * line always leaves its own job, so the row's origin says which.
+ *
+ * **Display only** — what the run sheet asks the driver for (a count or a
+ * tick) and how it words the row. The stop action decides direction again
+ * from each row's request and never trusts this.
+ */
+export function isPickupMaterial(row: { fromLocation?: string }): boolean {
+  return row.fromLocation !== undefined && !isWarehouseLocation(row.fromLocation)
+}
+
+/** A pickup line whose trip ends at another job: a site-to-site transfer (5F). */
+export function isTransferMaterial(row: { fromLocation?: string; toLocation?: string }): boolean {
+  return isPickupMaterial(row) && row.toLocation !== undefined && !isWarehouseLocation(row.toLocation)
+}
+
+/** `about 10 bag` until the driver counts it, then the count — a pickup's planned qty is the PM's estimate. */
+export function pickupQtyLabel(row: { qty: number; actualQty?: number | null; unit: string }): string {
+  return row.actualQty === null || row.actualQty === undefined ? `about ${materialQtyLabel(row)}` : materialQtyLabel(row)
 }
 
 /** `stillLoaded` for material lines — what the finish-trip guard names beside the tools. */

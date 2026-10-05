@@ -18,6 +18,7 @@ import {
 } from "@/lib/schemas/combined-request"
 import { pickupRequestFormSchema } from "@/lib/schemas/pickup-request"
 import { requestFormSchema } from "@/lib/schemas/request"
+import { settleNewPickup } from "@/app/(app)/requests/new/pickup/settle-pickup"
 import type { CombinedHalf, CombinedRequestState } from "./action-state"
 
 /**
@@ -80,10 +81,14 @@ export async function createCombinedRequestAction(input: unknown): Promise<Combi
     return { status: "error", message: "The combined form produced an invalid request. Reload and try again." }
   }
 
-  // Before either workflow fires, so a bad catalogue line can't leave the
-  // pickup half written on its own.
-  const resolved = await resolveMaterialLines(delivery.data.materialLines)
+  // Before either workflow fires, so a bad catalogue line can't leave one half
+  // written on its own.
+  const [resolved, pickupResolved] = await Promise.all([
+    resolveMaterialLines(delivery.data.materialLines),
+    resolveMaterialLines(pickup.data.materialLines),
+  ])
   if (!resolved.ok) return { status: "error", message: resolved.message }
+  if (!pickupResolved.ok) return { status: "error", message: pickupResolved.message }
 
   // Fired together, not in sequence. Each workflow spends most of its time
   // inside Bubble waiting on Whapi, ClickUp and Outlook Calendar in turn, so
@@ -97,7 +102,12 @@ export async function createCombinedRequestAction(input: unknown): Promise<Combi
   // all four outcomes be reported truthfully.
   const started = Date.now()
   const [pickupResult, deliveryResult] = await Promise.allSettled([
-    createPickupToolRequest(pickup.data, job, summaryFor(values, job, "pickup")),
+    createPickupToolRequest(
+      pickup.data,
+      job,
+      summaryFor(values, job, "pickup", pickupResolved.lines),
+      pickupResolved.lines
+    ),
     createToolRequest(delivery.data, job, summaryFor(values, job, "delivery", resolved.lines), resolved.lines),
   ])
   console.info(`[combined-request] both workflows settled in ${Date.now() - started}ms`)
@@ -118,12 +128,17 @@ export async function createCombinedRequestAction(input: unknown): Promise<Combi
     return partial("delivery", deliveryResult as Fulfilled, "pickup", pickupResult.reason)
   }
 
+  const warnings = await Promise.all([
+    settleNewPickup(pickupResult.value.requestId, pickupResolved.lines.length),
+    materialLinesWarning(deliveryResult.value.requestId, resolved.lines.length),
+  ])
+
   return {
     status: "created",
     pickupRequestId: pickupResult.value.requestId,
     deliveryRequestId: deliveryResult.value.requestId,
     job: job.name,
-    warning: await materialLinesWarning(deliveryResult.value.requestId, resolved.lines.length),
+    warning: warnings.filter(Boolean).join(" ") || undefined,
   }
 }
 
@@ -178,7 +193,7 @@ function summaryFor(
     notes: values.notes,
     tools: isPickup ? values.pickupTools : values.deliveryTools,
     toolsNotes: isPickup ? values.pickupToolsNotes : values.deliveryToolsNotes,
-    materials: isPickup ? values.pickupMaterials : "",
+    // Each half's own lines, resolved — the caller passes the matching set.
     materialLines,
   })
 }

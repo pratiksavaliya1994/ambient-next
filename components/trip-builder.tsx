@@ -86,7 +86,7 @@ export function TripBuilder({
   const [splitPreference, setSplitPreference] = useState<Map<string, string>>(() => {
     if (!draft) return new Map()
     const { movements } = selectMovements(groups, selectedIds, destinations)
-    const { materials } = selectMaterialMovements(groups, lines.quantities)
+    const { materials } = selectMaterialMovements(groups, lines.quantities, destinations)
     return deriveInitialSplitPreference(movements, materials, draft.splitLocations)
   })
 
@@ -95,8 +95,8 @@ export function TripBuilder({
     [groups, selectedIds, destinations]
   )
   const materialSelection = useMemo(
-    () => selectMaterialMovements(groups, lines.quantities),
-    [groups, lines.quantities]
+    () => selectMaterialMovements(groups, lines.quantities, destinations),
+    [groups, lines.quantities, destinations]
   )
 
   // Hand-added stops are laid over the fresh plan, never stored in it — the

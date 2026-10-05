@@ -1,4 +1,4 @@
-# Phase 5G — pickup frontend: pickup form, approve, driver counts
+# Phase 5G — pickup frontend: pickup form, driver counts
 
 Part of [phase 5](./phase-5-materials.md). Built against
 [5F](./phase-5f-pickup-backend.md) — **no new backend**. After this slice the
@@ -8,7 +8,8 @@ material flow is complete in both directions.
 
 1. The pickup form (and the combined page's pickup card) take material lines,
    entered by hand.
-2. The assign page approves pickup lines.
+2. ~~The assign page approves pickup lines.~~ Dropped 2026-10-05: pickup
+   lines need no approval (see *As built*).
 3. The run sheet asks the driver to count pickup lines at the collect stop.
 4. The request page shows pickup line progress.
 5. The old free-text material components are deleted.
@@ -64,7 +65,11 @@ Then **delete `components/materials-field.tsx` and
 nothing else uses them — check with a search first. The Bubble `materials` table
 stays; only this app stops reading it.
 
-## 2. Approve on the assign page
+## 2. Approve on the assign page — dropped 2026-10-05
+
+> **Superseded.** The user ruled that pickup material lines need no approval,
+> the same as a pickup's tools. A pickup's assign page now redirects to the
+> request page. The text below is the original plan, kept for the record.
 
 `components/assign-material-line.tsx` (5C) renders pickup lines with only the
 **Approve / Approved** toggle for both kinds — no stepper, no stock. The card's
@@ -147,20 +152,144 @@ warehouse, or "→ Site B"), linking to the request. It's read from the same
 
 ## Tasks
 
-- [ ] 1. `mode="pickup"` on the material field and picker
-- [ ] 2. Pickup form + pickup page; combined pickup card + combined page
-- [ ] 3. Delete the free-text components and unused defaults code (search first)
-- [ ] 4. Approve-only pickup lines on the assign page
-- [ ] 5. Run-sheet count input, stop actions gating, confirm dialog, labels
-- [ ] 6. PDF "Collected" blank
-- [ ] 7. Request page pickup progress
-- [ ] 8. Pickup form site hint (`listSiteStockAction` on job pick, Take all)
-- [ ] 9. `assign-transfer-sources.tsx`; coverage in `assign-material-line.tsx`
+- [x] 1. `mode="pickup"` on the material field and picker
+- [x] 2. Pickup form + pickup page; combined pickup card + combined page
+- [x] 3. Delete the free-text components and unused defaults code (search first)
+- [x] 4. Approve-only pickup lines on the assign page
+- [x] 5. Run-sheet count input, stop actions gating, confirm dialog, labels
+- [x] 6. PDF "Collected" blank
+- [x] 7. Request page pickup progress
+- [x] 8. Pickup form site hint (`listSiteStockAction` on job pick, Take all)
+- [x] 9. `assign-transfer-sources.tsx`; coverage in `assign-material-line.tsx`
       and `use-material-targets.ts`; linked lines read-only on a pickup's
       assign page
-- [ ] 10. Transfer badges and labels: builder, run sheet, confirm dialog, PDF
-- [ ] 11. Request page transfer rows; site page "open pickups from this site"
-- [ ] 12. `npm run typecheck` once, at the end
+- [x] 10. Transfer badges and labels: builder, run sheet, confirm dialog, PDF
+- [x] 11. Request page transfer rows; site page "open pickups from this site"
+- [x] 12. `npm run typecheck` once, at the end
+
+## As built (2026-10-05)
+
+**Built, and it typechecks clean. Not checked in the browser yet. No backend
+change was needed.** One optional Bubble clean-up is written up in
+[`phase-5g-bubble-handoff.md`](./phase-5g-bubble-handoff.md); nothing here
+depends on it.
+
+Where the build differs from the sections above, or adds to them:
+
+- **The pickup free text is gone** (5F left the call to 5G). `materials` left
+  `pickupRequestFormSchema`, and `pickupMaterials` left the combined schema;
+  both refines are now "a tool or a material line". `buildSummary` and the
+  request payload lost their free-text `materials` input, so the legacy text
+  and the WhatsApp list are the lines' summary only.
+- **The pickup form was extracted**, not grown. 562 lines became:
+  - `hooks/use-pickup-request.ts`, the state and handlers, as
+    `useCombinedRequest` already does for the combined page;
+  - `pickup-request-details.tsx` and `pickup-request-fieldsets.tsx`, the left
+    card;
+  - `pickup-request-items-card.tsx`, tools, materials and submit;
+  - `pickup-request-form.tsx`, now a thin shell.
+  `pickup-tools-controls.tsx` holds the Select all / Clear all actions and the
+  Cleanup switch, now shared with the combined pickup card. The job type's
+  old "Sets the default materials list" hint went with the defaults.
+- **The site hint** is `hooks/use-site-stock-hint.ts`, loaded from the
+  job-change handler on both pages. A slower answer for a job no longer
+  picked is dropped.
+- **The pickup picker offers every active item, not the job type's.** A site
+  can hold anything, so the job-type filter is a delivery thing. The site's
+  items sort first. The inventory tab moved into `material-inventory-list.tsx`.
+- **Deleted:** `materials-field.tsx`, `material-dialog.tsx`,
+  `defaultMaterialsFor`, `MaterialDefault` and `listMaterialDefaults`. A search
+  found no other callers. The Bubble `materials` table is untouched.
+- **Assign page:**
+  - `assign-approve-line.tsx` (new) is the approve-only row for non-inventory
+    delivery lines. `AssignMaterialLine` is now the inventory delivery line
+    only.
+  - The draft clamps **down** only, as it's read. A line assigned above its
+    new bound before a link may keep that value, since the action allows any
+    decrease, but it can't go higher.
+  - `AssignedMeta` moved to `request-material-line.tsx`.
+- **The run-sheet count is not on `TripStopMaterialLine`.** As 5E built it,
+  that row is the record and the choices live in the stop's actions, so the
+  "Collected" inputs are a new `TripStopCountList` beside the checklists.
+  - **Counts are prefilled with the estimate** (user request, 2026-10-05;
+    §3 said "empty until the driver types"). `useStopChoices` keeps only the
+    numbers the driver changed. A field they clear is unanswered, and the
+    button reads "Count 1 material first" until it's filled again.
+  - `0` goes to `skipMaterialIds`, so the action's own 0-to-skip rule isn't
+    relied on.
+  - The checklist state moved into `hooks/use-stop-choices.ts`, to keep
+    `TripStopActions` under 100 lines.
+- **Which rows are pickups, client-side:** `isPickupMaterial` reads a row's
+  `fromLocation`. A delivery always leaves a warehouse, and a pickup always
+  leaves its job. It drives wording and the count input only. The stop action
+  still decides direction from each row's request.
+- **Confirm dialog:** `StopRow` gained a `note` that shows on every screen
+  size, because the `detail` column is hidden on phones. The notes are the
+  over-estimate callout, "Counted 0 — not collected", "then to Site B",
+  "+7 bag Level-Flor to stock" and "Refused — goes back to the warehouse".
+  The row wording lives in `lib/trips/stop-material-rows.ts`.
+- **Stop toast:** `materialsCounted` now counts as collected and
+  `materialsLanded` as dropped. Before, both were missing from the sentence.
+- **Builder:** a pickup line has no stepper ("about 10 bag · goes whole"), so
+  5F's "goes on one trip whole" problem can't be produced any more.
+- **Request page:** `RequestMaterialLine` (new) renders one line, and the
+  pickup progress and linked sub-rows are in `request-material-progress.tsx`.
+  The sub-rows name their source sites through
+  `listLinkedPickupSources` in `material-transfers.ts`, which costs one shallow
+  request read and only when a delivery has links. The page file didn't grow;
+  it is still 501 lines and still needs splitting.
+- **Site page:** "Open pickups from this site" is
+  `site-open-pickups-card.tsx`, streamed in its own `<Suspense>`. Its read is
+  `lib/bubble/site-pickups.ts`, kept out of `requests.ts` because that file is
+  over the cap. The read constrains on `request.job` only and filters direction
+  in code, so it adds no new kind of constraint. The card renders nothing when
+  there are no open pickups.
+- **No approval for pickup lines (user decision, 2026-10-05).** The first
+  browser pass found a pickup's lines never reached the trip pool: the pool
+  skipped `assignedQty = 0`, and nothing could approve them. The user ruled
+  that pickup materials need no approval, the same as pickup tools. So:
+  - `lineProgress`'s pickup branch counts a line as assigned in full from
+    creation (`assigned = requested`, outstanding while idle). `assignedQty`
+    stays 0 on pickup lines and is never read for them.
+  - The trip pool skips unassigned **delivery** lines only.
+  - Status derivation counts the lines as assigned, so a materials-only pickup
+    reads `Assigned` — what `new-pickup-request` stamps. `settle-pickup.ts` no
+    longer re-syncs it (5F's sync derived `New`).
+  - The pickup assign page redirects to the request page. `saveAssignmentAction`
+    and `prepareMaterialSave` refuse a pickup. A tool save would replace its
+    `assignedtools` rows wholesale.
+  - Linking a transfer is now just the `PATCH`, with no approve write.
+  - No "Awaiting approval" badges on pickup lines anywhere.
+  - **Pickups created before this change read `New`** (5F's sync set it), and
+    the trip pool reads only `Assigned` and later. Recreate those test
+    requests, or they appear once anything re-syncs them.
+- **Second browser pass (2026-10-05), transfers on the assign page:**
+  - **Split on link** (user decision): a pickup estimated above what the
+    delivery still needs is split, and only the need is linked. See the master
+    doc's *Whole-line, split on link*. The row says it before the click:
+    "2 here, ~1 to the warehouse" and "Transfer 2 bag to this site". A covered
+    line offers "Not needed".
+  - **Clearer labels:** "Pickups at other sites — send here instead of the
+    warehouse", **Transfer to this site**, and once linked "Coming here from
+    this pickup" plus a separate **Cancel transfer**.
+  - **The save bar** is now `assign-save-bar.tsx`, out of the over-cap panel.
+    With nothing unsaved it reads "Everything is saved — transfers save as
+    soon as you choose them" and offers **Back to request**, instead of a
+    disabled Save. It no longer prints "0 assigned · 0 requested" on a request
+    with no tool slots.
+  - **Not verified live:** the split is the first Data API `POST` to
+    `requestedmaterials`. If Bubble refuses it, the link fails before anything
+    changes.
+- **"Add to a trip" for a delivery fed by transfers** (third browser pass,
+  2026-10-05). A delivery covered only by transfers has no warehouse units of
+  its own, so the button never showed. The request page now counts linked
+  pickup lines that no trip holds yet. `OutstandingMaterial` gained
+  `feedsRequestId`, so `/trips/new?requestId=<delivery>` also ticks those
+  lines in their pickup's group, and only those — not the pickup's other lines.
+- **Still over the 300-line cap, touched only lightly:**
+  - `assign-tools-panel.tsx` (+1 line, `coverage` into the hook);
+  - `requests.ts` (smaller than before);
+  - the request detail page.
 
 ## Verification
 
@@ -170,8 +299,9 @@ Checked by the user in the browser. Suggested pass using 5F's test rows:
    material, that site's items list first with "Delivered, not picked up" and
    Take all works. A line with a typed estimate submits, and so does the
    combined page's pickup half.
-2. The assign page shows approve toggles only for the pickup; approving changes
-   no stock on `/materials`.
+2. A new pickup reads `Assigned` straight away, and its lines are in the trip
+   builder's pool without any approval. The request page offers no assign
+   button.
 3. Run sheet: Done here stays disabled until every pickup line has a count; a
    count above the estimate is called out in the dialog.
 4. After unloading at the yard, `/materials` shows the stock rise and a `Return`

@@ -2,7 +2,12 @@ import { CargoKindIcon } from "@/components/cargo-kind"
 import { MaterialKindBadge } from "@/components/material-line-row"
 import { StateChip, type StopItemTone } from "@/components/trip-stop-item-line"
 import type { MaterialKind } from "@/lib/bubble/requested-materials-types"
-import { materialQtyLabel } from "@/lib/bubble/trip-materials-types"
+import {
+  isPickupMaterial,
+  isTransferMaterial,
+  materialQtyLabel,
+  pickupQtyLabel,
+} from "@/lib/bubble/trip-materials-types"
 import type { TripToolState } from "@/lib/trips/plan-types"
 import { cn } from "@/lib/utils"
 
@@ -33,11 +38,17 @@ export type StopMaterial = {
  *
  * No checkbox here: as for tools, ticking and unticking live in the stop's
  * checklist (`TripStopActions`), and this line is the record.
+ *
+ * A **pickup** line (5G) shows its estimate as "about 10 bag" until the driver
+ * counts it. A **transfer** reads "→ Site B" where it's collected and "from
+ * Site A · 6 counted" where it lands.
  */
 export function TripStopMaterialLine({ material, tone }: { material: StopMaterial; tone: StopItemTone }) {
   const spent = material.state === "Skipped" || tone === "refused"
   const sentBack = tone === "drop" && (material.state === "Refused" || material.state === "Returned")
   const elsewhere = tone === "collect" || sentBack ? material.toLocation : material.fromLocation
+  const pickup = isPickupMaterial(material)
+  const transfer = isTransferMaterial(material)
 
   return (
     // Tinted and edged in the material accent, with the quantity in a pill —
@@ -56,7 +67,7 @@ export function TripStopMaterialLine({ material, tone }: { material: StopMateria
         {material.name}
       </span>
       <span className="shrink-0 rounded bg-material/15 px-1.5 py-0.5 text-[11px] font-semibold text-material-foreground tabular-nums">
-        {materialQtyLabel(material)}
+        {pickup ? pickupQtyLabel(material) : materialQtyLabel(material)}
       </span>
       {material.kind && (
         <MaterialKindBadge kind={material.kind} className="hidden shrink-0 px-1.5 py-0 text-[10px] font-normal sm:flex" />
@@ -67,8 +78,9 @@ export function TripStopMaterialLine({ material, tone }: { material: StopMateria
           className="ml-auto hidden max-w-[40%] shrink-0 truncate text-[11px] text-muted-foreground sm:inline"
           title={elsewhere}
         >
-          {tone === "collect" ? "to " : sentBack ? "refused by " : "from "}
+          {tone === "collect" ? (transfer ? "→ " : "to ") : sentBack ? "refused by " : "from "}
           {elsewhere}
+          {transfer && tone === "drop" && !sentBack && material.actualQty != null && ` · ${material.actualQty} counted`}
         </span>
       )}
 

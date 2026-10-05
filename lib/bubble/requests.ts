@@ -390,6 +390,8 @@ export type RequestBrief = {
   status: RequestStatus
   delivery: boolean
   pickup: boolean
+  /** `requestDateStart`. The transfer picker shows it as the pickup's due date. */
+  start: string | null
 }
 
 /**
@@ -414,6 +416,7 @@ export async function listOpenRequestsByIds(ids: readonly string[]): Promise<Req
       status: row.status ?? DEFAULT_REQUEST_STATUS,
       delivery: row.delivery ?? false,
       pickup: row.pickup ?? false,
+      start: row.requestDateStart ?? null,
     }))
     .filter((request) => isOpenRequest(request.status))
 }
@@ -425,6 +428,9 @@ export type RequestStopInfo = {
   contact: string | null
   contactPhone: string | null
   floor: string | null
+  /** The request's direction flags — `completeStopAction` routes material rows by them (5F). */
+  delivery: boolean
+  pickup: boolean
 }
 
 /**
@@ -446,6 +452,8 @@ export async function listRequestStopInfo(ids: readonly string[]): Promise<Reque
     contact: row.contact?.trim() || null,
     contactPhone: row.contactPhone?.trim() || null,
     floor: row.floor?.trim() || null,
+    delivery: row.delivery ?? false,
+    pickup: row.pickup ?? false,
   }))
 }
 
@@ -562,7 +570,7 @@ const NEW_PICKUP_REQUEST_WORKFLOW = "new-pickup-request"
 
 const createRequestResult = z.looseObject({
   requestId: z.string(),
-  // Only `new-request` returns it, and only since 5B.
+  // `new-request` since 5B, `new-pickup-request` since 5F.
   materialLines: z.number().optional(),
 })
 
@@ -590,8 +598,7 @@ type RequestPayloadInput = {
   requestDateEnd: Date
   toolsSummary: string
   toolsNotes: string
-  materials: string
-  /** Phase 5, `new-request` only. Left out of the payload when empty, as an older client would. */
+  /** Phase 5, both workflows (`new-pickup-request` since 5F). Left out of the payload when empty, as an older client would. */
   materialLines?: readonly ResolvedMaterialLine[]
   summary: string
   now: Date
@@ -629,9 +636,10 @@ function buildRequestPayload(input: RequestPayloadInput): Record<string, unknown
     searchable: `${input.job.description} - ${newYorkStamp(input.now)}`,
     toolsSummary: input.toolsSummary,
     toolsNotes: input.toolsNotes,
-    // Feeds `new-request`'s legacy-row step, disabled 2026-09-25 (5B §1.4), so
-    // Bubble ignores it there; `new-pickup-request` still writes its row from it.
-    materials: input.materialLines?.length ? formatMaterialsSummary(input.materialLines) : input.materials,
+    // The lines' summary — the only materials either form has since 5G. Feeds
+    // `new-request`'s legacy-row step, disabled 2026-09-25 (5B §1.4), so Bubble
+    // ignores it there; `new-pickup-request` still writes its row from it.
+    materials: input.materialLines?.length ? formatMaterialsSummary(input.materialLines) : "",
     ...(input.materialLines?.length ? { materialLines: toNewRequestMaterialLines(input.materialLines) } : {}),
     summary: input.summary,
   }
@@ -697,9 +705,6 @@ export async function createToolRequest(
       requestDateEnd: end,
       toolsSummary: formatToolsSummary(values.tools),
       toolsNotes: values.toolsNotes,
-      // The delivery form sends lines only since 5C; `buildRequestPayload`
-      // writes their summary as the legacy text.
-      materials: "",
       materialLines,
       summary,
       now,
@@ -719,11 +724,15 @@ export async function createToolRequest(
  * `cleanup` has no Bubble field of its own — folded into `notes` as a line of
  * free text instead, since adding a field isn't an option here (see
  * `CLAUDE.md`).
+ *
+ * `materialLines` are the form's lines after `resolveMaterialLines`, as for
+ * `createToolRequest`. Their quantities are the PM's estimate.
  */
 export async function createPickupToolRequest(
   values: PickupRequestFormValues,
   job: Job,
-  summary: string
+  summary: string,
+  materialLines: readonly ResolvedMaterialLine[] = []
 ): Promise<CreatedRequest> {
   const now = new Date()
   const start = newYorkInstant(values.date, values.slotHour)
@@ -752,7 +761,7 @@ export async function createPickupToolRequest(
       requestDateEnd: end,
       toolsSummary: formatToolsSummary(values.tools),
       toolsNotes: values.toolsNotes,
-      materials: values.materials,
+      materialLines,
       summary,
       now,
     }),
@@ -781,7 +790,7 @@ export async function createPickupToolRequest(
   })
 
   const result = createRequestResult.parse(raw)
-  return { requestId: result.requestId, job: job.name, materialLines: 0 }
+  return { requestId: result.requestId, job: job.name, materialLines: result.materialLines ?? 0 }
 }
 
 // Phase 2B/2C's shared workflow — see `docs/bubble-request-status-workflow.md`

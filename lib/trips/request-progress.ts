@@ -35,7 +35,7 @@ export type RequestProgress = {
   unfilledSlots: number
   /** Phase 5. Structured material lines on the request. */
   materialLines: number
-  /** Of those, how many have anything assigned (`assignedQty > 0`). */
+  /** Of those, how many have anything assigned (`assignedQty > 0`, or a linked transfer). */
   materialLinesAssigned: number
   /** Of those, how many are done by `lineProgress`'s rule. */
   materialLinesDone: number
@@ -119,7 +119,10 @@ export function hasLanded(request: ProgressRequest, tool: CandidateTool): boolea
 /** A request's material lines and every trip row naming them. Optional, so tools-only callers are unchanged. */
 export type ProgressMaterials = {
   lines: readonly MaterialLine[]
+  /** Must include the `linked` lines' rows too. */
   tripRows: readonly TripMaterialRow[]
+  /** 5F: pickup lines linked to these (delivery) lines — `listLinkedPickupLines`. A superset is fine. */
+  linked?: readonly MaterialLine[]
 }
 
 const NO_MATERIALS: ProgressMaterials = { lines: [], tripRows: [] }
@@ -146,14 +149,20 @@ export function requestProgress(
     else if (tool.status === TOOL_STATUS_IN_TRANSIT) onTruck += 1
   }
 
+  const lines = materials.lines.map((line) =>
+    lineProgress(line, materials.tripRows, { pickup, linked: materials.linked })
+  )
+
   return {
     assigned: assignedRows.filter((row) => toolsById.has(row.toolId)).length,
     landed,
     onTruck,
     unfilledSlots,
-    materialLines: materials.lines.length,
-    materialLinesAssigned: materials.lines.filter((line) => line.assignedQty > 0).length,
-    materialLinesDone: materials.lines.filter((line) => lineProgress(line, materials.tripRows).done).length,
+    materialLines: lines.length,
+    // A delivery line covered only by a transfer from another site is as
+    // assigned as one drawn from stock.
+    materialLinesAssigned: lines.filter((line) => line.assigned > 0 || line.linkedCoverage > 0).length,
+    materialLinesDone: lines.filter((line) => line.done).length,
     terminal: pickup ? "Returned" : "Delivered",
     partial: pickup ? "Partially Returned" : "Partially Delivered",
   }

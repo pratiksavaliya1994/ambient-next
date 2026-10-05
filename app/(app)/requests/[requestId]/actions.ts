@@ -15,6 +15,8 @@ import { listTripFlags } from "@/lib/bubble/triptool-read"
 import { assignMaterials, targetsLanded, waitForMaterialLines } from "@/lib/bubble/requested-materials"
 import { holdsStock, IN_MOTION_STATES, lineProgress } from "@/lib/bubble/requested-materials-types"
 import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
+import { releaseTransfersForClose } from "@/lib/bubble/material-transfers"
+import { syncRequestStatuses } from "@/lib/trips/sync-request-status"
 import { displayNameOf, requireSession } from "@/lib/auth/session"
 import { deriveTripStatus } from "@/lib/dispatch/tool-state"
 import { offloadSchema } from "@/lib/schemas/assignment"
@@ -186,11 +188,19 @@ export async function closeRequestAction(input: unknown): Promise<CloseRequestSt
     }
   }
 
+  // Transfer links first (5F): a pickup line not collected yet stops feeding a
+  // delivery that's closing, or stops heading for a delivery from a pickup
+  // that's closing. Either way it's unlinked, and the request
+  // on the other side is re-synced after the close.
+  const transfers = await releaseTransfersForClose(request)
+  if ("error" in transfers) return { status: "error", message: transfers.error }
+
   // Stock that never left the yard goes back on the shelf — **before** the
   // terminal status, because nothing re-opens a closed request, so one closed
   // while holding stock would hold it for good. Only inventory delivery lines
   // hold stock (`holdsStock`, Bubble's own test); each is lowered to what was
-  // actually dropped.
+  // actually dropped **from the warehouse** — `lineProgress` without `linked`,
+  // so units a transfer brought in are never counted as shelf stock.
   const releases = request.materialLines
     .filter((line) => holdsStock(line, request))
     .map((line) => ({ lineId: line.id, targetQty: lineProgress(line, tripRows).delivered, from: line.assignedQty }))
@@ -231,8 +241,13 @@ export async function closeRequestAction(input: unknown): Promise<CloseRequestSt
     }
   }
 
+  // The other side of each cleared transfer. Non-fatal: this request closed.
+  const others = transfers.touchedRequestIds.filter((id) => id !== requestId)
+  if (others.length > 0) await syncRequestStatuses(others)
+
   revalidatePath("/requests")
   revalidatePath(`/requests/${requestId}`)
+  for (const id of others) revalidatePath(`/requests/${id}`)
   revalidatePath("/trips/new")
   if (releases.length > 0) revalidatePath("/materials")
 

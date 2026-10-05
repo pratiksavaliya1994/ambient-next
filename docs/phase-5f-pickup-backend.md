@@ -329,23 +329,116 @@ touches it.
 
 ## Tasks
 
-- [ ] 0. Studio: the three `requestedmaterials` fields (§1.0); Swagger check
-- [ ] 1. Studio: `new-pickup-request` + `materialLines`
-- [ ] 2. Studio: `load-trip-material` (with the `Collect` site debit),
+Tasks 0–2 are built from [`phase-5f-bubble-build-sheet.md`](./phase-5f-bubble-build-sheet.md),
+which supersedes §1 where they differ (see *As built* below).
+
+- [x] 0. Studio: the three `requestedmaterials` fields (§1.0); Swagger check
+- [x] 1. Studio: `new-pickup-request` + `materialLines`
+- [x] 2. Studio: `load-trip-material` (with the `Collect` site debit),
       `land-material-stock` (`Loaded` or `Refused`) — **not exposed**, check;
       `complete-trip-stop` + `countMaterials`, `landMaterialIds`
-- [ ] 3. Pickup + combined schemas, `createPickupToolRequest`, both create
+- [x] 3. Pickup + combined schemas, `createPickupToolRequest`, both create
       actions, `notify.ts`, `listSiteStockAction`
-- [ ] 4. `assignMaterialsAction` pickup branch, and the delivery bound minus
+- [x] 4. `assignMaterialsAction` pickup branch, and the delivery bound minus
       linked coverage
-- [ ] 5. `lineProgress` pickup branch + `linked` argument; pool (fixed transfer
+- [x] 5. `lineProgress` pickup branch + `linked` argument; pool (fixed transfer
       destinations) and `selectMaterialMovements`
-- [ ] 6. `startTripAction` exclusion; `completeStopAction` split (transfer drops
+- [x] 6. `startTripAction` exclusion; `completeStopAction` split (transfer drops
       and refusals, refused transfers landed); `refusable`; `schemas/trip.ts`;
       `trips.ts` / payload; settle poll
-- [ ] 7. `listTransferSources`, `listLinkedPickupLines`; `transfer-actions.ts`;
+- [x] 7. `listTransferSources`, `listLinkedPickupLines`; `transfer-actions.ts`;
       `closeRequestAction` unlink; two-sided status sync
-- [ ] 8. `npm run typecheck` once, at the end
+- [x] 8. `npm run typecheck` once, at the end
+
+## As built (2026-10-01)
+
+**Next.js: built, and it typechecks clean. Not run against Bubble.**
+
+**Bubble: built 2026-10-01, with no deviations from the build sheet.** Not
+tested live. The record is the sheet's "Built as" section,
+[`phase-5f-bubble-build-sheet.md`](./phase-5f-bubble-build-sheet.md).
+
+**Deploy order: Bubble first, which is now satisfied.** Its step 1 matters most. The coverage read
+constrains on `transferToLineID`, and a constraint on a field Bubble doesn't
+have is an error, not an empty result. If Next.js ships before the field
+exists, every `syncRequestStatuses` call (so every trip action) returns a
+"statuses didn't update" warning, and the request page fails.
+
+### Contract changes from §1
+
+The build sheet records these, and the code follows them.
+
+- **`countMaterials` is a text list, `lineId::actualQty`.** It is not an
+  object list, because `complete-trip-stop` takes manual parameters (5B's
+  `materialLines` lesson). The payload is built by `countWire` in
+  `trip-material-payload.ts`.
+- **The `landMaterialIds` search has no `state` filter.** §1.5 filtered it to
+  `Loaded`, which would have skipped refused transfers. The helper gates on
+  live state anyway.
+- The helpers take the `tripmaterial` thing (5D's D3).
+
+### Where the build differs from §2
+
+- **The two-sided status sync is central.** §2.6 had `completeStopAction`,
+  `startTripAction` and `cancelTripAction` each add the
+  `transferToRequestID` they touch. Instead, `syncRequestStatuses` does it
+  itself, in `withTransferTargets`: any pickup line it reads with a link pulls
+  in that delivery. No caller can forget it, and link, unlink and close get
+  the same behaviour for free.
+- **A refused transfer's coverage is 0, not its count.** §2.6 said a linked
+  line counts its row's `actualQty` once it is `Refused`/`Returned`.
+  Verification 14 needs the opposite: B's coverage drops back. It is never
+  coming, so `transferCoverage` returns 0 for those states.
+- **`startTripAction` is unchanged.** It already sends `materialLineIds`
+  empty (5D as built), so there is nothing to exclude.
+- **`refusable` is unchanged.** `refusableMaterials` already allows any
+  `Loaded` drop at a job stop, and a pickup's own collect stop is never in its
+  drop list.
+- **`movements.ts` doesn't pass `linked`.** Its `requestProgress` call only
+  feeds the pool's tool counts (`landed`/`total`), which links can't change.
+  `sync-request-status.ts`, the request page and the assign save do pass it.
+- **`counts` is required for every pickup line in `loadMaterialIds`.** A
+  count of `0` becomes a skip. Direction comes from each row's request, read
+  through `listRequestStopInfo`, which gained `delivery`/`pickup`. If a
+  request can't be read, the whole stop is refused rather than guessed.
+- **A pickup row can't be refused-then-returned off the yard.** A refused
+  transfer ticked at a job stop is refused by name, because sending it to
+  `return-material-stock` would un-approve it.
+- **The post-create sync runs only for a materials-only pickup.** With tools,
+  the `assignedtools` fan-out may not have landed yet, so a sync could derive
+  `New` over a correct `Assigned`. The helper is `settle-pickup.ts`, kept out
+  of `actions.ts` because `"use server"` would make it a public action.
+- **The pickup form keeps its free text beside the lines.** The legacy text
+  and the WhatsApp message are the lines' summary followed by the free text.
+  When both are present, the request page shows only the lines, because
+  `listMaterialLines` drops the legacy row whenever structured lines exist.
+  5G should decide whether the free text stays.
+- **Pickup lines in the assign save.** `refusePickupLine` allows `0` or the
+  whole estimate. It refuses any change once a trip holds the line or it is
+  collected, and refuses un-approving a linked line ("unlink first").
+- **The delivery bound.** `refuseLine` allows `≤ requested − linkedCoverage`,
+  or any decrease. The message names the source jobs, which costs one request
+  read, made only when the message is shown.
+- **Pool rows.** `OutstandingMaterial` gains `fixedQty` (pickup: all of the
+  estimate) and `fixedDestination` (delivery, or a linked transfer).
+  `selectMaterialMovements` takes the groups' warehouse choice as a third
+  argument, the way `selectMovements` does.
+- **The run sheet and pickup form send nothing new yet, until 5G:**
+  - The pickup form sends `materialLines: []`.
+  - The run sheet sends no `counts`, so ticking a pickup collect is refused
+    with "Enter how many … you collected".
+  - The builder's qty stepper can lower a pickup line below whole, which shows
+    the blocking problem "… goes on one trip whole".
+- **New files:**
+  - `lib/bubble/material-transfers.ts` holds the coverage and source reads,
+    the `PATCH`, the lock reason and the close step;
+  - `lib/bubble/material-transfer-types.ts`;
+  - `app/(app)/requests/[requestId]/assign/transfer-actions.ts` and
+    `transfer-state.ts`;
+  - `app/(app)/requests/new/pickup/site-stock-action.ts` and
+    `settle-pickup.ts`.
+- `app/(app)/requests/[requestId]/page.tsx` is now 501 lines. It was already
+  over the cap before 5F (5E noted 497) and still needs splitting.
 
 ## Verification
 

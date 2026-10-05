@@ -1,15 +1,11 @@
 import "server-only"
 
-import { isOpenRequest } from "@/lib/bubble/enums"
+import { isOpenRequest, isPickupRequest } from "@/lib/bubble/enums"
 import { listMaterialItemsByIds } from "@/lib/bubble/material-items"
+import { listLinkedPickupLines } from "@/lib/bubble/material-transfers"
 import { assignMaterials, targetsLanded, waitForMaterialLines, type MaterialTarget } from "@/lib/bubble/requested-materials"
-import {
-  effectiveQty,
-  holdsStock,
-  lineProgress,
-  type MaterialLine,
-} from "@/lib/bubble/requested-materials-types"
-import type { ToolRequest } from "@/lib/bubble/requests"
+import { holdsStock, lineProgress, type LineProgress, type MaterialLine } from "@/lib/bubble/requested-materials-types"
+import { listOpenRequestsByIds, type ToolRequest } from "@/lib/bubble/requests"
 import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { syncRequestStatuses } from "@/lib/trips/sync-request-status"
 
@@ -48,18 +44,26 @@ export async function prepareMaterialSave(
     return { error: "A material line isn't on this request any more. Reload the page." }
   }
 
-  const [items, tripRows] = await Promise.all([
+  // A pickup's lines need no approval — they count as assigned from creation.
+  if (isPickupRequest(request)) return { error: "A pickup's materials need no approval." }
+
+  const lineIds = request.materialLines.map((line) => line.id)
+  const [items, ownRows, linked] = await Promise.all([
     listMaterialItemsByIds(request.materialLines.flatMap((line) => (line.materialId ? [line.materialId] : []))),
-    listTripMaterialsForLines(request.materialLines.map((line) => line.id)),
+    listTripMaterialsForLines(lineIds),
+    listLinkedPickupLines(lineIds),
   ])
   const stockById = new Map(items.map((item) => [item.id, item.stockQty]))
+  const tripRows = [...ownRows, ...linked.tripRows]
+  const context = { linked: linked.lines }
 
   // Stock drawn per item across the whole save — two lines can name one item.
   const drawn = new Map<string, number>()
 
   for (const target of changed) {
     const line = linesById.get(target.lineId) as MaterialLine
-    const refusal = refuseLine(line, target.targetQty, lineProgress(line, tripRows).onTrips)
+    const progress = lineProgress(line, tripRows, context)
+    const refusal = await refuseLine(line, target.targetQty, progress, () => transferSites(line, linked.lines))
     if (refusal) return { error: refusal }
 
     if (holdsStock(line, request) && line.materialId) {
@@ -111,11 +115,27 @@ export async function prepareMaterialSave(
   }
 }
 
-/** Why one line's target can't be saved, or `null`. Stock is checked per item, after. */
-function refuseLine(line: MaterialLine, targetQty: number, onTrips: number): string | null {
-  const requested = effectiveQty(line)
-  if (targetQty > requested) {
-    return `${line.name}: only ${requested} ${requested === 1 ? "was" : "were"} requested.`
+/**
+ * Why one delivery line's target can't be saved, or `null`. Stock is checked
+ * per item, after.
+ *
+ * Units coming from linked transfers (5F) come off the bound: what's asked for
+ * minus what other sites are sending. A decrease is always allowed, so a line
+ * assigned before a transfer was linked can still be brought down. Naming the
+ * sites costs a read, so `sites` only runs when the message needs it.
+ */
+async function refuseLine(
+  line: MaterialLine,
+  targetQty: number,
+  progress: LineProgress,
+  sites: () => Promise<string>
+): Promise<string | null> {
+  const { requested, linkedCoverage, onTrips } = progress
+  const bound = Math.max(0, requested - linkedCoverage)
+  if (targetQty > bound && targetQty > line.assignedQty) {
+    if (linkedCoverage === 0) return `${line.name}: only ${requested} ${requested === 1 ? "was" : "were"} requested.`
+    const coming = `${linkedCoverage} ${linkedCoverage === 1 ? "is" : "are"} coming from ${await sites()}`
+    return `${line.name}: ${coming}, so assign ${bound} or fewer from stock.`
   }
   // Approve or not — there's no partial state without stock behind it.
   if (line.kind === "NonInventory" && targetQty !== 0 && targetQty !== requested) {
@@ -125,4 +145,11 @@ function refuseLine(line: MaterialLine, targetQty: number, onTrips: number): str
     return `${line.name}: ${onTrips} ${onTrips === 1 ? "is" : "are"} already on a trip and can't be unassigned. Take ${onTrips === 1 ? "it" : "them"} off the trip first.`
   }
   return null
+}
+
+/** The jobs the transfers feeding this line come from, for the bound's message. */
+async function transferSites(line: MaterialLine, linked: readonly MaterialLine[]): Promise<string> {
+  const requestIds = [...new Set(linked.filter((entry) => entry.transferToLineId === line.id).map((entry) => entry.requestId))]
+  const jobs = (await listOpenRequestsByIds(requestIds)).map((request) => request.job)
+  return jobs.length > 0 ? jobs.join(" and ") : "another site"
 }

@@ -171,9 +171,22 @@ export const startTripSchema = z.object({ tripId: z.string().min(1) })
  * The four material lists hold **line ids** and mirror the tool ones exactly,
  * `returnMaterialIds` absent for the same reason. Defaulted, so a run sheet
  * that predates 5D (tools only) still validates.
+ *
+ * **`counts` (5F)** is what the driver counted for each **pickup** line ticked
+ * in `loadMaterialIds` — required for every one of them, ignored for none. It
+ * may exceed the estimate: more came back than anyone knew about, which is the
+ * information the count exists to catch. `0` records the line as not picked
+ * up. Which lines are pickups is decided server-side, from each row's request.
  */
 const ids = z.array(z.string().min(1))
 const lineIds = ids.default([])
+
+const materialCountsSchema = z
+  .array(z.object({ lineId: z.string().min(1), actualQty: z.number().int().min(0).max(99999) }))
+  .refine((counts) => new Set(counts.map((count) => count.lineId)).size === counts.length, {
+    message: "A material can only be counted once at a stop.",
+  })
+  .default([])
 
 export const completeStopSchema = z
   .object({
@@ -188,6 +201,7 @@ export const completeStopSchema = z
     loadMaterialIds: lineIds,
     skipMaterialIds: lineIds,
     refuseMaterialIds: lineIds,
+    counts: materialCountsSchema,
   })
   .refine((value) => toolOutcomes(value).length + materialOutcomes(value).length > 0, {
     message: "Nothing to record at this stop.",

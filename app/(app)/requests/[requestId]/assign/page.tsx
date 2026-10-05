@@ -1,7 +1,7 @@
 import { ArrowLeftIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { Suspense } from "react"
 
 import type { AssignMaterialsData } from "@/components/assign-materials-panel"
@@ -23,8 +23,9 @@ import {
   type ToolTripClaim,
 } from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
-import { isOpenRequest } from "@/lib/bubble/enums"
+import { isOpenRequest, isPickupRequest } from "@/lib/bubble/enums"
 import { listMaterialItemsByIds } from "@/lib/bubble/material-items"
+import { listLinkedPickupLines, listTransferSources } from "@/lib/bubble/material-transfers"
 import { listToolTypes } from "@/lib/bubble/reference"
 import { lineProgress } from "@/lib/bubble/requested-materials-types"
 import { getRequest, type ToolRequest } from "@/lib/bubble/requests"
@@ -70,6 +71,24 @@ export default async function AssignPage({ params }: { params: Promise<{ request
 async function AssignBody({ requestId }: { requestId: string }) {
   const request = await getRequest(requestId)
   if (!request) notFound()
+  // A pickup names its tools when it's created and its material lines need no
+  // approval, so there is nothing to assign — the request page is the place.
+  if (isPickupRequest(request)) redirect(`/requests/${request.id}`)
+
+  const header = (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="text-xl font-medium wrap-anywhere">{request.job}</h1>
+        <RequestStatusBadge status={request.status} />
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {newYorkDayLabel(request.start ?? request.end)}
+        {request.end && request.start !== request.end && ` → ${newYorkDayLabel(request.end)}`}
+        {request.timeRange && ` · ${request.timeRange}`}
+        {request.fieldPm && ` · ${request.fieldPm}`}
+      </p>
+    </div>
+  )
 
   // `toolstype` is memoised for five minutes and effectively free; the
   // `assignedtools` read is one `in` query on a child table. Both are needed
@@ -129,18 +148,7 @@ async function AssignBody({ requestId }: { requestId: string }) {
 
   return (
     <>
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-medium wrap-anywhere">{request.job}</h1>
-          <RequestStatusBadge status={request.status} />
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {newYorkDayLabel(request.start ?? request.end)}
-          {request.end && request.start !== request.end && ` → ${newYorkDayLabel(request.end)}`}
-          {request.timeRange && ` · ${request.timeRange}`}
-          {request.fieldPm && ` · ${request.fieldPm}`}
-        </p>
-      </div>
+      {header}
 
       {/* Notes beside the picker rather than above it: `order` puts them in the
           right-hand column from `lg` up, where they stay in view while the slot
@@ -181,21 +189,33 @@ async function AssignBody({ requestId }: { requestId: string }) {
  * about. Loaded with the tools because the two share one Save; a failure is
  * still the card's alone, handed down as an error rather than thrown, so it
  * never takes the tools panel down with it.
+ *
+ * Only a delivery gets here (a pickup redirects), so it also reads its
+ * transfers (5F §2.6): the pickup lines already linked to its lines, whose
+ * estimates come off each line's bound, and the pickup lines at other sites
+ * that could be linked.
  */
 async function loadMaterials(request: ToolRequest): Promise<AssignMaterialsData> {
   const lines = request.materialLines
+  const lineIds = lines.map((line) => line.id)
   try {
-    const [items, tripRows] = await Promise.all([
+    const [items, ownRows, linked, sources] = await Promise.all([
       listMaterialItemsByIds(lines.flatMap((line) => (line.materialId ? [line.materialId] : []))),
-      listTripMaterialsForLines(lines.map((line) => line.id)),
+      listTripMaterialsForLines(lineIds),
+      listLinkedPickupLines(lineIds),
+      isOpenRequest(request.status) ? listTransferSources(request, lines) : [],
     ])
+    const tripRows = [...ownRows, ...linked.tripRows]
+    const progress = (line: (typeof lines)[number]) => lineProgress(line, tripRows, { linked: linked.lines })
     return {
       lines,
       stock: Object.fromEntries(items.map((item) => [item.id, item.stockQty])),
       shelves: Object.fromEntries(
         items.flatMap((item) => (item.warehouseLocation ? [[item.id, item.warehouseLocation]] : []))
       ),
-      floors: Object.fromEntries(lines.map((line) => [line.id, lineProgress(line, tripRows).onTrips])),
+      floors: Object.fromEntries(lines.map((line) => [line.id, progress(line).onTrips])),
+      coverage: Object.fromEntries(lines.map((line) => [line.id, progress(line).linkedCoverage])),
+      sources,
       pickup: request.pickup,
       readOnly: !isOpenRequest(request.status),
     }

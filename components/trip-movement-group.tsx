@@ -169,25 +169,54 @@ function GroupHeader({
       </p>
 
       {group.destinationIsChoosable && (
-        <Select
-          items={WAREHOUSE_JOB_NAMES.map((value) => ({ label: value, value }))}
-          value={destination}
-          onValueChange={(next) => next !== null && onDestinationChange(next)}
-        >
-          <SelectTrigger size="sm" className="w-full" aria-label={`Return ${group.job} tools to`}>
-            <SelectValue className="truncate" />
-          </SelectTrigger>
-          <SelectContent className="w-fit min-w-(--anchor-width)">
-            <SelectGroup>
-              {WAREHOUSE_JOB_NAMES.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {value}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <WarehousePicker group={group} destination={destination} onDestinationChange={onDestinationChange} />
       )}
     </header>
+  )
+}
+
+/**
+ * Which warehouse a pickup group returns to. Material lines linked to a
+ * delivery at another site (5F) keep their own destination, so once the group
+ * has one the picker says it applies to the rest.
+ */
+function WarehousePicker({
+  group,
+  destination,
+  onDestinationChange,
+}: {
+  group: RequestMovements
+  destination: string
+  onDestinationChange: (warehouse: string) => void
+}) {
+  const transfers = group.materials.filter((line) => line.fixedQty && line.fixedDestination).length
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Select
+        items={WAREHOUSE_JOB_NAMES.map((value) => ({ label: value, value }))}
+        value={destination}
+        onValueChange={(next) => next !== null && onDestinationChange(next)}
+      >
+        <SelectTrigger size="sm" className="w-full" aria-label={`Return ${group.job} tools to`}>
+          <SelectValue className="truncate" />
+        </SelectTrigger>
+        <SelectContent className="w-fit min-w-(--anchor-width)">
+          <SelectGroup>
+            {WAREHOUSE_JOB_NAMES.map((value) => (
+              <SelectItem key={value} value={value}>
+                {value}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      {transfers > 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          For the rest — {transfers} linked {transfers === 1 ? "material goes" : "materials go"} to{" "}
+          {transfers === 1 ? "its" : "their"} site.
+        </p>
+      )}
+    </div>
   )
 }

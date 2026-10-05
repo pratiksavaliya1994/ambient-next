@@ -10,10 +10,10 @@ stops, its planner and its conventions, and adds a second kind of cargo.
 | 5A — schema | [`phase-5a-material-schema.md`](./phase-5a-material-schema.md) | **done** 2026-09-24 — verified live |
 | 5B — delivery backend: catalogue, request, assign | [`phase-5b-delivery-backend-catalogue-assign.md`](./phase-5b-delivery-backend-catalogue-assign.md) | **done** 2026-09-24 — typecheck + `check-bubble` green; write tests not yet run |
 | 5C — delivery frontend: catalogue, request, assign | [`phase-5c-delivery-frontend-catalogue-assign.md`](./phase-5c-delivery-frontend-catalogue-assign.md) | **built** 2026-09-25 — typecheck clean, awaiting the browser pass |
-| 5D — delivery backend: trips **+ site stock** | [`phase-5d-delivery-backend-trips.md`](./phase-5d-delivery-backend-trips.md) | not started |
-| 5E — delivery frontend: trips **+ site view** | [`phase-5e-delivery-frontend-trips.md`](./phase-5e-delivery-frontend-trips.md) | not started |
-| 5F — pickup backend **+ site-to-site transfer** | [`phase-5f-pickup-backend.md`](./phase-5f-pickup-backend.md) | not started |
-| 5G — pickup frontend **+ transfer UI** | [`phase-5g-pickup-frontend.md`](./phase-5g-pickup-frontend.md) | not started |
+| 5D — delivery backend: trips **+ site stock** | [`phase-5d-delivery-backend-trips.md`](./phase-5d-delivery-backend-trips.md) | **built** 2026-09-28 — both halves; not run live |
+| 5E — delivery frontend: trips **+ site view** | [`phase-5e-delivery-frontend-trips.md`](./phase-5e-delivery-frontend-trips.md) | **built** 2026-09-29 — typecheck clean, awaiting the browser pass |
+| 5F — pickup backend **+ site-to-site transfer** | [`phase-5f-pickup-backend.md`](./phase-5f-pickup-backend.md) | **built** 2026-10-01 — both halves; not run live |
+| 5G — pickup frontend **+ transfer UI** | [`phase-5g-pickup-frontend.md`](./phase-5g-pickup-frontend.md) | **built** 2026-10-05 — typecheck clean, awaiting the browser pass; no backend change required |
 
 The order is fixed: schema first, backend and frontend never in the same slice,
 the whole delivery flow (5B–5E) before any of the pickup flow (5F–5G). A slice's
@@ -107,9 +107,12 @@ Don't re-litigate these.
 - **Quantities are positive whole numbers.** The unit (`bag`, `box`, `gal`)
   carries the meaning. A non-inventory line with no quantity is **one lot** —
   stored blank, counted as `1` in progress maths, shown as "—".
-- **Material pickups get an approve step** (no stock involved), because the brief
-  says assignment mirrors delivery. Tool pickups skip it (born `Assigned`); a
-  request carrying both reads by the usual status derivation.
+- ~~Material pickups get an approve step~~ — **overturned by the user
+  2026-10-05.** Pickup material lines need **no approval**, the same as a
+  pickup's tools: they count as assigned in full from the moment the request is
+  created (`lineProgress`'s pickup branch), and go straight into the trip
+  pool. `assignedQty` stays 0 on pickup lines and is never read for them. A
+  pickup is born `Assigned`, whatever it carries.
 - **The legacy `materials` text is still sent**, now as a formatted summary of
   the lines, so the old Bubble UI keeps its one readable row per request. The
   reader here hides a request's legacy row whenever that request has structured
@@ -328,17 +331,22 @@ material available to someone else.
 - **The link lives on the pickup line.** It is three `requestedmaterials`
   fields: `transferToLineID` (B's line), `transferToRequestID` and
   `transferToLocation` (B's job name, the trip destination).
-- **Linking** is two writes, in this order:
-  1. Approve the pickup line through the existing `assign-material-line`
-     (`assignedQty = effectiveQty`). A linked line is an approved line.
-  2. A plain Data API **`PATCH`** of the three fields. It changes one row, moves
-     no stock and creates no children: the `/tools/[toolId]` rule.
-
-  If step 2 fails, the line is approved and going to the warehouse, which is
-  harmless. **Unlinking** is a `PATCH` clearing the fields, refused once the line
-  has a live trip row.
-- **Whole-line.** One pickup line has one destination. If more comes back than B
-  needs, the extra stays in B's site stock.
+- **Linking** is a plain Data API **`PATCH`** of the three fields. It changes
+  one row, moves no stock and creates no children: the `/tools/[toolId]` rule.
+  (It was two writes, approve then `PATCH`, until pickup approval was dropped
+  on 2026-10-05.) **Unlinking** is a `PATCH` clearing the fields, refused once
+  the line has a live trip row.
+- **Whole-line, split on link** *(changed by the user 2026-10-05; was "the
+  extra stays in B's site stock")*. One pickup line still has one destination
+  and goes on one trip whole. When a pickup's estimate is more than B still
+  needs (requested − assigned from stock − other transfers), linking **splits**
+  it: the original is `PATCH`ed down to the need and linked, and the rest
+  becomes a new unlinked line on the same pickup, heading for the warehouse.
+  The remainder row is a plain Data API `POST` (one row, no children — the
+  `/tools/new` rule), made first; a failed `PATCH` deletes it again. The driver
+  counts the two lines separately at the stop. Cancelling the transfer leaves
+  both lines going to the warehouse; they aren't merged back. A line that's
+  already covered offers no transfer.
 
 ### What the delivery line counts
 

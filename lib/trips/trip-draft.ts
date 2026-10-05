@@ -60,8 +60,9 @@ export function deriveInitialSplitPreference(
  *
  * Editing: the draft's own quantities, as saved. Arriving from a request's
  * "Add to a trip": every one of that request's lines, at all of what's left —
- * the same "everything this request still needs" its tools are seeded with.
- * Otherwise nothing.
+ * the same "everything this request still needs" its tools are seeded with —
+ * plus, for a delivery, the transfer lines at other sites feeding it (they sit
+ * in their pickup's group). Otherwise nothing.
  */
 export function initialMaterialSelection(
   groups: readonly RequestMovements[],
@@ -69,10 +70,11 @@ export function initialMaterialSelection(
   preselectRequestId: string | undefined
 ): Map<string, number> {
   if (draft) return new Map(draft.materials.map((line) => [line.lineId, line.qty]))
+  if (!preselectRequestId) return new Map()
   return new Map(
     groups
-      .filter((group) => group.requestId === preselectRequestId)
       .flatMap((group) => group.materials)
+      .filter((line) => line.requestId === preselectRequestId || line.feedsRequestId === preselectRequestId)
       .map((line) => [line.lineId, line.outstanding])
   )
 }

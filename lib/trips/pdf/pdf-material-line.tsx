@@ -3,7 +3,13 @@ import "server-only"
 import { Text, View } from "@react-pdf/renderer"
 
 import type { RequestStopInfo } from "@/lib/bubble/requests"
-import { materialQtyLabel, type TripMaterialRow } from "@/lib/bubble/trip-materials-types"
+import {
+  isPickupMaterial,
+  isTransferMaterial,
+  materialQtyLabel,
+  pickupQtyLabel,
+  type TripMaterialRow,
+} from "@/lib/bubble/trip-materials-types"
 import { journeyLabel, type PdfItemTone } from "@/lib/trips/pdf/pdf-helpers"
 import { pdfStyles } from "@/lib/trips/pdf/pdf-styles"
 
@@ -16,6 +22,10 @@ const SECTION_LABEL: Record<PdfItemTone, string> = {
  * A stop's material lines for one half of its work, printed under that half's
  * tools: "Pick up — materials (2)", then `20 bag  Level-Flor — to <job>` per
  * line. The quantity leads, since the driver is counting bags, not names.
+ *
+ * A **pickup** line at its collect (5G) prints its estimate as "about 10 bag"
+ * and a blank **"Collected: ____"** for a driver working from paper. A
+ * transfer reads "→ Site B" there, and "from Site A" where it lands.
  */
 export function PdfMaterialSection({
   tone,
@@ -60,15 +70,18 @@ function PdfMaterialLine({
   tone: PdfItemTone
   request?: RequestStopInfo
 }) {
-  const journey = journeyLabel(row, tone)
+  const pickup = isPickupMaterial(row)
+  const counting = pickup && tone === "collect"
+  const journey = counting && isTransferMaterial(row) ? `→ ${row.toLocation}` : journeyLabel(row, tone)
 
   return (
     <View style={pdfStyles.itemLine}>
       <Text style={pdfStyles.itemName}>
-        {materialQtyLabel(row)} {row.name}
+        {pickup ? pickupQtyLabel(row) : materialQtyLabel(row)} {row.name}
       </Text>
       {journey && <Text style={pdfStyles.itemDetail}> — {journey}</Text>}
       {request && <Text style={pdfStyles.itemDetail}> for {request.job}</Text>}
+      {counting && <Text style={pdfStyles.itemName}>{"   "}Collected: ________</Text>}
     </View>
   )
 }
