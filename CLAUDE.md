@@ -118,7 +118,7 @@ Not written: `pictures`, `onClickUp`, `realGC`, `Slug`.
 
 ### `toolstype`
 
-Catalogue, 112 rows. `name` (the identifier as far as `toolsSummary` cares), `realtedTo` (list of option set — **the misspelling is Bubble's, keep it** — which `toDo` values the tool is offered for; `Fast Request` appears in no list, so it means "show everything"), `consumable` (yes/no), `notes`. `quantity`, `order`, `clickUpID` mostly empty.
+Catalogue, 112 rows. `name` (the identifier as far as `toolsSummary` cares), `realtedTo` (list of option set — **the misspelling is Bubble's, keep it** — which `toDo` values the tool is offered for; `Fast Request` appears in no list, so it means "show everything"), `consumable` (yes/no), `notes`. `quantity`, `order`, `clickUpID` mostly empty. `setParts` (list of text, added 2026-10-05, filled by hand in Bubble's Data tab) names the parts of a **tool set** type — "Full 880 Grinder Set" = `880 Cart`, `880 Gang Box`, `880 Grinder`, `880 Vac` — and a tool of that type is part of set #N only when its name **equals** `<part> #N` (case/whitespace-insensitive; equality because look-alikes like `Small 880 Cart #1` sit on the same type). Read only by the assign dialog's "Add set" grouping and incomplete-set warning; empty means an ordinary type. See `lib/bubble/tool-sets.ts`.
 
 ### `jobs`
 

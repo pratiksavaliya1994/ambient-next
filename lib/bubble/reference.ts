@@ -85,6 +85,10 @@ export function listJobs(): Promise<Job[]> {
  * `realtedTo` — the misspelling is Bubble's and must be kept — lists the job
  * types a tool is offered for. An empty list means the tool is not tied to any
  * job type; those only show under "Fast Request".
+ *
+ * `setParts` (list of text, added 2026-10-05) names the parts of a **tool set**
+ * type, e.g. `880 Cart`, `880 Vac` — see `lib/bubble/tool-sets.ts`. Empty on
+ * every ordinary type, and absent until the field exists in Bubble.
  */
 const toolTypeRow = z.looseObject({
   _id: z.string(),
@@ -93,6 +97,7 @@ const toolTypeRow = z.looseObject({
   consumable: z.boolean().optional(),
   order: z.number().optional(),
   realtedTo: z.array(z.string()).optional(),
+  setParts: z.array(z.string()).optional(),
 })
 
 const IS_TO_DO = new Set<string>(TO_DO)
@@ -109,6 +114,7 @@ export function listToolTypes(): Promise<ToolType[]> {
         notes: row.notes ?? null,
         consumable: row.consumable ?? false,
         relatedTo: (row.realtedTo ?? []).filter((value): value is ToDo => IS_TO_DO.has(value)),
+        setParts: [...new Set((row.setParts ?? []).map((part) => part.trim()).filter(Boolean))],
       }))
       .sort((a, b) => a.name.localeCompare(b.name))
   })

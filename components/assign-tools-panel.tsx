@@ -27,6 +27,7 @@ import {
   type ToolTripClaim,
 } from "@/lib/bubble/assigned-tools-types"
 import { isLockedToTrip } from "@/lib/bubble/tool-enums"
+import { NO_SETS, type SetShape } from "@/lib/bubble/tool-sets"
 
 /**
  * The assign screen's one client island.
@@ -64,6 +65,7 @@ export function AssignToolsPanel({
   slots,
   extraToolIds,
   pool,
+  setShapes,
   claims,
   requestClaims,
   unresolvedSlots,
@@ -73,6 +75,8 @@ export function AssignToolsPanel({
   slots: AssignSlot[]
   extraToolIds: string[]
   pool: CandidateTool[]
+  /** Per requested type, the parts of each tool set on file — see `lib/bubble/tool-sets.ts`. */
+  setShapes: Record<string, SetShape>
   /** Which of this request's tools a saved trip already holds. See `ToolTripClaim`. */
   claims: ToolTripClaim[]
   /**
@@ -173,9 +177,14 @@ export function AssignToolsPanel({
     slots.some((slot) => (picks.get(slot.toolType) ?? []).join(",") !== slot.toolIds.join(","))
   const dirty = toolsDirty || materialsChanged > 0
 
-  function remember(tool: CandidateTool) {
-    if (known.has(tool.id)) return
-    setKnown((current) => new Map(current).set(tool.id, tool))
+  function remember(tools: CandidateTool[]) {
+    const unknown = tools.filter((tool) => !known.has(tool.id))
+    if (unknown.length === 0) return
+    setKnown((current) => {
+      const next = new Map(current)
+      for (const tool of unknown) next.set(tool.id, tool)
+      return next
+    })
   }
 
   /**
@@ -187,26 +196,30 @@ export function AssignToolsPanel({
    * disables a row that is already picked or used elsewhere, and this guard is
    * what actually enforces it, since a stale render or a double click would
    * otherwise slip a duplicate through.
+   *
+   * Takes several at once for a tool set's "Add set" — one state update, so
+   * the guard sees every part rather than racing itself.
    */
-  function addToSlot(toolType: string, tool: CandidateTool) {
-    const chosen = picks.get(toolType) ?? []
-    if (chosen.includes(tool.id) || usedIds.has(tool.id)) return
+  function addToSlot(toolType: string, tools: CandidateTool[]) {
+    const fresh = tools.filter((tool) => !usedIds.has(tool.id))
+    if (fresh.length === 0) return
 
-    remember(tool)
+    remember(fresh)
     setPicks((current) => {
       const next = new Map(current)
-      next.set(toolType, [...(next.get(toolType) ?? []), tool.id])
+      next.set(toolType, [...(next.get(toolType) ?? []), ...fresh.map((tool) => tool.id)])
       return next
     })
   }
 
-  function removeFromSlot(toolType: string, toolId: string) {
-    if (lockedIds.has(toolId)) return
+  function removeFromSlot(toolType: string, toolIds: string[]) {
+    const removable = new Set(toolIds.filter((id) => !lockedIds.has(id)))
+    if (removable.size === 0) return
     setPicks((current) => {
       const next = new Map(current)
       next.set(
         toolType,
-        (next.get(toolType) ?? []).filter((id) => id !== toolId)
+        (next.get(toolType) ?? []).filter((id) => !removable.has(id))
       )
       return next
     })
@@ -214,7 +227,7 @@ export function AssignToolsPanel({
 
   function addExtra(tool: CandidateTool) {
     if (usedIds.has(tool.id)) return
-    remember(tool)
+    remember([tool])
     setExtras((current) => [...current, tool.id])
   }
 
@@ -324,11 +337,12 @@ export function AssignToolsPanel({
                     slot={slot}
                     chosen={chosen}
                     candidates={slot.typeId ? (candidatesByType.get(slot.typeId) ?? []) : []}
+                    setShape={(slot.typeId && setShapes[slot.typeId]) || NO_SETS}
                     usedElsewhere={usedIds}
                     lockedIds={lockedIds}
                     heldElsewhere={heldElsewhere}
-                    onAdd={(tool) => addToSlot(slot.toolType, tool)}
-                    onRemove={(toolId) => removeFromSlot(slot.toolType, toolId)}
+                    onAdd={(tools) => addToSlot(slot.toolType, tools)}
+                    onRemove={(toolIds) => removeFromSlot(slot.toolType, toolIds)}
                   />
                 )
               })}

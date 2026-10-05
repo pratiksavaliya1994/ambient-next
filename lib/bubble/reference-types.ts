@@ -63,6 +63,8 @@ export type ToolType = {
   notes: string | null
   consumable: boolean
   relatedTo: ToDo[]
+  /** The parts of a tool set type, empty for an ordinary type. See `lib/bubble/tool-sets.ts`. */
+  setParts: string[]
 }
 
 export type FieldPm = { id: string; name: string; company: string | null }

@@ -122,7 +122,7 @@ async function AssignBody({ requestId }: { requestId: string }) {
   // whatever is already on the request. The panel adds to it as extras are
   // searched for.
   const pool = new Map<string, CandidateTool>()
-  for (const tool of [...candidates, ...alreadyAssigned]) pool.set(tool.id, tool)
+  for (const tool of [...candidates.tools, ...alreadyAssigned]) pool.set(tool.id, tool)
 
   // Which of the offered tools another open request already holds. Sequential
   // rather than folded into the `Promise.all` above, because it takes the pool
@@ -172,6 +172,7 @@ async function AssignBody({ requestId }: { requestId: string }) {
             slots={slots}
             extraToolIds={extraToolIds}
             pool={[...pool.values()]}
+            setShapes={candidates.setShapes}
             claims={tripClaims}
             requestClaims={heldElsewhere}
             unresolvedSlots={unresolved}

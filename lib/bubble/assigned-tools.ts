@@ -8,6 +8,7 @@ import { isAssignable, isFreeToAssign } from "@/lib/bubble/tool-enums"
 import { NO_LOCATION } from "@/lib/bubble/pickup-tools-types"
 import { listToolTypes } from "@/lib/bubble/reference"
 import { listOpenRequestsByIds } from "@/lib/bubble/requests"
+import { buildSetShape, type SetShape } from "@/lib/bubble/tool-sets"
 import type {
   AssignedTool,
   AssignmentEntry,
@@ -228,9 +229,16 @@ function sortCandidates(tools: CandidateTool[]): CandidateTool[] {
  * `Delivered`). A tool already on file for *this* request doesn't come
  * through here at all — the assign page merges it in separately, by id
  * (`listToolsByIds`), so it stays pickable regardless of its live status.
+ *
+ * `setShapes` rides on the same read: per type, its `setParts` and which of
+ * them each set number has on file (see `lib/bubble/tool-sets.ts`). Free for
+ * the asking — every row of the type is already here before the filters drop
+ * the busy ones.
  */
-export async function listCandidateTools(typeIds: string[]): Promise<CandidateTool[]> {
-  if (typeIds.length === 0) return []
+export async function listCandidateTools(
+  typeIds: string[]
+): Promise<{ tools: CandidateTool[]; setShapes: Record<string, SetShape> }> {
+  if (typeIds.length === 0) return { tools: [], setShapes: {} }
 
   const wanted = new Set(typeIds)
   const [toolTypes, narrow] = await Promise.all([
@@ -247,14 +255,26 @@ export async function listCandidateTools(typeIds: string[]): Promise<CandidateTo
   }
 
   const typeNameById = new Map(toolTypes.map((type) => [type.id, type.name]))
+  const partsById = new Map(toolTypes.map((type) => [type.id, type.setParts]))
+  const ofType = rows.map((raw) => toolRow.parse(raw)).filter((row) => row.name && row.type && wanted.has(row.type))
 
-  return sortCandidates(
-    rows
-      .map((raw) => toolRow.parse(raw))
-      .filter((row) => row.name && row.type && wanted.has(row.type))
+  // Shapes before the status filter, so a busy part still counts as missing.
+  const setShapes = Object.fromEntries(
+    typeIds.map((typeId) => [
+      typeId,
+      buildSetShape(
+        ofType.filter((row) => row.type === typeId).map((row) => row.name ?? ""),
+        partsById.get(typeId) ?? []
+      ),
+    ])
+  )
+
+  const tools = sortCandidates(
+    ofType
       .filter((row) => isAssignable(row.condition ?? "", row.statusNew ?? "") && isFreeToAssign(row.statusNew ?? ""))
       .map((row) => toCandidate(row, typeNameById))
   )
+  return { tools, setShapes }
 }
 
 /**
