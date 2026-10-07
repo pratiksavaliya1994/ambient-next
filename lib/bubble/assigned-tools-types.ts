@@ -64,7 +64,6 @@ export type CandidateTool = {
   floor: string | null
   /** Static shelf/bin in the warehouse — where to find it when it's home. */
   warehouseLocation: string | null
-  currentUser: string | null
 }
 
 /**

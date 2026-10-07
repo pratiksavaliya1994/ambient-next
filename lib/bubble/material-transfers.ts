@@ -7,6 +7,7 @@ import { readStructuredLines, REQUESTED_MATERIALS } from "@/lib/bubble/requested
 import {
   effectiveQty,
   formatMaterialLine,
+  isPickupLineTouched,
   pickupLineStatus,
   type MaterialLine,
 } from "@/lib/bubble/requested-materials-types"
@@ -68,7 +69,7 @@ export async function listLinkedPickupSources(
  * - names the same catalogue item;
  * - sits on an open **pickup** request at another job;
  * - is unlinked, or linked to one of these lines (so a linked one still shows);
- * - has no live trip row and isn't done.
+ * - has no live trip row and isn't done, and no trip has taken part of it yet.
  */
 export async function listTransferSources(
   delivery: { job: string },
@@ -104,7 +105,7 @@ export async function listTransferSources(
 
   const tripRows = await listTripMaterialsForLines(pickups.map((line) => line.id))
   return pickups
-    .filter((line) => pickupLineStatus(line, tripRows) === "idle")
+    .filter((line) => !isPickupLineTouched(line, tripRows))
     .map((line) => {
       const request = requests.get(line.requestId)
       return {
@@ -138,8 +139,8 @@ export async function setTransferLink(pickupLineId: string, link: TransferLink |
  * Links only **part** of a pickup line (user decision 2026-10-05): when its
  * estimate is more than the delivery still needs, the line is split in two —
  * `keep` linked to the delivery, the rest a new unlinked line on the same
- * pickup, heading for the warehouse. Each half is still whole-line on a trip,
- * so the trip model doesn't change; the driver counts the two at the stop.
+ * pickup, heading for the warehouse. The linked half goes on one trip whole
+ * (the remainder, unlinked, can be split); the driver counts the two at the stop.
  *
  * Two writes, in the order that fails safe:
  * 1. `POST` the remainder line — one row, no children, the `/tools/new` rule;
@@ -179,12 +180,17 @@ export async function linkPartOfPickupLine(line: MaterialLine, keep: number, lin
 
 /**
  * Why a pickup line's link can't change now, or `null`. A trip holding the line
- * has already routed it, and a collected line is history.
+ * has already routed it, and a collected line is history — as is one partly
+ * collected, since a transfer goes on one trip whole.
  */
 export function transferLockReason(line: MaterialLine, tripRows: readonly LineTripRow[]): string | null {
   const status = pickupLineStatus(line, tripRows)
   if (status === "done") return `${line.name} has already been collected.`
-  if (status === "idle") return null
+  if (status === "idle") {
+    return isPickupLineTouched(line, tripRows)
+      ? `Part of ${line.name} has already been collected, so it can't become a transfer.`
+      : null
+  }
   const onTruck = tripRows.some((row) => row.lineId === line.id && (row.state === "Loaded" || row.state === "Refused"))
   return onTruck
     ? `${line.name} is on the truck. Finish the trip first.`

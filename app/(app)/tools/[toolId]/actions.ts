@@ -81,7 +81,6 @@ export async function updateToolAction(input: unknown): Promise<ToolEditState> {
   const movesTool =
     values.location !== tool.location ||
     values.floor !== tool.floor ||
-    values.currentUser !== tool.currentUser ||
     values.markAvailable
   if (movesTool && hold) {
     return { status: "error", message: holdRefusal(hold) }
@@ -114,12 +113,10 @@ export async function updateToolAction(input: unknown): Promise<ToolEditState> {
     if (values.markAvailable && editability.canRelease) {
       patch.statusNew = TOOL_STATUS_AVAILABLE
       // `Available` means nobody has it, so the last driver's name goes with
-      // it — overriding whatever the input held, which the form has already
-      // blanked to match. Skipped when it was empty anyway, so a release from
-      // an unheld tool doesn't log a no-op change.
+      // it. The field isn't shown anywhere any more, but clearing it keeps the
+      // row from carrying a stale name. Skipped when it was empty anyway, so a
+      // release from an unheld tool doesn't log a no-op change.
       if (tool.currentUser !== "") patch.currentUser = ""
-    } else if (values.currentUser !== tool.currentUser) {
-      patch.currentUser = values.currentUser
     }
   }
 

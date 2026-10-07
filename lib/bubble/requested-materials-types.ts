@@ -114,8 +114,8 @@ export type LineProgress = {
   assigned: number
   /**
    * Units committed to trips — the floor an unassign can't go below. Delivery:
-   * Σ qty over committed rows. Pickup: the estimate while a trip holds the line,
-   * then what was counted.
+   * Σ qty over committed rows. Pickup: what live and finished rows claim of the
+   * estimate — each row's plan, or its count when that's more.
    */
   onTrips: number
   /** Delivery: Σ qty over `Dropped` rows, plus linked transfers dropped here. Pickup: what came back, as counted. */
@@ -156,20 +156,53 @@ function isStalePlan(row: ProgressRow): boolean {
 }
 
 /**
- * Where a pickup line stands, from its own trip rows. **One trip, whole line**:
- * there is nothing to split an unknown quantity by.
- *
- * - `done`: one `Dropped` or `Returned` row, whatever was counted. `Returned`
- *   is a transfer the receiving site refused, landed at the yard.
- * - `live`: a trip holds it — `Planned` on an open trip, `Loaded`, or `Refused`
- *   and still riding.
- * - `idle`: neither. A `Skipped` line is idle again, back in the pool.
+ * What one pickup row accounts for of the line's estimate: what was planned,
+ * or the driver's count when that's more. A count **below** the plan doesn't
+ * hand the difference back — that part was never there to take, the same
+ * "the driver's count is the truth" rule a whole line has always had.
  */
-export function pickupLineStatus(line: Pick<MaterialLine, "id">, tripRows: readonly ProgressRow[]) {
+const claimedQty = (row: TripMaterialRow) => Math.max(row.qty, row.actualQty ?? 0)
+
+const isFinished = (row: ProgressRow) => row.state === "Dropped" || row.state === "Returned"
+const isLive = (row: ProgressRow) => IN_MOTION_STATES.includes(row.state) && !isStalePlan(row)
+
+/**
+ * A pickup line's trip rows, summed. A line can be **split across trips**
+ * (user decision 2026-10-06): each row claims part of the estimate, and what
+ * no live or finished row claims is still to collect. `Skipped` rows and
+ * stale plans claim nothing — they're back in the pool.
+ */
+function pickupClaims(line: Pick<MaterialLine, "id" | "quantity">, tripRows: readonly ProgressRow[]) {
   const own = tripRows.filter((row) => row.lineId === line.id)
-  if (own.some((row) => row.state === "Dropped" || row.state === "Returned")) return "done" as const
-  if (own.some((row) => IN_MOTION_STATES.includes(row.state) && !isStalePlan(row))) return "live" as const
-  return "idle" as const
+  const claimed = own.filter((row) => isFinished(row) || isLive(row)).reduce((sum, row) => sum + claimedQty(row), 0)
+  return { live: own.some(isLive), left: Math.max(0, effectiveQty(line) - claimed), claimed }
+}
+
+/**
+ * Where a pickup line stands, from its own trip rows.
+ *
+ * - `live`: a trip holds some of it — `Planned` on an open trip, `Loaded`, or
+ *   `Refused` and still riding.
+ * - `done`: no trip holds it and finished rows (`Dropped`, or `Returned` — a
+ *   transfer the receiving site refused, landed at the yard) account for the
+ *   whole estimate. A line planned whole is done by its one row, whatever was
+ *   counted.
+ * - `idle`: neither. A `Skipped` line is idle again, back in the pool, and so
+ *   is the rest of a line only part of which has been collected.
+ */
+export function pickupLineStatus(line: Pick<MaterialLine, "id" | "quantity">, tripRows: readonly ProgressRow[]) {
+  const { live, left } = pickupClaims(line, tripRows)
+  if (live) return "live" as const
+  return left === 0 ? ("done" as const) : ("idle" as const)
+}
+
+/**
+ * Whether any trip has planned or collected part of this pickup line. Only an
+ * untouched line can become a transfer: a transfer goes on one trip whole, and
+ * linking sizes it by its full estimate.
+ */
+export function isPickupLineTouched(line: Pick<MaterialLine, "id" | "quantity">, tripRows: readonly ProgressRow[]) {
+  return pickupClaims(line, tripRows).claimed > 0
 }
 
 /** What a row says was actually moved: the driver's count once there is one, else the plan. */
@@ -186,8 +219,8 @@ const movedQty = (row: TripMaterialRow) => row.actualQty ?? row.qty
  * **Pickup:** see `pickupLineStatus`. A pickup line needs **no approval** — it
  * counts as assigned in full from the moment the request is created, the way a
  * pickup's tools are assigned by being named. `assignedQty` stays 0 on these
- * rows and is never read for them. Outstanding is the whole estimate while the
- * line is idle, else 0.
+ * rows and is never read for them. Outstanding is what no trip has claimed yet
+ * (`pickupClaims`): the whole estimate on an untouched line.
  */
 export function lineProgress(
   line: MaterialLine,
@@ -227,19 +260,19 @@ export function lineProgress(
 }
 
 function pickupProgress(line: MaterialLine, tripRows: readonly ProgressRow[], requested: number): LineProgress {
-  const status = pickupLineStatus(line, tripRows)
+  const { live, left, claimed } = pickupClaims(line, tripRows)
   const collected = tripRows
-    .filter((row) => row.lineId === line.id && (row.state === "Dropped" || row.state === "Returned"))
+    .filter((row) => row.lineId === line.id && isFinished(row))
     .reduce((sum, row) => sum + movedQty(row), 0)
   return {
     requested,
     // Approved by being on the request — see `lineProgress`.
     assigned: requested,
-    onTrips: status === "live" ? requested : collected,
+    onTrips: claimed,
     delivered: collected,
-    outstanding: status === "idle" ? requested : 0,
+    outstanding: left,
     linkedCoverage: 0,
-    done: status === "done",
+    done: !live && left === 0,
   }
 }
 

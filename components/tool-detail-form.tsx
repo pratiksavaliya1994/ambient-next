@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ArrowLeftIcon, SaveIcon } from "lucide-react"
 import * as React from "react"
-import { useForm, useWatch } from "react-hook-form"
+import { useForm } from "react-hook-form"
 
 import { ToolCatalogueFields } from "@/components/tool-catalogue-fields"
 import { ToolMovementFields, ToolReleaseField } from "@/components/tool-movement-fields"
@@ -23,7 +23,7 @@ import Link from "next/link"
  * Editing one tool. `name` is absent on purpose — it is what a driver reads off
  * the label, and nothing in this app identifies a tool any other way.
  *
- * Type and condition are always editable; location, floor, holder and the
+ * Type and condition are always editable; location, floor and the
  * release switch are gated on `editability`. **The disabled inputs are a
  * courtesy, not the guard** — `updateToolAction` recomputes the same
  * `editabilityOf` against a fresh read before it writes, because a server
@@ -63,12 +63,9 @@ export function ToolDetailForm({
       location: tool.location,
       floor: tool.floor,
       warehouseLocation: tool.warehouseLocation,
-      currentUser: tool.currentUser,
       markAvailable: false,
     },
   })
-
-  const releasing = useWatch({ control, name: "markAvailable" })
 
   const onSubmit = handleSubmit((values) => {
     startTransition(async () => {
@@ -83,11 +80,7 @@ export function ToolDetailForm({
 
       // Re-seed from what was actually written so the form stops reading dirty
       // and the release switch springs back. The page revalidates underneath.
-      reset({
-        ...values,
-        markAvailable: false,
-        currentUser: values.markAvailable ? "" : values.currentUser,
-      })
+      reset({ ...values, markAvailable: false })
       toast.add({ title: `${result.name} saved`, description: result.warning ?? "Your changes have been saved." })
     })
   })
@@ -103,7 +96,6 @@ export function ToolDetailForm({
           control={control}
           locations={locations}
           disabled={!editability.movable}
-          releasing={releasing}
           error={errors.location?.message}
         />
 

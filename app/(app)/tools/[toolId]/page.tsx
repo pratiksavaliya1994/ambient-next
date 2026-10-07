@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, MapPinIcon, UserIcon, WrenchIcon } from "lucide-react"
+import { ArrowLeftIcon, MapPinIcon, WrenchIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
@@ -88,12 +88,6 @@ export default async function ToolDetailPage({ params }: { params: Promise<{ too
             {tool.location || NO_LOCATION}
             {tool.floor && ` · Floor ${tool.floor}`}
           </Badge>
-          {tool.currentUser && (
-            <Badge variant="outline">
-              <UserIcon className="size-3.5" />
-              {tool.currentUser}
-            </Badge>
-          )}
         </div>
       </div>
 

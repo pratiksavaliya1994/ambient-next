@@ -2,7 +2,12 @@ import { ArrowRightLeftIcon, PackageXIcon } from "lucide-react"
 import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
-import { effectiveQty, isLinkedTransfer, type MaterialLine } from "@/lib/bubble/requested-materials-types"
+import {
+  effectiveQty,
+  isLinkedTransfer,
+  lineProgress,
+  type MaterialLine,
+} from "@/lib/bubble/requested-materials-types"
 import type { TripMaterialRow } from "@/lib/bubble/trip-materials-types"
 import { pickupLineReport } from "@/lib/materials/pickup-line-report"
 import type { TripFlag } from "@/lib/trips/plan-types"
@@ -26,6 +31,7 @@ export function PickupLineProgress({
   flag?: TripFlag
 }) {
   const report = pickupLineReport(line, rows)
+  const progress = lineProgress(line, rows, { pickup: true })
   const linked = isLinkedTransfer(line)
 
   return (
@@ -42,10 +48,13 @@ export function PickupLineProgress({
         <span>to the warehouse</span>
       )}
       {report.counted !== null && <span className="tabular-nums">· collected {report.counted}</span>}
-      {report.landedAt && report.counted !== null && (
+      {report.landedAt && (
         <span className="tabular-nums">
-          · {linked && report.landedAt === line.transferToLocation ? `delivered ${report.counted}` : `returned ${report.counted}`}
+          · {linked && report.landedAt === line.transferToLocation ? `delivered ${report.landed}` : `returned ${report.landed}`}
         </span>
+      )}
+      {!linked && report.counted !== null && progress.outstanding > 0 && (
+        <span className="tabular-nums">· about {progress.outstanding} still to collect</span>
       )}
       {flag === "skipped" && (
         <Badge className="border-transparent bg-status-attention text-white">
@@ -98,8 +107,8 @@ export function LinkedSupplyRows({
               {unit}
             </span>
             {report.counted !== null && <span className="tabular-nums">· collected {report.counted}</span>}
-            {report.landedAt === supply.transferToLocation && report.counted !== null && (
-              <span className="tabular-nums">· delivered {report.counted}</span>
+            {report.landedAt === supply.transferToLocation && (
+              <span className="tabular-nums">· delivered {report.landed}</span>
             )}
             {report.refusedAt && <span className="text-status-attention-foreground">· refused here</span>}
           </li>

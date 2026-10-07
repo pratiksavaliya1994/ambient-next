@@ -5,12 +5,7 @@ import { AutoRefresh } from "@/components/auto-refresh"
 import { WarehouseDashboard } from "@/components/warehouse-dashboard"
 import { ToolsDashboardSkeleton } from "@/components/tools-skeletons"
 import { listAllTools } from "@/lib/bubble/pickup-tools"
-import {
-  filterWarehouseTools,
-  groupByToolType,
-  parseWarehouseParams,
-  type WarehouseRawParams,
-} from "@/lib/tools/warehouse-filters"
+import { warehouseTools } from "@/lib/tools/warehouse-filters"
 
 export const metadata: Metadata = { title: "Warehouse" }
 export const revalidate = 60
@@ -19,12 +14,10 @@ export const revalidate = 60
  * Every tool actually at the warehouse right now, grouped by tool type — `/tools`
  * answers "what's on this job site," `/tools/all` "show me everything,"
  * this answers "what do we have on hand to send out." A fraction of the full
- * inventory (see `warehouse-filters.ts`), so each row can afford floor and
- * holder inline instead of the by-location dashboard's dots-only line.
+ * inventory (see `warehouse-filters.ts`). No floor anywhere on it: a warehouse
+ * row's `floor` is stale residue from the job site it came back from.
  */
-export default async function WarehousePage({ searchParams }: { searchParams: Promise<WarehouseRawParams> }) {
-  const params = await searchParams
-
+export default function WarehousePage() {
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-wrap items-baseline gap-x-2">
@@ -34,18 +27,15 @@ export default async function WarehousePage({ searchParams }: { searchParams: Pr
 
       <AutoRefresh />
 
-      <Suspense key={JSON.stringify(params)} fallback={<ToolsDashboardSkeleton />}>
-        <WarehouseBody params={params} />
+      <Suspense fallback={<ToolsDashboardSkeleton />}>
+        <WarehouseBody />
       </Suspense>
     </div>
   )
 }
 
-async function WarehouseBody({ params }: { params: WarehouseRawParams }) {
-  const current = parseWarehouseParams(params)
+/** Only warehouse rows cross to the client — filtering on them happens there. */
+async function WarehouseBody() {
   const tools = await listAllTools()
-  const filtered = filterWarehouseTools(tools, current)
-  const groups = groupByToolType(filtered)
-
-  return <WarehouseDashboard current={current} groups={groups} totalTools={filtered.length} />
+  return <WarehouseDashboard tools={warehouseTools(tools)} />
 }

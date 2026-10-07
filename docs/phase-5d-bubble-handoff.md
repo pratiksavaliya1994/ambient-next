@@ -200,8 +200,10 @@ All new material steps use `tripmaterial` searches with *Ignore empty constraint
 | **10** | Make changes → `state = Loaded`, `actualQty = qty` | `loadMaterialIds`, `Planned` | `loadMaterialIds:count > 0` |
 | **11** | Make changes → `state = Skipped` | `skipMaterialIds`, `Planned` | `skipMaterialIds:count > 0` |
 | **12** | Make changes → `state = Refused` | `refuseMaterialIds`, `Loaded` | `refuseMaterialIds:count > 0` |
-| **13** | Schedule `drop-material-at-site` on a list (`tripMaterial = This tripmaterial`, `byName`) | `dropMaterialIds`, `Loaded` | `dropMaterialIds:count > 0` |
-| **14** | Schedule `return-material-stock` on a list (`tripMaterial = This tripmaterial`, `byName`) | `returnMaterialIds`, `Refused` | `returnMaterialIds:count > 0` |
+| **13** | Schedule `drop-material-at-site` on a list (`tripMaterial = This tripmaterial`, `byName = actor`) | `dropMaterialIds`, `Loaded` | `dropMaterialIds:count > 0` |
+| **14** | Schedule `return-material-stock` on a list (`tripMaterial = This tripmaterial`, `byName = actor`) | `returnMaterialIds`, `Refused` | `returnMaterialIds:count > 0` |
+
+**`byName` is `actor`, never `driver`.** `actor` is whoever clicked the button in the app, and `driver` is the trip's driver. They are often different people. The first build passed `driver`, so stock history credited the driver for every stop. Fixed 2026-10-06; rows written before then still show the driver.
 | 15 | Return data — **adds** the five material count keys (below) | | |
 
 **Asynchronous steps:** steps 13–14 are async fan-outs. The `Dropped` / `Returned` flips land after the response, so Next.js must settle-poll (`waitForMaterialRows`).

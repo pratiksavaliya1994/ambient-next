@@ -4,9 +4,8 @@ import * as React from "react"
 import { ToolStatusDots } from "@/components/tool-status-badges"
 import type { PickupTool } from "@/lib/bubble/pickup-tools-types"
 
-/** What a line needs — a `PickupTool`, plus the holder when the read has it
- *  (`DashboardTool` does, `listToolsForJob` doesn't). */
-export type ListedTool = PickupTool & { currentUser?: string | null }
+/** What a line needs — a `PickupTool`. */
+export type ListedTool = PickupTool
 
 type TypeGroup<T extends ListedTool> = { typeName: string; tools: T[] }
 
@@ -75,14 +74,13 @@ export function ToolTypeList({ groups, singles }: GroupedTools<ListedTool>) {
   )
 }
 
-/** Everything the one-line row drops, back on hover — floor and holder are
- *  gone from the layout, not from the data. */
+/** Everything the one-line row drops, back on hover — floor is gone from the
+ *  layout, not from the data. */
 function toolTooltip(tool: ListedTool): string {
   return [
     tool.name,
     tool.typeName,
     tool.floor && `Floor ${tool.floor}`,
-    tool.currentUser,
     tool.status,
     tool.condition && tool.condition !== "Ok" ? tool.condition : null,
   ]

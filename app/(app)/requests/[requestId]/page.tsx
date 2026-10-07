@@ -6,6 +6,7 @@ import { notFound } from "next/navigation"
 import { AssignedToolRow } from "@/components/assigned-tool-row"
 import { CloseRequestAction } from "@/components/close-request-action"
 import { CompleteDeliveryAction } from "@/components/complete-delivery-action"
+import { assignLabelFor } from "@/components/request-card-action"
 import { RequestMaterialsCard } from "@/components/request-materials-card"
 import { RequestStatusBadge, statusIcon, statusIndex } from "@/components/request-status-badge"
 import { RequestToolSlots } from "@/components/request-tool-slots"
@@ -384,9 +385,7 @@ function NextAction({
   const assignLabel = dispatched
     ? "Assign remaining"
     : request.status === "New"
-      ? request.tools.length === 0 && request.materialLines.length > 0
-        ? "Assign materials"
-        : "Assign tools"
+      ? assignLabelFor(request)
       : "Edit assignment"
   const nothingToOffer = !canAssign && movableCount === 0 && !partial && !legacy
 

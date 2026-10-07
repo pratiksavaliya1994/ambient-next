@@ -1,27 +1,44 @@
 "use client"
 
+import * as React from "react"
 import { Maximize2, Minimize2 } from "lucide-react"
 
 import { useFullscreen } from "@/components/tools-dashboard"
-import { WarehouseDashboardFilters } from "@/components/warehouse-dashboard-filters"
+import { WarehouseDashboardFilters, type WarehouseFilterOptions } from "@/components/warehouse-dashboard-filters"
 import { WarehouseMasonryGrid } from "@/components/warehouse-masonry-grid"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { useAutoScroll } from "@/hooks/use-auto-scroll"
-import type { WarehouseListParams, WarehouseTypeGroup } from "@/lib/tools/warehouse-filters"
+import type { DashboardTool } from "@/lib/bubble/pickup-tools-types"
+import { conditionOf, optionsOf, statusOf } from "@/lib/tools/dashboard-filters"
+import {
+  EMPTY_WAREHOUSE_FILTERS,
+  filterWarehouseTools,
+  groupByToolType,
+  shelfOf,
+  warehouseTypeOf,
+  type WarehouseFilters,
+} from "@/lib/tools/warehouse-filters"
 
 /** Same fullscreen idiom as `ToolsDashboard` — the filter row keeps a
  *  toggle button alongside it, and the grid grows to fill the screen while
  *  fullscreen, scrolling internally rather than the page. */
-export function WarehouseDashboard({
-  current,
-  groups,
-  totalTools,
-}: {
-  current: WarehouseListParams
-  groups: WarehouseTypeGroup[]
-  totalTools: number
-}) {
+export function WarehouseDashboard({ tools }: { tools: DashboardTool[] }) {
+  const options = React.useMemo<WarehouseFilterOptions>(
+    () => ({
+      types: optionsOf(tools, warehouseTypeOf),
+      statuses: optionsOf(tools, statusOf),
+      conditions: optionsOf(tools, conditionOf),
+      shelves: optionsOf(tools, shelfOf),
+    }),
+    [tools]
+  )
+
+  // Nothing picked on any axis means "all", so first load shows every tool.
+  const [filters, setFilters] = React.useState<WarehouseFilters>(EMPTY_WAREHOUSE_FILTERS)
+  const filtered = React.useMemo(() => filterWarehouseTools(tools, filters), [tools, filters])
+  const groups = React.useMemo(() => groupByToolType(filtered), [filtered])
+  const totalTools = filtered.length
   const { ref: fsRef, isFullscreen, toggle: toggleFullscreen } = useFullscreen<HTMLDivElement>()
   useAutoScroll(fsRef, isFullscreen)
 
@@ -33,7 +50,7 @@ export function WarehouseDashboard({
     >
       <div className="flex items-start gap-2">
         <div className="flex-1">
-          <WarehouseDashboardFilters current={current} />
+          <WarehouseDashboardFilters options={options} filters={filters} onFiltersChange={setFilters} />
         </div>
         <Button
           variant="outline"

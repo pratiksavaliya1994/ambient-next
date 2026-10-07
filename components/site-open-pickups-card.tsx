@@ -45,7 +45,7 @@ export function SiteOpenPickupsCard({ pickups }: { pickups: readonly SitePickupL
       </CardHeader>
       <CardContent>
         <ItemGroup className="gap-1.5">
-          {pickups.map(({ line, start, onTrip }) => (
+          {pickups.map(({ line, start, onTrip, collected }) => (
             <MaterialLineRow
               key={line.id}
               line={line}
@@ -54,6 +54,7 @@ export function SiteOpenPickupsCard({ pickups }: { pickups: readonly SitePickupL
                   <span className="tabular-nums">
                     {line.quantity !== null ? `about ${quantityLabel(line)}` : quantityLabel(line)}
                   </span>
+                  {collected > 0 && <span className="tabular-nums">· {collected} collected</span>}
                   {isLinkedTransfer(line) ? (
                     <Link href={`/requests/${line.transferToRequestId}`} className={LINK}>
                       → {line.transferToLocation}

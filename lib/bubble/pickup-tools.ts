@@ -23,8 +23,6 @@ export { NO_LOCATION, type DashboardTool, type PickupTool }
  * `NO_LOCATION` instead of conflating them with `"Warehouse"`. `type` is a
  * real link to `toolstype._id`, resolved here to a name via the
  * already-cached `listToolTypes()` rather than a second Bubble round trip.
- * `currentUser` is free text (a display name, e.g. `"Carlos Faner"`) — not a
- * link to `user` — and empty on most rows.
  *
  * Deliberately not memoised like the other reference lists: a tool's status
  * and location are exactly the kind of thing that changes between visits, so
@@ -47,7 +45,6 @@ const toolRow = z.looseObject({
   condition: z.string().optional(),
   floor: z.string().optional(),
   warehouseLocation: z.string().optional(),
-  currentUser: z.string().optional(),
 })
 
 export async function listToolsForJob(jobName: string): Promise<PickupTool[]> {
@@ -128,7 +125,6 @@ export async function listAllTools(): Promise<DashboardTool[]> {
       // `statusNew`, not `status` — see the comment on `toolRow` above.
       status: row.statusNew ?? "",
       condition: row.condition ?? "",
-      currentUser: row.currentUser?.trim() || null,
     }))
     .sort((a, b) => a.location.localeCompare(b.location) || a.name.localeCompare(b.name))
 }

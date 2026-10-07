@@ -32,7 +32,7 @@ import { getRequest, type ToolRequest } from "@/lib/bubble/requests"
 import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { listToolClaims } from "@/lib/bubble/trips-read"
 
-export const metadata: Metadata = { title: "Assign tools" }
+export const metadata: Metadata = { title: "Assign tools & materials" }
 
 /**
  * Picking the physical `tools` rows that go on the truck for one request.

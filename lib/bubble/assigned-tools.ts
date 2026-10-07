@@ -72,7 +72,6 @@ const toolRow = z.looseObject({
   condition: z.string().optional(),
   floor: z.string().optional(),
   warehouseLocation: z.string().optional(),
-  currentUser: z.string().optional(),
 })
 
 /** Every `assignedtools` row for these requests, in one `in` query. */
@@ -205,7 +204,6 @@ function toCandidate(row: z.infer<typeof toolRow>, typeNameById: Map<string, str
     location: row.location?.trim() ? row.location.trim() : NO_LOCATION,
     floor: row.floor ?? null,
     warehouseLocation: row.warehouseLocation?.trim() || null,
-    currentUser: row.currentUser?.trim() || null,
   }
 }
 

@@ -5,7 +5,7 @@ import { z } from "zod"
 import { bubbleListAll } from "@/lib/bubble/client"
 import { DEFAULT_REQUEST_STATUS, isOpenRequest, isPickupRequest, REQUEST_STATUS } from "@/lib/bubble/enums"
 import { listMaterialLines } from "@/lib/bubble/requested-materials"
-import { pickupLineStatus, type MaterialLine } from "@/lib/bubble/requested-materials-types"
+import { lineProgress, pickupLineStatus, type MaterialLine } from "@/lib/bubble/requested-materials-types"
 import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 
 /**
@@ -35,6 +35,8 @@ export type SitePickupLine = {
   start: string | null
   /** A trip holds it now (planned or on the truck). */
   onTrip: boolean
+  /** Already come back, as counted — a line split across trips is part-collected. */
+  collected: number
 }
 
 export async function listOpenSitePickups(job: string): Promise<SitePickupLine[]> {
@@ -56,6 +58,11 @@ export async function listOpenSitePickups(job: string): Promise<SitePickupLine[]
   return lines
     .map((line) => ({ line, status: pickupLineStatus(line, tripRows) }))
     .filter(({ status }) => status !== "done")
-    .map(({ line, status }) => ({ line, start: startOf.get(line.requestId) ?? null, onTrip: status === "live" }))
+    .map(({ line, status }) => ({
+      line,
+      start: startOf.get(line.requestId) ?? null,
+      onTrip: status === "live",
+      collected: lineProgress(line, tripRows, { pickup: true }).delivered,
+    }))
     .sort((a, b) => (a.start ?? "").localeCompare(b.start ?? "") || a.line.name.localeCompare(b.line.name))
 }

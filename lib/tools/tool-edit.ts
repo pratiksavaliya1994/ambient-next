@@ -61,7 +61,7 @@ export type ToolHold =
   | { kind: "request"; requestId: string; job: string; pickup: boolean }
 
 export type ToolEditability = {
-  /** No live claim, so `location` / `floor` / `currentUser` unlock. */
+  /** No live claim, so `location` / `floor` unlock. */
   movable: boolean
   /** Why they are locked. `null` exactly when `movable`. */
   hold: ToolHold | null

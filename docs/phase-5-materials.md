@@ -99,6 +99,18 @@ Don't re-litigate these.
   ended up at the yard. The driver's count is the truth, not the PM's estimate
   and not the site figure. A collect with `actualQty = 0` is `Skipped` and the
   line stays outstanding.
+  - **Amended by the user 2026-10-06: an unlinked pickup line can be split
+    across trips.** The builder has a stepper for it, like a delivery line.
+    Each live or finished trip row **claims** `max(qty, actualQty)` of the
+    estimate: its plan, or the driver's count when that is more. A count below
+    the plan gives nothing back. What no row claims stays in the pool. The
+    line is done when no trip holds it and the claims cover the estimate. So
+    a line planned whole is still done by its one row, whatever was counted,
+    and rows written before this change read exactly as they did. **Linked
+    transfers stay whole-line.** A line that any trip has planned or collected
+    part of can't be linked. The rule lives in `pickupClaims`
+    (`requested-materials-types.ts`). No Bubble change was needed, because
+    `complete-trip-stop` already works one row per line per trip.
 - **A transfer is whole-line.** A pickup line has exactly one destination: the
   warehouse, or one delivery line at another site. If more comes back than B
   needed, the extra stays in B's site stock.

@@ -48,8 +48,6 @@ export const toolEditSchema = z.object({
   floor: z.string().trim().max(120),
   /** The tool's shelf/bin in the warehouse — static, ungated, never moved by a request or trip. */
   warehouseLocation: z.string().trim().max(120),
-  /** A display name, not a `user` link — `tools.currentUser` is free text. */
-  currentUser: z.string().trim().max(120),
   /**
    * The whole of this form's power over `statusNew`: release the tool, or leave
    * it alone. Not a `statusNew` field with one legal value, because that would

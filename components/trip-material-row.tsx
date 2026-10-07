@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
  *
  * Kept apart from `TripMovementRow`, which is tool-shaped: a line has no
  * condition to block on, but it has a quantity, and part of a delivery line
- * can go on this trip. A pickup line goes whole (5F).
+ * can go on this trip. Only a linked transfer goes whole (5F).
  */
 export function TripMaterialList({
   materials,
@@ -51,10 +51,11 @@ export function TripMaterialList({
  * One line: checkbox · name · kind · "**8** of 12 left", and a stepper once
  * ticked. The stepper runs `1..outstanding` and starts at all of it.
  *
- * A **pickup** line (`fixedQty`) has no stepper: it goes on one trip whole,
- * its estimate reading "about 10 bag", and the driver counts it at the stop.
- * A **linked** one also carries a "→ Site B" badge — its destination is fixed
- * by the transfer, whatever the group's warehouse says.
+ * A **pickup** line reads its estimate as "about 10 bag left" and the driver
+ * counts it at the stop; its stepper splits it across trips like a delivery's.
+ * A **linked** one (`fixedQty`) has no stepper: it goes on one trip whole, and
+ * carries a "→ Site B" badge — its destination is fixed by the transfer,
+ * whatever the group's warehouse says.
  *
  * The whole row toggles, as `TripMovementRow` does, so the checkbox and the
  * stepper stop their clicks reaching it.
@@ -108,6 +109,11 @@ export function TripMaterialRow({
             <span className="tabular-nums">
               about <span className="font-semibold text-foreground">{line.outstanding}</span>
               {unit} · goes whole
+            </span>
+          ) : line.pickup ? (
+            <span className="tabular-nums">
+              about <span className="font-semibold text-foreground">{line.outstanding}</span>
+              {unit} left
             </span>
           ) : (
             <span className="tabular-nums">

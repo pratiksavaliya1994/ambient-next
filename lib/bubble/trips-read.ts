@@ -93,7 +93,7 @@ function toStop(row: z.infer<typeof tripStopRow>): TripStop | null {
   }
 }
 
-/** A `tripDate` window, the same half-open New York day range `searchRequests` builds for `requestDateStart`. */
+/** A `tripDate` window, the same half-open New York day range `pageRequests` builds for `requestDateStart`. */
 export type TripDateRange = { from?: string; to?: string }
 
 function tripDateConstraints(range?: TripDateRange): Constraint[] {

@@ -1,4 +1,4 @@
-import { MapPinIcon, UserIcon, WrenchIcon } from "lucide-react"
+import { MapPinIcon, WrenchIcon } from "lucide-react"
 import Link from "next/link"
 
 import { ToolStateBadges } from "@/components/tool-status-badges"
@@ -48,12 +48,6 @@ export function ToolsListCard({ tool }: { tool: DashboardTool }) {
             {tool.floor && ` · Floor ${tool.floor}`}
           </span>
         </p>
-        {/* {tool.currentUser && (
-          <p className="flex items-center gap-1.5 truncate">
-            <UserIcon className="size-3.5 shrink-0" />
-            <span className="truncate">{tool.currentUser}</span>
-          </p>
-        )} */}
       </CardContent>
     </Card>
   )

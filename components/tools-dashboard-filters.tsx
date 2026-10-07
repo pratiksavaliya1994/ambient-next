@@ -1,120 +1,105 @@
 "use client"
 
 import * as React from "react"
-import { SearchIcon, XIcon } from "lucide-react"
 
+import { MultiSelectFilter } from "@/components/multi-select-filter"
+import { ToolNameSearch } from "@/components/tool-name-search"
 import { Button } from "@/components/ui/button"
-import { ButtonGroup } from "@/components/ui/button-group"
 import {
-  Combobox,
-  ComboboxChip,
-  ComboboxChips,
-  ComboboxChipsInput,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxValue,
-  useComboboxAnchor,
-} from "@/components/ui/combobox"
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+  EMPTY_DASHBOARD_FILTERS,
+  hasDashboardFilters,
+  LOCATION_KINDS,
+  type DashboardFilters,
+} from "@/lib/tools/dashboard-filters"
+
+export type DashboardFilterOptions = {
+  sites: string[]
+  types: string[]
+  statuses: string[]
+  conditions: string[]
+}
 
 /**
- * The Tools dashboard's toolbar — location multi-select, tool-name search,
- * and the bulk selection buttons. Split out of `components/tools-dashboard.tsx`
- * to keep both that component and this one inside `CLAUDE.md`'s 100-line
- * ceiling.
+ * The Job Dashboard's toolbar — one multi-select per filter axis plus the
+ * tool-name search. Every axis starts empty, which means "all": the dashboard
+ * opens on every site.
  *
  * The live keystroke state lives here rather than in the dashboard: only the
  * *committed* query changes what's rendered, and filtering on a committed
- * query scans every tool rather than just the selected locations, so it
- * mustn't re-run per keystroke.
+ * query scans every tool, so it mustn't re-run per keystroke.
  */
 export function ToolsDashboardFilters({
-  locations,
-  selected,
-  onSelectedChange,
-  onSearch,
-  hasSearch,
+  options,
+  filters,
+  onFiltersChange,
 }: {
-  locations: string[]
-  selected: string[]
-  onSelectedChange: (next: string[]) => void
-  onSearch: (query: string) => void
-  hasSearch: boolean
+  options: DashboardFilterOptions
+  filters: DashboardFilters
+  onFiltersChange: (next: DashboardFilters) => void
 }) {
-  const anchor = useComboboxAnchor()
   const [searchInput, setSearchInput] = React.useState("")
 
-  function runSearch(event: React.FormEvent) {
-    event.preventDefault()
-    onSearch(searchInput.trim())
+  function set<K extends keyof DashboardFilters>(key: K, value: DashboardFilters[K]) {
+    onFiltersChange({ ...filters, [key]: value })
   }
 
-  function clearSearch() {
+  function clearAll() {
     setSearchInput("")
-    onSearch("")
+    onFiltersChange(EMPTY_DASHBOARD_FILTERS)
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b pb-3">
-      <Combobox multiple items={locations} value={selected} onValueChange={(next) => onSelectedChange(next as string[])}>
-        <ComboboxChips ref={anchor} className="min-w-72">
-          <ComboboxValue>
-            {(values: string[]) => (
-              <>
-                {values.map((value) => (
-                  <ComboboxChip key={value}>{value}</ComboboxChip>
-                ))}
-                <ComboboxChipsInput placeholder="Search locations…" />
-              </>
-            )}
-          </ComboboxValue>
-        </ComboboxChips>
-        <ComboboxContent anchor={anchor}>
-          <ComboboxEmpty>No locations match.</ComboboxEmpty>
-          <ComboboxList>
-            {(item: string) => (
-              <ComboboxItem key={item} value={item}>
-                {item}
-              </ComboboxItem>
-            )}
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-
-      <form onSubmit={runSearch} className="contents">
-        <ButtonGroup className="min-w-72">
-          <InputGroup>
-            <InputGroupAddon>
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              placeholder="Search tools by name…"
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-            />
-            {hasSearch && (
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton type="button" size="icon-xs" aria-label="Clear search" onClick={clearSearch}>
-                  <XIcon />
-                </InputGroupButton>
-              </InputGroupAddon>
-            )}
-          </InputGroup>
-          <Button type="submit" variant="outline">
-            Search
-          </Button>
-        </ButtonGroup>
-      </form>
-
-      <Button type="button" variant="outline" size="sm" onClick={() => onSelectedChange(locations)}>
-        Select all
-      </Button>
-
-      {selected.length > 0 && (
-        <Button type="button" variant="ghost" size="sm" onClick={() => onSelectedChange([])}>
-          Clear
+      <MultiSelectFilter
+        ariaLabel="Sites"
+        placeholder="All sites / jobs"
+        emptyText="No sites match."
+        options={options.sites}
+        value={filters.sites}
+        onValueChange={(next) => set("sites", next)}
+        className="min-w-72"
+      />
+      <ToolNameSearch
+        value={searchInput}
+        onValueChange={setSearchInput}
+        onSearch={(query) => set("query", query)}
+        hasSearch={filters.query.length > 0}
+      />
+      <MultiSelectFilter
+        ariaLabel="Location kind"
+        placeholder="All location kinds"
+        emptyText="No kinds match."
+        options={LOCATION_KINDS}
+        value={filters.kinds}
+        onValueChange={(next) => set("kinds", next)}
+      />
+      <MultiSelectFilter
+        ariaLabel="Tool type"
+        placeholder="All types"
+        emptyText="No types match."
+        options={options.types}
+        value={filters.types}
+        onValueChange={(next) => set("types", next)}
+      />
+      <MultiSelectFilter
+        ariaLabel="Status"
+        placeholder="All statuses"
+        emptyText="No statuses match."
+        options={options.statuses}
+        value={filters.statuses}
+        onValueChange={(next) => set("statuses", next)}
+      />
+      <MultiSelectFilter
+        ariaLabel="Condition"
+        placeholder="All conditions"
+        emptyText="No conditions match."
+        options={options.conditions}
+        value={filters.conditions}
+        onValueChange={(next) => set("conditions", next)}
+      />
+      {hasDashboardFilters(filters) && (
+        <Button type="button" variant="ghost" size="sm" onClick={clearAll}>
+          Clear filters
         </Button>
       )}
     </div>

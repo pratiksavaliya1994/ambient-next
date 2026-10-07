@@ -3,14 +3,14 @@
 import { Controller, type Control } from "react-hook-form"
 
 import { ToolLocationField } from "@/components/tool-fields"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import type { ToolEditFormValues } from "@/lib/schemas/tool"
 
 /**
  * The gated half of the tool detail form — everything that says *where the tool
- * is and who has it*, plus the one status transition this page can make.
+ * is*, plus the one status transition this page can make.
  *
  * Split from `tool-detail-form.tsx` to keep both inside `CLAUDE.md`'s 100-line
  * component ceiling, and because these three share one enable/disable rule
@@ -21,7 +21,6 @@ export function ToolMovementFields({
   control,
   locations,
   disabled,
-  releasing,
   error,
 }: {
   control: Control<ToolEditFormValues>
@@ -29,8 +28,6 @@ export function ToolMovementFields({
   locations: string[]
   /** Something holds the tool — see `editabilityOf`. */
   disabled: boolean
-  /** The release switch is on, so `currentUser` is about to be cleared regardless of the input. */
-  releasing: boolean
   error?: string
 }) {
   return (
@@ -44,7 +41,7 @@ export function ToolMovementFields({
         error={error}
       />
 
-      <Field>
+      <Field className="sm:col-span-2">
         <FieldLabel htmlFor="floor">Floor</FieldLabel>
         <Controller
           control={control}
@@ -54,23 +51,6 @@ export function ToolMovementFields({
           // silently overwrite ours if it were spread last.
           render={({ field }) => (
             <Input id="floor" placeholder="14, ground, Suite 139" {...field} disabled={disabled} />
-          )}
-        />
-      </Field>
-
-      <Field>
-        <FieldLabel htmlFor="currentUser">Current holder</FieldLabel>
-        <Controller
-          control={control}
-          name="currentUser"
-          render={({ field }) => (
-            <Input
-              id="currentUser"
-              placeholder={releasing ? "Cleared on release" : "Nobody"}
-              {...field}
-              disabled={disabled || releasing}
-              value={releasing ? "" : field.value}
-            />
           )}
         />
       </Field>
@@ -104,7 +84,6 @@ export function ToolReleaseField({ control }: { control: Control<ToolEditFormVal
       />
       <div className="flex flex-col gap-0.5">
         <FieldLabel htmlFor="markAvailable">Release to Available</FieldLabel>
-        <FieldDescription>Also clears the current holder.</FieldDescription>
       </div>
     </Field>
   )

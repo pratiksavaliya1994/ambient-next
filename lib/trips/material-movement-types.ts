@@ -21,10 +21,13 @@ export type OutstandingMaterial = Omit<MaterialMovement, "qty"> & {
   assigned: number
   /** Assigned but on no open trip yet. Always ≥ 1 here. */
   outstanding: number
+  /** A pickup line (5F): its quantity is the PM's estimate, and the driver counts it at the stop. */
+  pickup: boolean
   /**
-   * 5F pickup lines go on **one trip, whole**: the qty must be all of
-   * `outstanding`, the estimate. There's nothing to split an unknown quantity
-   * by; the driver's count replaces it at the stop.
+   * A linked transfer goes on **one trip, whole**: the qty must be all of
+   * `outstanding`, since linking sized it to what the delivery needs. Any
+   * other line — an unlinked pickup included (user decision 2026-10-06) — can
+   * be split across trips.
    */
   fixedQty: boolean
   /**
@@ -46,8 +49,9 @@ type PoolRequest = { id: string; job: string; delivery: boolean; pickup: boolean
  * A request's lines with something left to send.
  *
  * - **Delivery:** `Warehouse → request.job`, any part of what's assigned.
- * - **Pickup (5F):** `request.job → the group's warehouse`, or a linked
- *   transfer's `→ transferToLocation`, the whole estimate.
+ * - **Pickup (5F):** `request.job → the group's warehouse`, any part of what
+ *   no trip has claimed; or a linked transfer's `→ transferToLocation`, the
+ *   whole estimate.
  *
  * A request whose job is a warehouse name is left out: a delivery's drop would
  * credit a site row to the yard, and a pickup's collect would debit one.
@@ -85,7 +89,8 @@ export function outstandingMaterialsFor(
       to: linked ? line.transferToLocation : pickup ? DEFAULT_WAREHOUSE : request.job,
       assigned,
       outstanding,
-      fixedQty: pickup,
+      pickup,
+      fixedQty: linked,
       fixedDestination: !pickup || linked,
       feedsRequestId: linked ? line.transferToRequestId : "",
     })
@@ -94,7 +99,7 @@ export function outstandingMaterialsFor(
 }
 
 /**
- * A requested quantity outside `1..outstanding`, or — for a pickup line
+ * A requested quantity outside `1..outstanding`, or — for a linked transfer
  * (`whole`) — anything but all of it. `outstanding` is 0 for a line no longer
  * in the pool at all.
  */
@@ -122,7 +127,7 @@ type MaterialGroup = {
  * A quantity outside `1..outstanding` is **refused by name, never clamped**.
  * Quietly sending 8 when the dispatcher typed 12 would plan a trip nobody
  * chose, the same reason `selectMovements` returns blocked tools rather than
- * skipping them. A pickup line takes all of `outstanding` or nothing.
+ * skipping them. A linked transfer takes all of `outstanding` or nothing.
  *
  * `destinationByRequest` is the pickup groups' warehouse choice, as
  * `selectMovements` takes it: an unlinked pickup line follows its request's
@@ -180,7 +185,7 @@ export function invalidMaterialMessage(invalid: readonly InvalidMaterial[]): str
     first.outstanding === 0
       ? `${first.name} has nothing left to send`
       : first.whole
-        ? `${first.name} is a pickup and goes on one trip whole (${units})`
+        ? `${first.name} is a transfer and goes on one trip whole (${units})`
         : `only ${units} of ${first.name} left to send`
   const rest = invalid.length > 1 ? ` (and ${invalid.length - 1} more)` : ""
   return `${reason[0].toUpperCase()}${reason.slice(1)}${rest}. Reload the builder.`

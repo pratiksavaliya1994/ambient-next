@@ -27,7 +27,6 @@ export type DashboardTool = {
   status: string
   /** `tools.condition` — see `lib/bubble/enums.ts`. Empty when unset. */
   condition: string
-  currentUser: string | null
 }
 
 /** Sentinel for rows where `location` is blank — distinct from the literal

@@ -360,8 +360,8 @@ Step A mapping:
 - `tripMaterial` = `Search for tripmaterials (tripID = tripId, lineID = This
   text:split by ("::"):item #1):first item`.
 - `actualQty` = `This text:split by ("::"):item #2:converted to number`.
-- `byName` = the same expression the existing material steps 13–14 pass as
-  `byName`.
+- `byName` = **`actor`** (the person who clicked, not `driver`). Steps 13–14
+  pass the same. See the note under `phase-5d-bubble-handoff.md` §3.5.
 
 Step B mapping:
 

@@ -61,11 +61,11 @@ export function RequestSearchBar({ query, from, to }: { query: string; from: str
 
   function runSearch(event: React.FormEvent) {
     event.preventDefault()
-    const params = new URLSearchParams()
+    const params = new URLSearchParams({ tab: "all" })
     if (draftQuery.trim()) params.set("q", draftQuery.trim())
     if (draftFrom) params.set("from", draftFrom)
     if (draftTo) params.set("to", draftTo)
-    const target = params.size > 0 ? `/requests?${params}` : "/requests"
+    const target = `/requests?${params}`
     startTransition(() => router.push(target))
   }
 
@@ -146,7 +146,7 @@ export function RequestSearchBar({ query, from, to }: { query: string; from: str
           </Button>
 
           {isSearching && (
-            <Link href="/requests" className={buttonVariants({ variant: "ghost" })}>
+            <Link href="/requests?tab=all" className={buttonVariants({ variant: "ghost" })}>
               Clear search
             </Link>
           )}

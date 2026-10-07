@@ -91,10 +91,7 @@ export function TripDriverPanel({
           {materialCount > 0 && ` · ${materialCount} ${materialCount === 1 ? "material" : "materials"}`} · {stopCount}{" "}
           {stopCount === 1 ? "stop" : "stops"}
         </span>
-        <Button
-          onClick={onSave}
-          disabled={pending || problem !== null || stopCount === 0 || !driver.trim()}
-        >
+        <Button onClick={onSave} disabled={pending || problem !== null || stopCount === 0 || !driver.trim()}>
           {pending ? <Spinner /> : <CheckIcon />}
           {saveLabel}
         </Button>
