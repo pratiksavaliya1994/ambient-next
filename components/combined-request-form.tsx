@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { useCombinedRequest } from "@/hooks/use-combined-request"
 import type { MaterialItem } from "@/lib/bubble/material-items-types"
-import type { FieldPm, Job, TimeSlot, ToolType } from "@/lib/bubble/reference-types"
+import type { FieldPm, Job, ToolType } from "@/lib/bubble/reference-types"
 
 /**
  * Delivery + Pickup in one pass. A **utility page**, not a third kind of
@@ -28,17 +28,15 @@ export function CombinedRequestForm({
   jobs,
   toolTypes,
   fieldPms,
-  timeSlots,
   materialItems,
 }: {
   jobs: Job[]
   toolTypes: ToolType[]
   fieldPms: FieldPm[]
-  timeSlots: TimeSlot[]
   /** The material catalogue, read fresh — both halves pick their lines from it. */
   materialItems: MaterialItem[]
 }) {
-  const combined = useCombinedRequest(timeSlots, fieldPms)
+  const combined = useCombinedRequest()
   const { form } = combined
   const { isValid } = form.formState
 
@@ -53,7 +51,6 @@ export function CombinedRequestForm({
           job={combined.job}
           onJobChange={combined.updateJob}
           fieldPms={fieldPms}
-          timeSlots={timeSlots}
         />
 
         <div className="flex flex-col gap-4">

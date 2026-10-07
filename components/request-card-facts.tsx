@@ -17,9 +17,10 @@ function dateLabelFor(request: ToolRequest) {
   return "Date"
 }
 
-/** The top of a `/requests` card's body: date and window, then PM, floor and contact. */
+/** The top of a `/requests` card's body: date and window, then GC, PM, floor and contact. */
 export function RequestCardFacts({ request }: { request: ToolRequest }) {
   const facts = [
+    request.gc && { label: "GC", value: request.gc },
     request.fieldPm && { label: "Field PM", value: request.fieldPm },
     request.floor && { label: "Floor", value: request.floor },
     request.contact && { label: "Contact", value: request.contact, sub: request.contactPhone },

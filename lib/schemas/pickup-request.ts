@@ -18,12 +18,14 @@ import { toolLineSchema } from "@/lib/schemas/request"
 export const pickupRequestFormSchema = z
   .object({
     jobId: z.string().min(1, "Pick a job."),
-    toDo: z.enum(TO_DO),
-    weAre: z.enum(WE_ARE),
+    /** Same as `requestFormSchema.gc` — written to `request.realGC`. */
+    gc: z.string().trim().max(120),
+    toDo: z.enum(TO_DO, { error: "Pick a job type." }),
+    weAre: z.enum(WE_ARE, { error: "Pick who we are." }),
     /** `yyyy-mm-dd`, read as a New York calendar date. */
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date."),
+    /** Free text, blank for no preference — see `requestFormSchema.timeRange`. */
     timeRange: z.string().trim().max(120),
-    slotHour: z.number().int().min(0).max(23),
     floor: z.string().trim().max(120),
     contact: z.string().trim().max(120),
     contactPhone: z.string().trim().max(40),

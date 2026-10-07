@@ -28,7 +28,7 @@ import type { PickupRequestFormValues } from "@/lib/schemas/pickup-request"
  * - tool notes — likewise, the warehouse instruction for an outbound load is
  *   not the one for an inbound load.
  *
- * Everything else (job, job type, date, slot, floor, contact, PM, notes) is
+ * Everything else (job, GC, job type, date, time, floor, contact, PM, notes) is
  * entered once and copied to both, which is the entire point of the page.
  */
 
@@ -37,8 +37,9 @@ const dayString = /^\d{4}-\d{2}-\d{2}$/
 export const combinedRequestFormSchema = z
   .object({
     jobId: z.string().min(1, "Pick a job."),
-    toDo: z.enum(TO_DO),
-    weAre: z.enum(WE_ARE),
+    gc: z.string().trim().max(120),
+    toDo: z.enum(TO_DO, { error: "Pick a job type." }),
+    weAre: z.enum(WE_ARE, { error: "Pick who we are." }),
     /**
      * `yyyy-mm-dd`, read as a New York calendar date. **One date for both
      * halves** — the delivery's range collapses to this single day, so
@@ -47,7 +48,6 @@ export const combinedRequestFormSchema = z
      */
     date: z.string().regex(dayString, "Pick a date."),
     timeRange: z.string().trim().max(120),
-    slotHour: z.number().int().min(0).max(23),
     floor: z.string().trim().max(120),
     contact: z.string().trim().max(120),
     contactPhone: z.string().trim().max(40),
@@ -105,6 +105,7 @@ export type CombinedRequestFormValues = z.infer<typeof combinedRequestFormSchema
 export function toDeliveryValues(values: CombinedRequestFormValues): RequestFormValues {
   return {
     jobId: values.jobId,
+    gc: values.gc,
     toDo: values.toDo,
     weAre: values.weAre,
     delivery: true,
@@ -112,7 +113,6 @@ export function toDeliveryValues(values: CombinedRequestFormValues): RequestForm
     startDate: values.date,
     endDate: values.date,
     timeRange: values.timeRange,
-    slotHour: values.slotHour,
     floor: values.floor,
     contact: values.contact,
     contactPhone: values.contactPhone,
@@ -133,11 +133,11 @@ export function toDeliveryValues(values: CombinedRequestFormValues): RequestForm
 export function toPickupValues(values: CombinedRequestFormValues): PickupRequestFormValues {
   return {
     jobId: values.jobId,
+    gc: values.gc,
     toDo: values.toDo,
     weAre: values.weAre,
     date: values.date,
     timeRange: values.timeRange,
-    slotHour: values.slotHour,
     floor: values.floor,
     contact: values.contact,
     contactPhone: values.contactPhone,

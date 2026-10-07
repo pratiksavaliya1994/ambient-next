@@ -57,7 +57,7 @@ export function buildSummary(input: NotificationInput): string {
     input.floor ? `Floor: ${input.floor}` : null,
     `Contact: ${input.contact}${input.contactPhone ? ` Phone no: ${input.contactPhone}` : ""}`,
     `Date: ${dateLine}`,
-    `Range of time: ${input.timeRange}`,
+    `Range of time: ${input.timeRange || "No preference"}`,
     input.notes ? `Notes: ${input.notes}` : null,
     `Field PM: ${input.fieldPm}`,
     "",

@@ -5,7 +5,7 @@ import Link from "next/link"
 import { CombinedRequestForm } from "@/components/combined-request-form"
 import { buttonVariants } from "@/components/ui/button"
 import { listMaterialItems } from "@/lib/bubble/material-items"
-import { listFieldPms, listJobs, listTimeSlots, listToolTypes } from "@/lib/bubble/reference"
+import { listFieldPms, listJobs, listToolTypes } from "@/lib/bubble/reference"
 import { toJobOption } from "@/lib/bubble/reference-types"
 
 export const metadata: Metadata = { title: "New delivery + pickup request" }
@@ -17,11 +17,10 @@ export default async function NewCombinedRequestPage() {
   // live once a job is chosen, not from here. All but the material catalogue
   // are memoised in `reference.ts`; that one is read fresh because the picker
   // shows its stock.
-  const [jobs, toolTypes, fieldPms, timeSlots, materialItems] = await Promise.all([
+  const [jobs, toolTypes, fieldPms, materialItems] = await Promise.all([
     listJobs(),
     listToolTypes(),
     listFieldPms(),
-    listTimeSlots(),
     listMaterialItems(),
   ])
 
@@ -47,7 +46,6 @@ export default async function NewCombinedRequestPage() {
         jobs={jobs.map(toJobOption)}
         toolTypes={toolTypes}
         fieldPms={fieldPms}
-        timeSlots={timeSlots}
         materialItems={materialItems}
       />
     </div>

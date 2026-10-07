@@ -69,6 +69,11 @@ Response:
 | `toolsSummary`     | text                                                                              |
 | `toolsNotes`       | text                                                                              |
 | `summary`          | text — full multi-line WhatsApp-ready message, real `\n` already in place         |
+| `gc`               | text — **to add (2026-10-07)**, optional. The request's GC, seeded from `jobs.gc` and editable on the form. Written to `request.realGC`. Add to `new-pickup-request` too. |
+
+`timeRange` is free text from 2026-10-07 (blank = no preference), and
+`requestDateStart` is always the start date at 06:00 New York — the form no
+longer picks a slot. No Bubble change is needed for that.
 
 `toDo` and `weAre` are declared as plain text and converted inside the
 workflow via `: converted to toDo` / `: converted to weAre` (must exactly
@@ -86,6 +91,8 @@ Maps all 19 direct params (`job`, `toDo`—converted, `weAre`—converted,
 param is `fieldPm`, field is `fieldPM2`]**, `notes`, `timeRange`,
 `requestDate`, `requestDateStart`, `requestDateEnd`, `color`, `order`,
 `searchable`). The legacy `fieldPM` option-set field is left untouched/empty.
+**To add (2026-10-07):** `realGC` = `gc` param — same in `new-pickup-request`'s
+create step.
 
 **2. Create a new `requestedtools`**
 

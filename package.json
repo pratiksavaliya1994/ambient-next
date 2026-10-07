@@ -11,7 +11,8 @@
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "format:all": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "check-bubble": "tsx --conditions=react-server --env-file=.env.local --tsconfig tsconfig.json scripts/check-bubble.ts"
+    "check-bubble": "tsx --conditions=react-server --env-file=.env.local --tsconfig tsconfig.json scripts/check-bubble.ts",
+    "seed-material-items": "tsx --env-file=.env.local --tsconfig tsconfig.json scripts/seed-material-items.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -7,7 +7,7 @@ import { PickupRequestItemsCard } from "@/components/pickup-request-items-card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { usePickupRequest } from "@/hooks/use-pickup-request"
 import type { MaterialItem } from "@/lib/bubble/material-items-types"
-import type { FieldPm, Job, TimeSlot } from "@/lib/bubble/reference-types"
+import type { FieldPm, Job } from "@/lib/bubble/reference-types"
 
 /**
  * The Pickup counterpart to `RequestForm` — same two-column shell, three real
@@ -22,15 +22,13 @@ import type { FieldPm, Job, TimeSlot } from "@/lib/bubble/reference-types"
 export function PickupRequestForm({
   jobs,
   fieldPms,
-  timeSlots,
   materialItems,
 }: {
   jobs: Job[]
   fieldPms: FieldPm[]
-  timeSlots: TimeSlot[]
   materialItems: MaterialItem[]
 }) {
-  const controller = usePickupRequest(timeSlots, fieldPms)
+  const controller = usePickupRequest()
   const { state } = controller
 
   return (
@@ -44,7 +42,7 @@ export function PickupRequestForm({
       )}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_28rem]">
-        <PickupRequestDetails controller={controller} jobs={jobs} fieldPms={fieldPms} timeSlots={timeSlots} />
+        <PickupRequestDetails controller={controller} jobs={jobs} fieldPms={fieldPms} />
         <PickupRequestItemsCard controller={controller} materialItems={materialItems} />
       </div>
     </form>

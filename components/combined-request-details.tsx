@@ -17,10 +17,11 @@ import {
   ComboboxList,
 } from "@/components/ui/combobox"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { TO_DO } from "@/lib/bubble/enums"
-import type { FieldPm, Job, TimeSlot } from "@/lib/bubble/reference-types"
+import type { FieldPm, Job } from "@/lib/bubble/reference-types"
 import type { CombinedRequestFormValues } from "@/lib/schemas/combined-request"
 
 /**
@@ -34,17 +35,16 @@ export function CombinedRequestDetails({
   job,
   onJobChange,
   fieldPms,
-  timeSlots,
 }: {
   form: UseFormReturn<CombinedRequestFormValues>
   jobs: Job[]
   job: Job | null
   onJobChange: (next: Job | null) => void
   fieldPms: FieldPm[]
-  timeSlots: TimeSlot[]
 }) {
   const {
     control,
+    register,
     formState: { errors },
   } = form
 
@@ -56,54 +56,28 @@ export function CombinedRequestDetails({
       </CardHeader>
       <CardContent>
         <FieldGroup className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Field className="sm:col-span-2" data-invalid={errors.jobId ? true : undefined}>
-            <FieldLabel htmlFor="job">
-              Job <span className="text-destructive">*</span>
-            </FieldLabel>
-            <Combobox
-              items={jobs}
-              value={job}
-              onValueChange={(next) => onJobChange((next as Job) ?? null)}
-              itemToStringLabel={(item: Job) => item.name}
-              itemToStringValue={(item: Job) => item.id}
-              limit={40}
-            >
-              <ComboboxInput id="job" placeholder="Search jobs by name" aria-invalid={errors.jobId ? true : undefined} />
-              <ComboboxContent>
-                <ComboboxEmpty>No job matches.</ComboboxEmpty>
-                <ComboboxList>
-                  {(item: Job) => (
-                    <ComboboxItem key={item.id} value={item}>
-                      <Item size="xs" className="p-0">
-                        <ItemContent>
-                          <ItemTitle className="whitespace-nowrap">{item.name}</ItemTitle>
-                          <ItemDescription>
-                            {[item.gc, item.borough, item.description].filter(Boolean).join(" · ") || "No GC on file"}
-                          </ItemDescription>
-                        </ItemContent>
-                      </Item>
-                    </ComboboxItem>
-                  )}
-                </ComboboxList>
-              </ComboboxContent>
-            </Combobox>
-            {job && <FieldDescription className="font-semibold">GC: {job.gc || "None on file"}</FieldDescription>}
-            {errors.jobId && <FieldError errors={[errors.jobId]} />}
-          </Field>
+          <CombinedJobField form={form} jobs={jobs} job={job} onJobChange={onJobChange} />
 
           <Field>
-            <FieldLabel htmlFor="toDo">Job type</FieldLabel>
+            <FieldLabel htmlFor="gc">GC</FieldLabel>
+            <Input id="gc" placeholder="Enter GC" {...register("gc")} />
+          </Field>
+
+          <Field data-invalid={errors.toDo ? true : undefined}>
+            <FieldLabel htmlFor="toDo">
+              Job type <span className="text-destructive">*</span>
+            </FieldLabel>
             <Controller
               control={control}
               name="toDo"
               render={({ field }) => (
                 <Select
                   items={TO_DO.map((value) => ({ label: value, value }))}
-                  value={field.value}
+                  value={field.value ?? null}
                   onValueChange={field.onChange}
                 >
-                  <SelectTrigger id="toDo" onBlur={field.onBlur}>
-                    <SelectValue />
+                  <SelectTrigger id="toDo" onBlur={field.onBlur} aria-invalid={errors.toDo ? true : undefined}>
+                    <SelectValue placeholder="Select job type" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
@@ -118,13 +92,64 @@ export function CombinedRequestDetails({
               )}
             />
             <FieldDescription>Filters the delivery tool list.</FieldDescription>
+            {errors.toDo && <FieldError errors={[errors.toDo]} />}
           </Field>
 
           <CombinedSiteFields form={form} />
-          <CombinedScheduleFields form={form} timeSlots={timeSlots} />
+          <CombinedScheduleFields form={form} />
           <CombinedOwnerFields form={form} fieldPms={fieldPms} />
         </FieldGroup>
       </CardContent>
     </Card>
+  )
+}
+
+function CombinedJobField({
+  form,
+  jobs,
+  job,
+  onJobChange,
+}: {
+  form: UseFormReturn<CombinedRequestFormValues>
+  jobs: Job[]
+  job: Job | null
+  onJobChange: (next: Job | null) => void
+}) {
+  const error = form.formState.errors.jobId
+
+  return (
+    <Field className="sm:col-span-2" data-invalid={error ? true : undefined}>
+      <FieldLabel htmlFor="job">
+        Job <span className="text-destructive">*</span>
+      </FieldLabel>
+      <Combobox
+        items={jobs}
+        value={job}
+        onValueChange={(next) => onJobChange((next as Job) ?? null)}
+        itemToStringLabel={(item: Job) => item.name}
+        itemToStringValue={(item: Job) => item.id}
+        limit={40}
+      >
+        <ComboboxInput id="job" placeholder="Search jobs by name" aria-invalid={error ? true : undefined} />
+        <ComboboxContent>
+          <ComboboxEmpty>No job matches.</ComboboxEmpty>
+          <ComboboxList>
+            {(item: Job) => (
+              <ComboboxItem key={item.id} value={item}>
+                <Item size="xs" className="p-0">
+                  <ItemContent>
+                    <ItemTitle className="whitespace-nowrap">{item.name}</ItemTitle>
+                    <ItemDescription>
+                      {[item.gc, item.borough, item.description].filter(Boolean).join(" · ") || "No GC on file"}
+                    </ItemDescription>
+                  </ItemContent>
+                </Item>
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+      {error && <FieldError errors={[error]} />}
+    </Field>
   )
 }

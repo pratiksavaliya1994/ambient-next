@@ -67,7 +67,7 @@ export function MaterialPickerDialog({
   }, [pickup, items, toDo, qtyById])
   const placeholder = pickup
     ? `Search ${items.length} materials`
-    : `Search ${offered.length} of ${items.length} offered for ${toDo}`
+    : `Search ${offered.length} of ${items.length} offered for ${toDo || "all job types"}`
 
   return (
     <Dialog>

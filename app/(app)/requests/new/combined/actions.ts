@@ -163,7 +163,7 @@ function partial(
  * One WhatsApp summary per half, each built the way its own page builds it —
  * the pickup's names the physical tools and its own materials, the delivery's
  * the tool types and theirs. The date is the same instant on both, since the
- * page asks for one date and one slot.
+ * page asks for one date and one time.
  */
 function summaryFor(
   values: CombinedRequestFormValues,
@@ -178,7 +178,7 @@ function summaryFor(
     requestedBy: values.fieldPm,
     job: job.name,
     jobDetails: job.description,
-    gc: job.gc,
+    gc: values.gc || null,
     toDo: values.toDo,
     weAre: values.weAre,
     delivery: !isPickup,

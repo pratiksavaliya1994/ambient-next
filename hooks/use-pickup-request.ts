@@ -15,10 +15,8 @@ import {
 } from "@/components/pickup-tool-picker"
 import { toast } from "@/components/ui/toast"
 import { useSiteStockHint, type SiteStockHint } from "@/hooks/use-site-stock-hint"
-import { newYorkToday } from "@/lib/bubble/dates"
-import { DEFAULT_WE_ARE, UNFILTERED_TO_DO } from "@/lib/bubble/enums"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
-import type { FieldPm, Job, TimeSlot } from "@/lib/bubble/reference-types"
+import type { Job } from "@/lib/bubble/reference-types"
 import { pickupRequestFormSchema, type PickupRequestFormValues } from "@/lib/schemas/pickup-request"
 
 /**
@@ -48,7 +46,7 @@ export type PickupRequestController = {
   onSubmit: FormEventHandler<HTMLFormElement>
 }
 
-export function usePickupRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): PickupRequestController {
+export function usePickupRequest(): PickupRequestController {
   const router = useRouter()
   const [state, setState] = useState<CreateRequestState>(INITIAL_CREATE_STATE)
   const [pending, startTransition] = useTransition()
@@ -57,17 +55,16 @@ export function usePickupRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): Pi
 
   const form = useForm<PickupRequestFormValues>({
     resolver: zodResolver(pickupRequestFormSchema),
+    // Nothing pre-picked — see `RequestForm`. `toDo`/`weAre` stay undefined.
     defaultValues: {
       jobId: "",
-      toDo: UNFILTERED_TO_DO,
-      weAre: DEFAULT_WE_ARE,
-      date: newYorkToday(),
-      timeRange: timeSlots[2]?.label ?? "Anytime",
-      slotHour: timeSlots[2]?.hour ?? 8,
+      gc: "",
+      date: "",
+      timeRange: "",
       floor: "",
       contact: "",
       contactPhone: "",
-      fieldPm: fieldPms[0]?.name ?? "",
+      fieldPm: "",
       notes: "",
       toolsNotes: "",
       materialLines: [],
@@ -116,6 +113,8 @@ export function usePickupRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): Pi
     setValue("toolConditionUpdates", [])
     setValue("cleanup", false)
     setToolsForJob([])
+    // Seeded from the job's own GC on every pick; the PM can overwrite it after.
+    setValue("gc", next?.gc ?? "")
     // Only `jobId` is validated here. The "a tool or material" refine hangs off
     // `tools`, so validating it on job select would flag the empty picker
     // before anyone could fill it — the job is set last so this pass sees the

@@ -8,7 +8,7 @@ The project lives in `next-ambient/` — the working root for all commands. The 
 
 Next.js frontend for the Tipp Floor Covering / Ambient Flooring tool workflow. **Bubble.io stays as the database and backend; there is no application database.** Next.js replaces only the UI.
 
-**Scope built:** request creation (delivery + pickup), and a Tools dashboard. A PM picks a job, job type, date + slot, tool _types with quantities_, and optional free-text materials; submit writes one `request` row and one `requestedtools` row. A list page reads requests back with tool types and counts. The Pickup flow additionally picks physical `tools` rows and writes their `status` back. `/requests/new/combined` is a **utility page, not a third request type** — it collects the shared fields once and calls `new-pickup-request` then `new-request`, producing two ordinary independent rows (and two WhatsApp messages); there is no combined workflow and no link between the two rows.
+**Scope built:** request creation (delivery + pickup), and a Tools dashboard. A PM picks a job (which seeds an editable GC), job type, date + a free-text preferred time, tool _types with quantities_, and optional free-text materials — no field is prefilled; submit writes one `request` row and one `requestedtools` row. A list page reads requests back with tool types and counts. The Pickup flow additionally picks physical `tools` rows and writes their `status` back. `/requests/new/combined` is a **utility page, not a third request type** — it collects the shared fields once and calls `new-pickup-request` then `new-request`, producing two ordinary independent rows (and two WhatsApp messages); there is no combined workflow and no link between the two rows.
 
 **In progress — phase 2:** the request lifecycle (assign → dispatch → offload) and the tool location lifecycle. Design and build sheets live in [`docs/phase-2-lifecycle.md`](docs/phase-2-lifecycle.md); **read that before touching `tools`, `assignedtools`, or `request.status`.** The Bubble Studio steps are in [`docs/bubble-request-status-workflow.md`](docs/bubble-request-status-workflow.md). **A delivery no longer assumes its tools start at the Warehouse** — see [`docs/phase-2d-site-to-site-transfers.md`](docs/phase-2d-site-to-site-transfers.md) before changing dispatch, offload, or anything that decides where a tool is.
 
@@ -95,9 +95,10 @@ Header row, 24 business fields. The ones this app writes:
 | `weAre` | option set | `Ambient` / `Tipp` / `BT Flooring` / `Pyramid Floors` |
 | `delivery`, `pickup` | yes/no | Both can be true. |
 | `requestDate` | date | **Midnight New York** on the first day. Never carries a time. |
-| `requestDateStart` | date | The delivery **instant** — first day at the chosen slot's hour. The `new-request` workflow's ClickUp + Outlook Calendar steps read it as the appointment time. |
+| `requestDateStart` | date | The delivery **instant** — first day at **06:00 New York** (`DEFAULT_START_HOUR`, since 2026-10-07; it was the chosen slot's hour before). The `new-request` workflow's ClickUp + Outlook Calendar steps read it as the appointment time. |
 | `requestDateEnd` | date | **Midnight New York** on the day tools are needed until. No time of its own. |
-| `timeRange` | text | The chosen slot's label on rows this app writes (e.g. `06:00 a.m. to 06:30 a.m.`) — Bubble has no time-of-day text field, so this doubles as it, and its hour feeds `requestDateStart`. Older rows hold free text (`Anytime`, `6-8am`, `TBD`). |
+| `timeRange` | text | The PM's preferred time as **free text** (since 2026-10-07), blank when there is no preference. It feeds nothing else — `requestDateStart` is a fixed 06:00. Rows from before hold a `timelabels` slot label (`06:00 a.m. to 06:30 a.m.`) or older free text (`Anytime`, `6-8am`, `TBD`). |
+| `realGC` | text | The GC for this request. The forms seed it from `jobs.gc` on job pick and the PM may edit it; sent as the `gc` workflow param. The old Bubble UI filled it too (~106 older rows). |
 | `floor` | text | `14`, `ground`, `loading dock`, `Suite 139`. |
 | `contact`, `contactPhone` | text | |
 | `fieldPM2` | text | The PM's name. **This is the one written.** |
@@ -108,7 +109,7 @@ Header row, 24 business fields. The ones this app writes:
 | `order` | number | `100` on create. **Vestigial since phase 4** — it briefly doubled as a driver's stop sequence (`101, 102, …`), but stops live on `tripstop.seq` now and nothing reads this any more. Left at whatever each row holds rather than cleared: the old Bubble UI's calendar sorts on it, so resetting ~1,550 rows would visibly reshuffle a UI this repo doesn't own. See [`docs/bubble-set-request-order-spec.md`](docs/bubble-set-request-order-spec.md) §7 for the reasoning, now historical. |
 | `searchable` | text | What Bubble's search box matches: job `description` + ` - ` + date as `M-D-YYYY h:mm am` ET. |
 
-Not written: `pictures`, `onClickUp`, `realGC`, `Slug`.
+Not written: `pictures`, `onClickUp`, `Slug`.
 
 ### `requestedtools`
 
@@ -130,7 +131,7 @@ Catalogue, 112 rows. `name` (the identifier as far as `toolsSummary` cares), `re
 
 ### `timelabels`
 
-The 14 half-hour slots the Bubble calendar lays requests out on (`06:00 a.m. to 06:30 a.m.` … `07:00 p.m. to 07:30 p.m.`). The form's "Time slot" picker does double duty: the label goes into `timeRange`, its hour combines with `startDate` to become `requestDateStart` — so `slotHour` (`lib/schemas/request.ts`) and `timeRange` are always set together from one pick.
+The 14 half-hour slots the Bubble calendar lays requests out on (`06:00 a.m. to 06:30 a.m.` … `07:00 p.m. to 07:30 p.m.`). **No form reads it since 2026-10-07** — the slot picker became a free-text "Preferred time" (a PM may have no preference, or one outside the slots). `listTimeSlots` stays for `check-bubble`.
 
 ### `materials`
 

@@ -56,7 +56,7 @@ export function CombinedDeliveryCard({
         </CardTitle>
         <CardDescription>
           {tools.length === 0
-            ? `${offered.length} tool types offered for ${toDo}`
+            ? `${offered.length} tool types offered for ${toDo || "all job types"}`
             : `${tools.length} ${tools.length === 1 ? "type" : "types"}, ${units} in total`}
         </CardDescription>
         <CardAction>

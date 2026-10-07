@@ -67,7 +67,7 @@ export function ToolPickerDialog({
         <DialogHeader>
           <DialogTitle>Add tools</DialogTitle>
           <DialogDescription>
-            {toolTypes.length} of {catalogueSize} tool types are offered for {toDo}.
+            {toolTypes.length} of {catalogueSize} tool types are offered for {toDo || "all job types"}.
           </DialogDescription>
         </DialogHeader>
 

@@ -184,6 +184,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
 
               <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
                 <Fact label="Until" value={request.end ? newYorkDayLabel(request.end) : null} />
+                <Fact label="GC" value={request.gc} />
                 <Fact label="Field PM" value={request.fieldPm} />
                 <Fact label="Floor" value={request.floor} />
                 <Fact label="Contact" value={request.contact} sub={request.contactPhone} />

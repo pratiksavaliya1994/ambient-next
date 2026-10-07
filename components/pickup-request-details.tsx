@@ -16,12 +16,13 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox"
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { PickupRequestController } from "@/hooks/use-pickup-request"
 import { TO_DO } from "@/lib/bubble/enums"
-import type { FieldPm, Job, TimeSlot } from "@/lib/bubble/reference-types"
+import type { FieldPm, Job } from "@/lib/bubble/reference-types"
 
 /**
  * The pickup form's left-hand card: where the tools are coming from, when, and
@@ -32,14 +33,13 @@ export function PickupRequestDetails({
   controller,
   jobs,
   fieldPms,
-  timeSlots,
 }: {
   controller: PickupRequestController
   jobs: Job[]
   fieldPms: FieldPm[]
-  timeSlots: TimeSlot[]
 }) {
   const { form } = controller
+  const toDoError = form.formState.errors.toDo
 
   return (
     <Card>
@@ -52,18 +52,25 @@ export function PickupRequestDetails({
           <PickupJobField controller={controller} jobs={jobs} />
 
           <Field>
-            <FieldLabel htmlFor="toDo">Job type</FieldLabel>
+            <FieldLabel htmlFor="gc">GC</FieldLabel>
+            <Input id="gc" placeholder="Enter GC" {...form.register("gc")} />
+          </Field>
+
+          <Field data-invalid={toDoError ? true : undefined}>
+            <FieldLabel htmlFor="toDo">
+              Job type <span className="text-destructive">*</span>
+            </FieldLabel>
             <Controller
               control={form.control}
               name="toDo"
               render={({ field }) => (
                 <Select
                   items={TO_DO.map((value) => ({ label: value, value }))}
-                  value={field.value}
+                  value={field.value ?? null}
                   onValueChange={field.onChange}
                 >
-                  <SelectTrigger id="toDo" onBlur={field.onBlur}>
-                    <SelectValue />
+                  <SelectTrigger id="toDo" onBlur={field.onBlur} aria-invalid={toDoError ? true : undefined}>
+                    <SelectValue placeholder="Select job type" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
@@ -77,10 +84,11 @@ export function PickupRequestDetails({
                 </Select>
               )}
             />
+            {toDoError && <FieldError errors={[toDoError]} />}
           </Field>
 
           <PickupSiteFields form={form} />
-          <PickupScheduleFields controller={controller} timeSlots={timeSlots} />
+          <PickupScheduleFields controller={controller} />
           <PickupOwnerFields form={form} fieldPms={fieldPms} />
         </FieldGroup>
       </CardContent>
@@ -124,7 +132,6 @@ function PickupJobField({ controller, jobs }: { controller: PickupRequestControl
           </ComboboxList>
         </ComboboxContent>
       </Combobox>
-      {job && <FieldDescription className="font-semibold">GC: {job.gc || "None on file"}</FieldDescription>}
       {error && <FieldError errors={[error]} />}
     </Field>
   )

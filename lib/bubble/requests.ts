@@ -54,6 +54,9 @@ export const requestRow = z.looseObject({
   _id: z.string(),
   "Created Date": z.string().optional(),
   job: z.string().optional(),
+  // The GC as typed on the request — seeded from `jobs.gc`, editable per
+  // request. The old Bubble UI filled it too, so older rows carry it.
+  realGC: z.string().optional(),
   toDo: z.string().optional(),
   weAre: z.string().optional(),
   floor: z.string().optional(),
@@ -93,6 +96,8 @@ export type ToolRequest = {
   id: string
   createdAt: string | null
   job: string
+  /** `request.realGC`. */
+  gc: string | null
   toDo: string | null
   weAre: string | null
   floor: string | null
@@ -166,6 +171,7 @@ function toToolRequest(
     id: row._id,
     createdAt: row["Created Date"] ?? null,
     job: row.job ?? NO_JOB,
+    gc: row.realGC?.trim() || null,
     toDo: row.toDo ?? null,
     weAre: row.weAre ?? null,
     floor: row.floor ?? null,
@@ -469,6 +475,14 @@ const NEW_REQUEST_WORKFLOW = "new-request"
 // `bubble-new-request-workflow-summary.md` for the steps to mirror.
 const NEW_PICKUP_REQUEST_WORKFLOW = "new-pickup-request"
 
+/**
+ * The hour (New York) every new request's `requestDateStart` lands on. The
+ * form's time is free text a PM may leave blank, so it can't supply one, but
+ * ClickUp and the Calendar step read `requestDateStart` as an appointment and
+ * need an instant. 6 a.m. is the first slot on the Bubble calendar.
+ */
+const DEFAULT_START_HOUR = 6
+
 const createRequestResult = z.looseObject({
   requestId: z.string(),
   // `new-request` since 5B, `new-pickup-request` since 5F.
@@ -483,6 +497,7 @@ const createRequestResult = z.looseObject({
  */
 type RequestPayloadInput = {
   job: Job
+  gc: string
   toDo: string
   weAre: string
   delivery: boolean
@@ -513,6 +528,8 @@ function buildRequestPayload(input: RequestPayloadInput): Record<string, unknown
     // the old Bubble page workflow could just reference the Job thing it
     // already had in hand.
     jobId: input.job.id,
+    // The workflows write this to `request.realGC`.
+    gc: input.gc,
     todo: input.toDo,
     weAre: input.weAre,
     delivery: input.delivery,
@@ -567,17 +584,17 @@ export async function createToolRequest(
   materialLines: readonly ResolvedMaterialLine[] = []
 ): Promise<CreatedRequest> {
   const now = new Date()
-  // `requestDateStart` is the actual delivery instant — `startDate` at the
-  // chosen slot's hour — since ClickUp and the Calendar step both read it as
+  // `requestDateStart` is the delivery instant — `startDate` at
+  // `DEFAULT_START_HOUR` — since ClickUp and the Calendar step both read it as
   // one point in time, not a date. `requestDateEnd` is just the day tools are
   // needed until, with no appointment of its own, so it stays at midnight —
   // except when the range is a single day, where midnight of that same day
-  // lands *before* `requestDateStart` (start-of-day plus the slot hour) and
-  // breaks the Calendar step's "end after start" requirement. Same fix as
-  // `createPickupToolRequest`: fall back to `requestDateStart` plus the slot's
-  // 30-minute duration, which stays well short of midnight the next day and
-  // doesn't change the "Until" day shown anywhere `requestDateEnd` is read.
-  const start = newYorkInstant(values.startDate, values.slotHour)
+  // lands *before* `requestDateStart` and breaks the Calendar step's "end
+  // after start" requirement. Same fix as `createPickupToolRequest`: fall back
+  // to `requestDateStart` plus 30 minutes, which stays well short of midnight
+  // the next day and doesn't change the "Until" day shown anywhere
+  // `requestDateEnd` is read.
+  const start = newYorkInstant(values.startDate, DEFAULT_START_HOUR)
   const end =
     values.startDate === values.endDate
       ? new Date(start.getTime() + 30 * 60 * 1000)
@@ -590,6 +607,7 @@ export async function createToolRequest(
     NEW_REQUEST_WORKFLOW,
     buildRequestPayload({
       job,
+      gc: values.gc,
       toDo: values.toDo,
       weAre: values.weAre,
       delivery: values.delivery,
@@ -618,10 +636,10 @@ export async function createToolRequest(
 
 /**
  * The Pickup counterpart to `createToolRequest`. A pickup is a single visit,
- * so `requestDateEnd` is the same instant as `requestDateStart` plus the
- * chosen slot's 30-minute duration — **not** midnight of the same day, which
- * would land *before* `requestDateStart` (start-of-day plus the slot hour)
- * and broke the Calendar step's "end after start" requirement in practice.
+ * so `requestDateEnd` is `requestDateStart` plus 30 minutes — **not**
+ * midnight of the same day, which would land *before* `requestDateStart`
+ * (start-of-day plus `DEFAULT_START_HOUR`) and broke the Calendar step's "end
+ * after start" requirement in practice.
  * `cleanup` has no Bubble field of its own — folded into `notes` as a line of
  * free text instead, since adding a field isn't an option here (see
  * `CLAUDE.md`).
@@ -636,7 +654,7 @@ export async function createPickupToolRequest(
   materialLines: readonly ResolvedMaterialLine[] = []
 ): Promise<CreatedRequest> {
   const now = new Date()
-  const start = newYorkInstant(values.date, values.slotHour)
+  const start = newYorkInstant(values.date, DEFAULT_START_HOUR)
   const startOfDay = newYorkInstant(values.date)
   const end = new Date(start.getTime() + 30 * 60 * 1000)
   const notes = values.cleanup
@@ -646,6 +664,7 @@ export async function createPickupToolRequest(
   const raw = await bubbleRunWorkflow(NEW_PICKUP_REQUEST_WORKFLOW, {
     ...buildRequestPayload({
       job,
+      gc: values.gc,
       toDo: values.toDo,
       weAre: values.weAre,
       delivery: false,

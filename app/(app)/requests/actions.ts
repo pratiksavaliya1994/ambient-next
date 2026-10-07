@@ -56,7 +56,7 @@ export async function createRequestAction(input: unknown): Promise<CreateRequest
     requestedBy: values.fieldPm,
     job: job.name,
     jobDetails: job.description,
-    gc: job.gc,
+    gc: values.gc || null,
     toDo: values.toDo,
     weAre: values.weAre,
     delivery: values.delivery,

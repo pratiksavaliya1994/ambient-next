@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { WE_ARE } from "@/lib/bubble/enums"
-import type { FieldPm, TimeSlot } from "@/lib/bubble/reference-types"
+import type { FieldPm } from "@/lib/bubble/reference-types"
 import type { CombinedRequestFormValues } from "@/lib/schemas/combined-request"
 
 /**
@@ -48,18 +48,18 @@ export function CombinedSiteFields({ form }: Props) {
 }
 
 /**
- * One date and one slot for both halves — the delivery's range collapses to
- * that single day. A pickup and a delivery on different days are two ordinary
- * requests, which the two single-purpose pages already make.
+ * One date and one preferred time for both halves — the delivery's range
+ * collapses to that single day. A pickup and a delivery on different days are
+ * two ordinary requests, which the two single-purpose pages already make.
  */
-export function CombinedScheduleFields({ form, timeSlots }: Props & { timeSlots: TimeSlot[] }) {
+export function CombinedScheduleFields({ form }: Props) {
   const {
     control,
+    register,
     setValue,
     formState: { errors },
   } = form
   const date = useWatch({ control, name: "date" })
-  const slotItems = timeSlots.map((slot) => ({ label: slot.label, value: slot.label }))
 
   return (
     <>
@@ -78,38 +78,12 @@ export function CombinedScheduleFields({ form, timeSlots }: Props & { timeSlots:
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="slot">Time slot</FieldLabel>
-        <Controller
-          control={control}
-          name="timeRange"
-          render={({ field }) => (
-            <Select
-              items={slotItems}
-              value={field.value}
-              onValueChange={(next) => {
-                field.onChange(next)
-                const hour = timeSlots.find((slot) => slot.label === next)?.hour
-                if (hour !== undefined) setValue("slotHour", hour)
-              }}
-            >
-              <SelectTrigger id="slot" onBlur={field.onBlur}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {slotItems.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          )}
-        />
+        <FieldLabel htmlFor="timeRange">Preferred time</FieldLabel>
+        <Input id="timeRange" placeholder="Enter preferred time" {...register("timeRange")} />
+        <FieldDescription>Leave blank if there is no preference.</FieldDescription>
       </Field>
 
-      <Field orientation="horizontal" className="sm:col-span-2">
+      <Field orientation="horizontal">
         <Controller
           control={control}
           name="tentative"
@@ -125,7 +99,11 @@ export function CombinedScheduleFields({ form, timeSlots }: Props & { timeSlots:
 
 /** Who the request is for and belongs to, plus the notes both rows carry. */
 export function CombinedOwnerFields({ form, fieldPms }: Props & { fieldPms: FieldPm[] }) {
-  const { control, register } = form
+  const {
+    control,
+    register,
+    formState: { errors },
+  } = form
   const pmItems = fieldPms.map((pm) => ({
     label: pm.company ? `${pm.name} — ${pm.company}` : pm.name,
     value: pm.name,
@@ -133,19 +111,21 @@ export function CombinedOwnerFields({ form, fieldPms }: Props & { fieldPms: Fiel
 
   return (
     <>
-      <Field>
-        <FieldLabel htmlFor="weAre">We are</FieldLabel>
+      <Field data-invalid={errors.weAre ? true : undefined}>
+        <FieldLabel htmlFor="weAre">
+          We are <span className="text-destructive">*</span>
+        </FieldLabel>
         <Controller
           control={control}
           name="weAre"
           render={({ field }) => (
             <Select
               items={WE_ARE.map((value) => ({ label: value, value }))}
-              value={field.value}
+              value={field.value ?? null}
               onValueChange={field.onChange}
             >
-              <SelectTrigger id="weAre" onBlur={field.onBlur}>
-                <SelectValue />
+              <SelectTrigger id="weAre" onBlur={field.onBlur} aria-invalid={errors.weAre ? true : undefined}>
+                <SelectValue placeholder="Select company" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -159,6 +139,7 @@ export function CombinedOwnerFields({ form, fieldPms }: Props & { fieldPms: Fiel
             </Select>
           )}
         />
+        {errors.weAre && <FieldError errors={[errors.weAre]} />}
       </Field>
 
       <Field>
@@ -167,9 +148,13 @@ export function CombinedOwnerFields({ form, fieldPms }: Props & { fieldPms: Fiel
           control={control}
           name="fieldPm"
           render={({ field }) => (
-            <Select items={pmItems} value={field.value} onValueChange={(next) => field.onChange(String(next))}>
+            <Select
+              items={pmItems}
+              value={field.value || null}
+              onValueChange={(next) => field.onChange((next as string | null) ?? "")}
+            >
               <SelectTrigger id="fieldPm" onBlur={field.onBlur}>
-                <SelectValue />
+                <SelectValue placeholder="Select field PM" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>

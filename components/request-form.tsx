@@ -30,15 +30,13 @@ import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
-import { newYorkToday } from "@/lib/bubble/dates"
-import { DEFAULT_WE_ARE, TO_DO, UNFILTERED_TO_DO, WE_ARE } from "@/lib/bubble/enums"
+import { TO_DO, WE_ARE } from "@/lib/bubble/enums"
 import type { MaterialItem } from "@/lib/bubble/material-items-types"
 import {
   Job,
   toolTypesFor,
   type FieldPm,
   // type JobOption,
-  type TimeSlot,
   type ToolType,
 } from "@/lib/bubble/reference-types"
 import { requestFormSchema, type RequestFormValues } from "@/lib/schemas/request"
@@ -61,13 +59,11 @@ export function RequestForm({
   jobs,
   toolTypes,
   fieldPms,
-  timeSlots,
   materialItems,
 }: {
   jobs: Job[]
   toolTypes: ToolType[]
   fieldPms: FieldPm[]
-  timeSlots: TimeSlot[]
   /** The active material catalogue, read fresh — stock is shown in the picker. */
   materialItems: MaterialItem[]
 }) {
@@ -85,20 +81,21 @@ export function RequestForm({
     formState: { errors, isValid },
   } = useForm<RequestFormValues>({
     resolver: zodResolver(requestFormSchema),
+    // Nothing is pre-picked: the PM chooses every value. `toDo` and `weAre`
+    // are left undefined rather than `""` because they are enums — the
+    // selects render that as their placeholder and the schema reports it.
     defaultValues: {
       jobId: "",
-      toDo: UNFILTERED_TO_DO,
-      weAre: DEFAULT_WE_ARE,
+      gc: "",
       delivery: true,
       pickup: false,
-      startDate: newYorkToday(),
-      endDate: newYorkToday(),
-      timeRange: timeSlots[2]?.label ?? "Anytime",
-      slotHour: timeSlots[2]?.hour ?? 8,
+      startDate: "",
+      endDate: "",
+      timeRange: "",
       floor: "",
       contact: "",
       contactPhone: "",
-      fieldPm: fieldPms[0]?.name ?? "",
+      fieldPm: "",
       notes: "",
       toolsNotes: "",
       materialLines: [],
@@ -130,6 +127,8 @@ export function RequestForm({
   // doesn't prematurely flag the tools list.
   function updateJob(next: Job | null) {
     setJob(next)
+    // Seeded from the job's own GC on every pick; the PM can overwrite it after.
+    setValue("gc", next?.gc ?? "")
     setValue("jobId", next?.id ?? "", { shouldValidate: true })
   }
 
@@ -169,13 +168,6 @@ export function RequestForm({
     })
   })
 
-  // Keyed by label rather than `slot.hour`: `timeRange` — the Bubble field
-  // this now writes to — is that label text verbatim, and several slots
-  // (e.g. the two halves of 6am) share the same starting hour.
-  const slotItems = timeSlots.map((slot) => ({
-    label: slot.label,
-    value: slot.label,
-  }))
   const pmItems = fieldPms.map((pm) => ({
     label: pm.company ? `${pm.name} — ${pm.company}` : pm.name,
     value: pm.name,
@@ -238,23 +230,29 @@ export function RequestForm({
                     </ComboboxList>
                   </ComboboxContent>
                 </Combobox>
-                {job && <FieldDescription className="font-semibold">GC: {job.gc || "None on file"}</FieldDescription>}
                 {errors.jobId && <FieldError errors={[errors.jobId]} />}
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="toDo">Job type</FieldLabel>
+                <FieldLabel htmlFor="gc">GC</FieldLabel>
+                <Input id="gc" placeholder="Enter GC" {...register("gc")} />
+              </Field>
+
+              <Field data-invalid={errors.toDo ? true : undefined}>
+                <FieldLabel htmlFor="toDo">
+                  Job type <span className="text-destructive">*</span>
+                </FieldLabel>
                 <Controller
                   control={control}
                   name="toDo"
                   render={({ field }) => (
                     <Select
                       items={TO_DO.map((value) => ({ label: value, value }))}
-                      value={field.value}
+                      value={field.value ?? null}
                       onValueChange={field.onChange}
                     >
-                      <SelectTrigger id="toDo" onBlur={field.onBlur}>
-                        <SelectValue />
+                      <SelectTrigger id="toDo" onBlur={field.onBlur} aria-invalid={errors.toDo ? true : undefined}>
+                        <SelectValue placeholder="Select job type" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -269,6 +267,7 @@ export function RequestForm({
                   )}
                 />
                 <FieldDescription>Filters the tool list.</FieldDescription>
+                {errors.toDo && <FieldError errors={[errors.toDo]} />}
               </Field>
 
               <Field>
@@ -304,36 +303,9 @@ export function RequestForm({
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="slot">Time slot</FieldLabel>
-                <Controller
-                  control={control}
-                  name="timeRange"
-                  render={({ field }) => (
-                    <Select
-                      items={slotItems}
-                      value={field.value}
-                      onValueChange={(next) => {
-                        field.onChange(next)
-                        const hour = timeSlots.find((slot) => slot.label === next)?.hour
-                        if (hour !== undefined) setValue("slotHour", hour)
-                      }}
-                    >
-                      <SelectTrigger id="slot" onBlur={field.onBlur}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {slotItems.map((item) => (
-                            <SelectItem key={item.value} value={item.value}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                <FieldDescription>Time slot for Delivery</FieldDescription>
+                <FieldLabel htmlFor="timeRange">Preferred time</FieldLabel>
+                <Input id="timeRange" placeholder="Enter preferred time" {...register("timeRange")} />
+                <FieldDescription>Leave blank if there is no preference.</FieldDescription>
               </Field>
               <Field orientation="horizontal">
                 <Controller
@@ -349,19 +321,21 @@ export function RequestForm({
                 />
                 <FieldLabel htmlFor="tentative">Tentative — the date may still move</FieldLabel>
               </Field>
-              <Field>
-                <FieldLabel htmlFor="weAre">We are</FieldLabel>
+              <Field data-invalid={errors.weAre ? true : undefined}>
+                <FieldLabel htmlFor="weAre">
+                  We are <span className="text-destructive">*</span>
+                </FieldLabel>
                 <Controller
                   control={control}
                   name="weAre"
                   render={({ field }) => (
                     <Select
                       items={WE_ARE.map((value) => ({ label: value, value }))}
-                      value={field.value}
+                      value={field.value ?? null}
                       onValueChange={field.onChange}
                     >
-                      <SelectTrigger id="weAre" onBlur={field.onBlur}>
-                        <SelectValue />
+                      <SelectTrigger id="weAre" onBlur={field.onBlur} aria-invalid={errors.weAre ? true : undefined}>
+                        <SelectValue placeholder="Select company" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -375,17 +349,22 @@ export function RequestForm({
                     </Select>
                   )}
                 />
+                {errors.weAre && <FieldError errors={[errors.weAre]} />}
               </Field>
 
-              <Field className="sm:col-span-2">
+              <Field>
                 <FieldLabel htmlFor="fieldPm">Field PM</FieldLabel>
                 <Controller
                   control={control}
                   name="fieldPm"
                   render={({ field }) => (
-                    <Select items={pmItems} value={field.value} onValueChange={(next) => field.onChange(String(next))}>
+                    <Select
+                      items={pmItems}
+                      value={field.value || null}
+                      onValueChange={(next) => field.onChange((next as string | null) ?? "")}
+                    >
                       <SelectTrigger id="fieldPm" onBlur={field.onBlur}>
-                        <SelectValue />
+                        <SelectValue placeholder="Select field PM" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -417,7 +396,7 @@ export function RequestForm({
             </CardTitle>
             <CardDescription>
               {tools.length === 0
-                ? `${offered.length} offered for ${toDo}`
+                ? `${offered.length} offered for ${toDo || "all job types"}`
                 : `${tools.length} ${tools.length === 1 ? "type" : "types"}, ${units} in total`}
             </CardDescription>
             <CardAction>

@@ -17,28 +17,22 @@ export const toolLineSchema = z.object({
 export const requestFormSchema = z
   .object({
     jobId: z.string().min(1, "Pick a job."),
-    toDo: z.enum(TO_DO),
-    weAre: z.enum(WE_ARE),
+    /** Filled from `jobs.gc` when a job is picked, then editable. Written to `request.realGC`. */
+    gc: z.string().trim().max(120),
+    toDo: z.enum(TO_DO, { error: "Pick a job type." }),
+    weAre: z.enum(WE_ARE, { error: "Pick who we are." }),
     delivery: z.boolean(),
     pickup: z.boolean(),
     /** `yyyy-mm-dd`, read as New York calendar dates. */
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a start date."),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick an end date."),
     /**
-     * The chosen calendar slot's label, e.g. `"06:00 a.m. to 06:30 a.m."` —
-     * this is what's written to Bubble's `timeRange` field. Still free text in
-     * the schema because live rows also hold values no picker produced
-     * ("Anytime", "TBD"), just no longer free-typed from this form.
+     * The PM's preferred time as free text, written to Bubble's `timeRange` —
+     * blank when they have no preference. It no longer sets the delivery
+     * instant: `requestDateStart` is always `startDate` at `DEFAULT_START_HOUR`
+     * (see `lib/bubble/requests.ts`).
      */
     timeRange: z.string().trim().max(120),
-    /**
-     * The same slot's start hour, 0–23 New York time — kept alongside
-     * `timeRange` because Bubble has no field of its own for it. This is what
-     * combines with `startDate` to produce the actual delivery instant
-     * (`requestDateStart`); `endDate` is just the day tools are needed until,
-     * with no time of its own.
-     */
-    slotHour: z.number().int().min(0).max(23),
     floor: z.string().trim().max(120),
     contact: z.string().trim().max(120),
     contactPhone: z.string().trim().max(40),

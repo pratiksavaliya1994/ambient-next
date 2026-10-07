@@ -5,7 +5,7 @@ import Link from "next/link"
 import { PickupRequestForm } from "@/components/pickup-request-form"
 import { buttonVariants } from "@/components/ui/button"
 import { listMaterialItems } from "@/lib/bubble/material-items"
-import { listFieldPms, listJobs, listTimeSlots } from "@/lib/bubble/reference"
+import { listFieldPms, listJobs } from "@/lib/bubble/reference"
 import { toJobOption } from "@/lib/bubble/reference-types"
 
 export const metadata: Metadata = { title: "New pickup request" }
@@ -16,12 +16,7 @@ export default async function NewPickupRequestPage() {
   // fetched live once a job is chosen, not the `toolstype` catalogue. The
   // material catalogue is read fresh rather than memoised, as on the delivery
   // form: the picker only offers active items.
-  const [jobs, fieldPms, timeSlots, materialItems] = await Promise.all([
-    listJobs(),
-    listFieldPms(),
-    listTimeSlots(),
-    listMaterialItems(),
-  ])
+  const [jobs, fieldPms, materialItems] = await Promise.all([listJobs(), listFieldPms(), listMaterialItems()])
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
@@ -42,7 +37,6 @@ export default async function NewPickupRequestPage() {
       <PickupRequestForm
         jobs={jobs.map(toJobOption)}
         fieldPms={fieldPms}
-        timeSlots={timeSlots}
         materialItems={materialItems}
       />
     </div>

@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import type { PickupRequestController } from "@/hooks/use-pickup-request"
 import { WE_ARE } from "@/lib/bubble/enums"
-import type { FieldPm, TimeSlot } from "@/lib/bubble/reference-types"
+import type { FieldPm } from "@/lib/bubble/reference-types"
 import type { PickupRequestFormValues } from "@/lib/schemas/pickup-request"
 
 /**
@@ -46,24 +46,18 @@ export function PickupSiteFields({ form }: Props) {
 }
 
 /**
- * The date and slot, tentative, and "Cleanup the Site" — which auto-selects
- * (but doesn't lock) every tool on file at the job.
+ * The date and preferred time, tentative, and "Cleanup the Site" — which
+ * auto-selects (but doesn't lock) every tool on file at the job.
  */
-export function PickupScheduleFields({
-  controller,
-  timeSlots,
-}: {
-  controller: PickupRequestController
-  timeSlots: TimeSlot[]
-}) {
+export function PickupScheduleFields({ controller }: { controller: PickupRequestController }) {
   const { form, job, toolsForJob, loadToolsForJob, updateSelected } = controller
   const {
     control,
+    register,
     setValue,
     formState: { errors },
   } = form
   const [date, cleanup] = useWatch({ control, name: ["date", "cleanup"] })
-  const slotItems = timeSlots.map((slot) => ({ label: slot.label, value: slot.label }))
 
   return (
     <>
@@ -81,36 +75,9 @@ export function PickupScheduleFields({
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="slot">Time slot</FieldLabel>
-        <Controller
-          control={control}
-          name="timeRange"
-          render={({ field }) => (
-            <Select
-              items={slotItems}
-              value={field.value}
-              onValueChange={(next) => {
-                field.onChange(next)
-                const hour = timeSlots.find((slot) => slot.label === next)?.hour
-                if (hour !== undefined) setValue("slotHour", hour)
-              }}
-            >
-              <SelectTrigger id="slot" onBlur={field.onBlur}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {slotItems.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          )}
-        />
-        <FieldDescription>Time slot for the pickup</FieldDescription>
+        <FieldLabel htmlFor="timeRange">Preferred time</FieldLabel>
+        <Input id="timeRange" placeholder="Enter preferred time" {...register("timeRange")} />
+        <FieldDescription>Leave blank if there is no preference.</FieldDescription>
       </Field>
 
       <Field orientation="horizontal">
@@ -138,21 +105,27 @@ export function PickupScheduleFields({
 
 /** Whose request it is, and anything else to say. */
 export function PickupOwnerFields({ form, fieldPms }: Props & { fieldPms: FieldPm[] }) {
-  const { control, register } = form
+  const {
+    control,
+    register,
+    formState: { errors },
+  } = form
   const pmItems = fieldPms.map((pm) => ({ label: pm.company ? `${pm.name} — ${pm.company}` : pm.name, value: pm.name }))
   const weAreItems = WE_ARE.map((value) => ({ label: value, value }))
 
   return (
     <>
-      <Field>
-        <FieldLabel htmlFor="weAre">We are</FieldLabel>
+      <Field data-invalid={errors.weAre ? true : undefined}>
+        <FieldLabel htmlFor="weAre">
+          We are <span className="text-destructive">*</span>
+        </FieldLabel>
         <Controller
           control={control}
           name="weAre"
           render={({ field }) => (
-            <Select items={weAreItems} value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger id="weAre" onBlur={field.onBlur}>
-                <SelectValue />
+            <Select items={weAreItems} value={field.value ?? null} onValueChange={field.onChange}>
+              <SelectTrigger id="weAre" onBlur={field.onBlur} aria-invalid={errors.weAre ? true : undefined}>
+                <SelectValue placeholder="Select company" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -166,6 +139,7 @@ export function PickupOwnerFields({ form, fieldPms }: Props & { fieldPms: FieldP
             </Select>
           )}
         />
+        {errors.weAre && <FieldError errors={[errors.weAre]} />}
       </Field>
 
       <Field className="sm:col-span-2">
@@ -174,9 +148,13 @@ export function PickupOwnerFields({ form, fieldPms }: Props & { fieldPms: FieldP
           control={control}
           name="fieldPm"
           render={({ field }) => (
-            <Select items={pmItems} value={field.value} onValueChange={(next) => field.onChange(String(next))}>
+            <Select
+              items={pmItems}
+              value={field.value || null}
+              onValueChange={(next) => field.onChange((next as string | null) ?? "")}
+            >
               <SelectTrigger id="fieldPm" onBlur={field.onBlur}>
-                <SelectValue />
+                <SelectValue placeholder="Select field PM" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>

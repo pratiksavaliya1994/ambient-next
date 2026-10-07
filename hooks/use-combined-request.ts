@@ -17,10 +17,8 @@ import {
 } from "@/components/pickup-tool-picker"
 import { toast } from "@/components/ui/toast"
 import { useSiteStockHint, type SiteStockHint } from "@/hooks/use-site-stock-hint"
-import { newYorkToday } from "@/lib/bubble/dates"
-import { DEFAULT_WE_ARE, UNFILTERED_TO_DO } from "@/lib/bubble/enums"
 import type { PickupTool } from "@/lib/bubble/pickup-tools"
-import type { FieldPm, Job, TimeSlot } from "@/lib/bubble/reference-types"
+import type { Job } from "@/lib/bubble/reference-types"
 import { combinedRequestFormSchema, type CombinedRequestFormValues } from "@/lib/schemas/combined-request"
 
 /**
@@ -55,7 +53,7 @@ export type CombinedRequestController = {
   onSubmit: FormEventHandler<HTMLFormElement>
 }
 
-export function useCombinedRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): CombinedRequestController {
+export function useCombinedRequest(): CombinedRequestController {
   const router = useRouter()
   const [state, setState] = useState<CombinedRequestState>(INITIAL_COMBINED_STATE)
   const [pending, startTransition] = useTransition()
@@ -64,17 +62,16 @@ export function useCombinedRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): 
 
   const form = useForm<CombinedRequestFormValues>({
     resolver: zodResolver(combinedRequestFormSchema),
+    // Nothing pre-picked — see `RequestForm`. `toDo`/`weAre` stay undefined.
     defaultValues: {
       jobId: "",
-      toDo: UNFILTERED_TO_DO,
-      weAre: DEFAULT_WE_ARE,
-      date: newYorkToday(),
-      timeRange: timeSlots[2]?.label ?? "Anytime",
-      slotHour: timeSlots[2]?.hour ?? 8,
+      gc: "",
+      date: "",
+      timeRange: "",
       floor: "",
       contact: "",
       contactPhone: "",
-      fieldPm: fieldPms[0]?.name ?? "",
+      fieldPm: "",
       notes: "",
       tentative: false,
       cleanup: false,
@@ -128,6 +125,8 @@ export function useCombinedRequest(timeSlots: TimeSlot[], fieldPms: FieldPm[]): 
     setValue("pickupToolConditionUpdates", [])
     setValue("cleanup", false)
     setToolsForJob([])
+    // Seeded from the job's own GC on every pick; the PM can overwrite it after.
+    setValue("gc", next?.gc ?? "")
     // Same ordering trick as the pickup form: clear the tools error and set
     // `jobId` last, so this validation pass sees the cleared picks rather than
     // flagging an empty picker the user hasn't had a chance to fill.

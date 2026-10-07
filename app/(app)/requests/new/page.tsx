@@ -5,20 +5,19 @@ import Link from "next/link"
 import { RequestForm } from "@/components/request-form"
 import { buttonVariants } from "@/components/ui/button"
 import { listMaterialItems } from "@/lib/bubble/material-items"
-import { listFieldPms, listJobs, listTimeSlots, listToolTypes } from "@/lib/bubble/reference"
+import { listFieldPms, listJobs, listToolTypes } from "@/lib/bubble/reference"
 import { toJobOption } from "@/lib/bubble/reference-types"
 
 export const metadata: Metadata = { title: "New delivery request" }
 
 export default async function NewRequestPage() {
-  // Five independent lookups, so fetch them together rather than in sequence.
-  // The first four are memoised in `reference.ts`; the material catalogue is
+  // Four independent lookups, so fetch them together rather than in sequence.
+  // The first three are memoised in `reference.ts`; the material catalogue is
   // read fresh every time, because the picker shows its stock.
-  const [jobs, toolTypes, fieldPms, timeSlots, materialItems] = await Promise.all([
+  const [jobs, toolTypes, fieldPms, materialItems] = await Promise.all([
     listJobs(),
     listToolTypes(),
     listFieldPms(),
-    listTimeSlots(),
     listMaterialItems(),
   ])
 
@@ -42,7 +41,6 @@ export default async function NewRequestPage() {
         jobs={jobs.map(toJobOption)}
         toolTypes={toolTypes}
         fieldPms={fieldPms}
-        timeSlots={timeSlots}
         materialItems={materialItems}
       />
     </div>
