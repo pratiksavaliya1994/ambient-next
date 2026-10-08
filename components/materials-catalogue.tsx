@@ -4,7 +4,7 @@ import { Maximize2, Minimize2, PackageIcon, PlusIcon, SearchIcon, XIcon } from "
 import Link from "next/link"
 import { useMemo, useState } from "react"
 
-import { MaterialCatalogueCard } from "@/components/material-catalogue-card"
+import { MaterialCategoryCard } from "@/components/material-category-card"
 import { useFullscreen } from "@/components/tools-dashboard"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
@@ -16,6 +16,7 @@ import { useAutoScroll } from "@/hooks/use-auto-scroll"
 import type { MaterialItem } from "@/lib/bubble/material-items-types"
 
 const ALL_CATEGORIES = "__all__"
+const NO_CATEGORY = "Uncategorised"
 
 /**
  * `/materials`' one client island: search by name, a category filter and a
@@ -45,6 +46,7 @@ export function MaterialsCatalogue({ items }: { items: MaterialItem[] }) {
         (!needle || item.name.toLowerCase().includes(needle))
     )
   }, [items, query, category, showRetired])
+  const groups = useMemo(() => groupByCategory(visible), [visible])
 
   if (items.length === 0) return <NoMaterialsYet />
 
@@ -74,7 +76,8 @@ export function MaterialsCatalogue({ items }: { items: MaterialItem[] }) {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        {visible.length} {visible.length === 1 ? "material" : "materials"}
+        {groups.length} {groups.length === 1 ? "category" : "categories"} · {visible.length}{" "}
+        {visible.length === 1 ? "material" : "materials"}
       </p>
 
       {visible.length === 0 ? (
@@ -86,15 +89,33 @@ export function MaterialsCatalogue({ items }: { items: MaterialItem[] }) {
         </Empty>
       ) : (
         <div ref={fsRef} className={isFullscreen ? "h-full w-full overflow-y-auto bg-background p-4" : undefined}>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {visible.map((item) => (
-              <MaterialCatalogueCard key={item.id} item={item} />
+          <div className="columns-3xs gap-1">
+            {groups.map((group) => (
+              <div key={group.category} className="mb-1 break-inside-avoid">
+                <MaterialCategoryCard category={group.category} items={group.items} />
+              </div>
             ))}
           </div>
         </div>
       )}
     </div>
   )
+}
+
+/** One card per category, A–Z, items A–Z inside; uncategorised items last. */
+function groupByCategory(items: MaterialItem[]) {
+  const byCategory = new Map<string, MaterialItem[]>()
+  for (const item of items) {
+    const key = item.category || NO_CATEGORY
+    byCategory.set(key, [...(byCategory.get(key) ?? []), item])
+  }
+  return [...byCategory]
+    .map(([category, rows]) => ({ category, items: rows.sort((a, b) => a.name.localeCompare(b.name)) }))
+    .sort(
+      (a, b) =>
+        Number(a.category === NO_CATEGORY) - Number(b.category === NO_CATEGORY) ||
+        a.category.localeCompare(b.category)
+    )
 }
 
 function CatalogueFilters({

@@ -1,6 +1,9 @@
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 
-/** Mirrors `/materials`: the filter row, then a grid of item cards. */
+const CATEGORY_CARD_HEIGHTS = ["h-40", "h-24", "h-56", "h-32", "h-20", "h-48", "h-28", "h-36"]
+
+/** Mirrors `/materials`: the filter row, then masonry columns of category cards. */
 export function MaterialsCatalogueSkeleton() {
   return (
     <div className="flex flex-col gap-3">
@@ -9,10 +12,10 @@ export function MaterialsCatalogueSkeleton() {
         <Skeleton className="h-9 w-40" />
         <Skeleton className="h-9 w-32" />
       </div>
-      <Skeleton className="h-4 w-24" />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {Array.from({ length: 8 }, (_, index) => (
-          <Skeleton key={index} className="h-28 w-full" />
+      <Skeleton className="h-4 w-40" />
+      <div className="columns-3xs gap-1">
+        {CATEGORY_CARD_HEIGHTS.map((height, index) => (
+          <Skeleton key={index} className={cn("mb-1 w-full break-inside-avoid", height)} />
         ))}
       </div>
     </div>
