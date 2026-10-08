@@ -4,6 +4,7 @@ import { z } from "zod"
 
 import { bubbleCreate, bubbleListAll } from "@/lib/bubble/client"
 import { LEGACY_STATUS_OK, TOOL_STATUS_AVAILABLE, type ToolCondition } from "@/lib/bubble/tool-enums"
+import { normaliseToolName } from "@/lib/tools/tool-name"
 
 /**
  * Bringing a new physical tool into existence — the second `tools` writer in
@@ -23,20 +24,6 @@ import { LEGACY_STATUS_OK, TOOL_STATUS_AVAILABLE, type ToolCondition } from "@/l
  */
 
 const TOOLS = "tools"
-
-/**
- * Trimmed and case-folded — the form of a name two rows are considered to
- * share. `tools.name` is free text with nothing enforcing uniqueness, and the
- * live table already proves both halves of this matter: two names carry
- * trailing spaces (`"Pumpjack #3 Red LW "`), and two pairs already collide
- * case-insensitively (`electric pumpjack #16`, `small 880 grinder #1`).
- *
- * Those existing collisions are left alone — this guards new rows; it is not a
- * migration.
- */
-export function normaliseToolName(name: string): string {
-  return name.trim().toLowerCase()
-}
 
 const nameRow = z.looseObject({ _id: z.string(), name: z.string().optional() })
 

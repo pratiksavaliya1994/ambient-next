@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   ArrowLeftRightIcon,
+  ClipboardCheckIcon,
   ClipboardListIcon,
   ContainerIcon,
   ListIcon,
@@ -86,6 +87,7 @@ const TOOL_NAV_ITEMS = [
   { title: "Job Dashboard", href: "/tools", icon: MapPinIcon },
   { title: "Warehouse", href: "/tools/warehouse", icon: WarehouseIcon },
   { title: "All Tools", href: "/tools/all", icon: ListIcon },
+  { title: "Stock take", href: "/tools/stock-take", icon: ClipboardCheckIcon },
   { title: "Add tool", href: "/tools/new", icon: PlusIcon },
 ] as const
 
