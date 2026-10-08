@@ -1,6 +1,5 @@
-import { RequestMaterialLine } from "@/components/request-material-line"
+import { RequestMaterialSlot } from "@/components/request-material-slot"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ItemGroup } from "@/components/ui/item"
 import {
   effectiveQty,
   lineProgress,
@@ -8,11 +7,11 @@ import {
   type MaterialLine,
 } from "@/lib/bubble/requested-materials-types"
 import type { LineTripRow } from "@/lib/bubble/trip-materials-types"
-import type { TripFlag } from "@/lib/trips/plan-types"
 
 /**
  * A request's materials on its detail page: each structured line as requested
- * · assigned · how far it has got on trips (`RequestMaterialLine`), and below
+ * · assigned · where its units are on trips (`RequestMaterialSlot`, laid out
+ * like the tools card's slots so both read the same), and below
  * them the legacy free-text note when the request has one. `listMaterialLines`
  * never returns both for one request — the legacy row beside new lines is
  * dropped on read — so in practice this shows one or the other.
@@ -27,7 +26,6 @@ export function RequestMaterialsCard({
   legacy,
   tripRows = [],
   context,
-  flags,
   sourceJobs,
 }: {
   lines: MaterialLine[]
@@ -36,8 +34,6 @@ export function RequestMaterialsCard({
   tripRows?: readonly LineTripRow[]
   /** The request's direction, and the transfers feeding a delivery's lines (5F). */
   context?: LineContext
-  /** `lineId → what the last trip decided`, from `lineTripFlags`. */
-  flags?: ReadonlyMap<string, TripFlag>
   /** Pickup request id → job, naming the sites a delivery's linked transfers come from. */
   sourceJobs?: ReadonlyMap<string, string>
 }) {
@@ -62,18 +58,17 @@ export function RequestMaterialsCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {lines.length > 0 && (
-          <ItemGroup className="gap-1.5">
+          <ul className="divide-y overflow-hidden rounded-lg border">
             {lines.map((line) => (
-              <RequestMaterialLine
+              <RequestMaterialSlot
                 key={line.id}
                 line={line}
                 tripRows={tripRows}
                 context={context}
-                flag={flags?.get(line.id)}
                 sourceJobs={sourceJobs}
               />
             ))}
-          </ItemGroup>
+          </ul>
         )}
 
         {legacy.length > 0 && (

@@ -1,72 +1,8 @@
 import { CheckIcon } from "lucide-react"
 
-import { MaterialLineRow, quantityLabel } from "@/components/material-line-row"
-import { MaterialLineTripProgress } from "@/components/material-line-trip-progress"
-import { LinkedSupplyRows, PickupLineProgress } from "@/components/request-material-progress"
+import { quantityLabel } from "@/components/material-line-row"
 import { Badge } from "@/components/ui/badge"
-import {
-  effectiveQty,
-  lineProgress,
-  type LineContext,
-  type MaterialLine,
-} from "@/lib/bubble/requested-materials-types"
-import type { LineTripRow } from "@/lib/bubble/trip-materials-types"
-import type { TripFlag } from "@/lib/trips/plan-types"
-
-/**
- * One material line on the request page.
- *
- * - **Delivery:** assigned against requested, with what linked pickups at
- *   other sites are bringing counted in, how far it has got on trips, and a
- *   sub-row per linked pickup.
- * - **Pickup (5G):** the estimate, where it's going, and what was collected
- *   and returned. No approval state — a pickup's lines need none.
- */
-export function RequestMaterialLine({
-  line,
-  tripRows,
-  context,
-  flag,
-  sourceJobs,
-}: {
-  line: MaterialLine
-  /** The request's lines' trip rows, plus their linked transfers' rows. */
-  tripRows: readonly LineTripRow[]
-  context?: LineContext
-  flag?: TripFlag
-  /** Pickup request id → job, for naming a delivery's linked sources. */
-  sourceJobs?: ReadonlyMap<string, string>
-}) {
-  if (context?.pickup) {
-    return (
-      <MaterialLineRow
-        line={line}
-        meta={
-          <>
-            <AssignedMeta line={line} pickup />
-            <PickupLineProgress line={line} rows={tripRows} flag={flag} />
-          </>
-        }
-      />
-    )
-  }
-
-  const progress = lineProgress(line, tripRows, context)
-  return (
-    <div className="flex flex-col gap-1">
-      <MaterialLineRow
-        line={line}
-        meta={
-          <>
-            <AssignedMeta line={line} coverage={progress.linkedCoverage} />
-            <MaterialLineTripProgress progress={progress} flag={flag} />
-          </>
-        }
-      />
-      <LinkedSupplyRows line={line} linked={context?.linked ?? []} rows={tripRows} jobs={sourceJobs} />
-    </div>
-  )
-}
+import { effectiveQty, type MaterialLine } from "@/lib/bubble/requested-materials-types"
 
 /**
  * `12 of 20 bag`, plus how it stands: "short" once some but not all is

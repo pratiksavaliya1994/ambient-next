@@ -2,9 +2,10 @@ import "server-only"
 
 import { z } from "zod"
 
-import { bubbleListAll } from "@/lib/bubble/client"
+import { bubbleListAll, type Constraint } from "@/lib/bubble/client"
 import { NO_LOCATION, type DashboardTool, type PickupTool } from "@/lib/bubble/pickup-tools-types"
 import { listToolTypes } from "@/lib/bubble/reference"
+import type { ToolStatusNew } from "@/lib/bubble/tool-enums"
 
 export { NO_LOCATION, type DashboardTool, type PickupTool }
 
@@ -108,7 +109,20 @@ export async function listToolLocations(): Promise<ToolLocationTally[]> {
 
 /** Every tool, for the Tools dashboard — grouped and filtered by location there. */
 export async function listAllTools(): Promise<DashboardTool[]> {
-  const [rows, toolTypes] = await Promise.all([bubbleListAll(TOOLS, {}), listToolTypes()])
+  return readDashboardTools([])
+}
+
+/**
+ * Only the tools whose `statusNew` reads `status` — one filtered query, for a
+ * dashboard that cares about a single lifecycle state (the In Transit board)
+ * and refreshes too often to read the whole table each time.
+ */
+export async function listToolsByStatus(status: ToolStatusNew): Promise<DashboardTool[]> {
+  return readDashboardTools([{ key: "statusNew", constraint_type: "equals", value: status }])
+}
+
+async function readDashboardTools(constraints: Constraint[]): Promise<DashboardTool[]> {
+  const [rows, toolTypes] = await Promise.all([bubbleListAll(TOOLS, { constraints }), listToolTypes()])
 
   const typeNameById = new Map(toolTypes.map((type) => [type.id, type.name]))
 

@@ -1,70 +1,11 @@
-import { ArrowRightLeftIcon, PackageXIcon } from "lucide-react"
+import { ArrowRightLeftIcon } from "lucide-react"
 import Link from "next/link"
 
-import { Badge } from "@/components/ui/badge"
-import {
-  effectiveQty,
-  isLinkedTransfer,
-  lineProgress,
-  type MaterialLine,
-} from "@/lib/bubble/requested-materials-types"
+import { effectiveQty, type MaterialLine } from "@/lib/bubble/requested-materials-types"
 import type { TripMaterialRow } from "@/lib/bubble/trip-materials-types"
 import { pickupLineReport } from "@/lib/materials/pickup-line-report"
-import type { TripFlag } from "@/lib/trips/plan-types"
 
 const LINK = "font-medium text-foreground underline-offset-2 hover:underline"
-
-/**
- * A pickup line's journey on the request page (5G §4): where it's going — the
- * warehouse, or "→ Site B" for a transfer, linking to that delivery — then
- * what the driver **collected** and where it **landed**. A transfer the site
- * turned away says so instead. **Not picked up** flags a line the last trip
- * left behind; it's back in the builder's pool.
- */
-export function PickupLineProgress({
-  line,
-  rows,
-  flag,
-}: {
-  line: MaterialLine
-  rows: readonly TripMaterialRow[]
-  flag?: TripFlag
-}) {
-  const report = pickupLineReport(line, rows)
-  const progress = lineProgress(line, rows, { pickup: true })
-  const linked = isLinkedTransfer(line)
-
-  return (
-    <>
-      {report.refusedAt ? (
-        <span className="font-medium text-status-attention-foreground">
-          · refused at {report.refusedAt} — {report.backAtYard ? "back at the warehouse" : "on its way back"}
-        </span>
-      ) : linked ? (
-        <Link href={`/requests/${line.transferToRequestId}`} className={LINK}>
-          → {line.transferToLocation}
-        </Link>
-      ) : (
-        <span>to the warehouse</span>
-      )}
-      {report.counted !== null && <span className="tabular-nums">· collected {report.counted}</span>}
-      {report.landedAt && (
-        <span className="tabular-nums">
-          · {linked && report.landedAt === line.transferToLocation ? `delivered ${report.landed}` : `returned ${report.landed}`}
-        </span>
-      )}
-      {!linked && report.counted !== null && progress.outstanding > 0 && (
-        <span className="tabular-nums">· about {progress.outstanding} still to collect</span>
-      )}
-      {flag === "skipped" && (
-        <Badge className="border-transparent bg-status-attention text-white">
-          <PackageXIcon />
-          Not picked up
-        </Badge>
-      )}
-    </>
-  )
-}
 
 /**
  * Under a delivery line, one sub-row per pickup linked to it (5G §4): "From

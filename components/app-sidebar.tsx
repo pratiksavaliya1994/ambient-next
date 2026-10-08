@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import {
   ArrowLeftRightIcon,
   ClipboardListIcon,
+  ContainerIcon,
   ListIcon,
   LogOutIcon,
   MapPinIcon,
@@ -61,6 +62,9 @@ import { signOutAction } from "@/lib/auth/actions"
  * entry alongside them the way "New delivery request" does under Requests —
  * it's reached from `/tools/all` too, but adding a tool is a thing you set out
  * to do, not something you discover while browsing.
+ *
+ * "In Transit" sits under Trips rather than Tools: it shows tools *and*
+ * materials, and it is the trip rows that say what's on a truck.
  */
 const REQUEST_NAV_ITEMS = [
   { title: "Requests", href: "/requests", icon: ClipboardListIcon },
@@ -75,6 +79,7 @@ const REQUEST_NAV_ITEMS = [
 const TRIP_NAV_ITEMS = [
   { title: "Trips", href: "/trips", icon: NavigationIcon },
   { title: "New trip", href: "/trips/new", icon: RouteIcon },
+  { title: "In Transit", href: "/trips/in-transit", icon: ContainerIcon },
 ] as const
 
 const TOOL_NAV_ITEMS = [

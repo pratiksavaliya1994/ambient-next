@@ -16,6 +16,8 @@ Next.js frontend for the Tipp Floor Covering / Ambient Flooring tool workflow. *
 
 **In progress — phase 4: trips.** Dispatch stops being request-shaped. A trip becomes a real Bubble row — a driver and an **ordered list of stops**, each with tools to collect and tools to drop — so a request's tools can go out on several trips, a partially-sent request stays open, and a site-to-site collect is a *stop* rather than something nested under the request that wanted it. Master design in [`docs/phase-4-trips.md`](docs/phase-4-trips.md); **the Bubble Studio half is not built** — build sheet in [`docs/bubble-trip-workflows-spec.md`](docs/bubble-trip-workflows-spec.md). **Read the master before touching `request.status`, `assignedtools`, or anything under `lib/trips/`.** **Manual stops** (a job added to the route by hand, keyed `<job>#manual`, with the driver's "Mark as done" in `tripstop.doneAt`) are in [`docs/trip-manual-stops.md`](docs/trip-manual-stops.md).
 
+**In Transit dashboard** (`/trips/in-transit`) — every tool and material on a truck, one card per driver. "On a truck" is read off `triptool`/`tripmaterial` (`isOnTruck` on an `In Transit` trip), not `tools.statusNew`; a tool reading `In Transit` with no such row is still shown, flagged "No trip". See `lib/trips/in-transit.ts`.
+
 **Not built:** approve/reject, QR scanning, GPS.
 
 ## Before changing anything

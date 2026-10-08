@@ -150,7 +150,7 @@ export type LineContext = {
  * sets it; `null` = the trip row is gone). A row without the field is read as
  * committed, as before.
  */
-function isStalePlan(row: ProgressRow): boolean {
+export function isStalePlan(row: ProgressRow): boolean {
   const tripClosed = row.tripStatus !== undefined && (row.tripStatus === null || !isOpenTrip(row.tripStatus))
   return row.state === "Planned" && tripClosed
 }

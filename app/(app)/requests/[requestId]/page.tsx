@@ -28,7 +28,7 @@ import { assignedLabel, buildSlots, type AssignSlot, type CandidateTool } from "
 import { newYorkDayLabel } from "@/lib/bubble/dates"
 import { isOpenRequest, isPickupRequest, requestSteps, type RequestStatus } from "@/lib/bubble/enums"
 import { effectiveQty, pickupLineStatus } from "@/lib/bubble/requested-materials-types"
-import { lineTripFlags, listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
+import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { listLinkedPickupSources } from "@/lib/bubble/material-transfers"
 import { listTripFlags } from "@/lib/bubble/triptool-read"
 import { outstandingMaterialsFor } from "@/lib/trips/material-movement-types"
@@ -275,7 +275,6 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
             legacy={request.legacyMaterials}
             tripRows={[...lineRows, ...(linked?.tripRows ?? [])]}
             context={{ pickup: isPickupRequest(request), linked: linked?.lines }}
-            flags={lineTripFlags(lineRows).get(request.id)}
             sourceJobs={linked?.jobs}
           />
         </div>

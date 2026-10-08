@@ -18,11 +18,13 @@ export function ToolNameSearch({
   onValueChange,
   onSearch,
   hasSearch,
+  placeholder = "Search tools by name…",
 }: {
   value: string
   onValueChange: (next: string) => void
   onSearch: (query: string) => void
   hasSearch: boolean
+  placeholder?: string
 }) {
   function runSearch(event: React.FormEvent) {
     event.preventDefault()
@@ -42,7 +44,7 @@ export function ToolNameSearch({
             <SearchIcon />
           </InputGroupAddon>
           <InputGroupInput
-            placeholder="Search tools by name…"
+            placeholder={placeholder}
             value={value}
             onChange={(event) => onValueChange(event.target.value)}
           />
