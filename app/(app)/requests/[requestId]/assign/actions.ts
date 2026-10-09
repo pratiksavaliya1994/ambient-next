@@ -100,6 +100,13 @@ export async function saveAssignmentAction(input: unknown): Promise<CreateReques
     return { status: "error", message: "A pickup's tools and materials are set when it's created. There's nothing to assign." }
   }
 
+  // A stale assign screen saved after a cancel would write `Assigned` over tools
+  // the cancel just freed, on a request nothing will ever move again. Unlike
+  // `Delivered`, which keeps accepting tools by design (`statusAfterSave`).
+  if (request.status === "Cancelled") {
+    return { status: "error", message: "This request was cancelled. Nothing can be assigned to it." }
+  }
+
   const tools = assignments ? await prepareToolSave(request, assignments) : null
   if (tools && "error" in tools) return { status: "error", message: tools.error }
 

@@ -239,3 +239,15 @@ export const cancelTripSchema = z.object({ tripId: z.string().min(1) })
  * ratchet, so nothing reopens it afterwards.
  */
 export const closeRequestSchema = z.object({ requestId: z.string().min(1) })
+
+/** The longest cancel reason — it lands in `request.notes`, which the detail page prints whole. */
+export const CANCEL_REASON_MAX = 300
+
+/**
+ * Cancelling a request that never went out. The reason is optional and goes
+ * into `request.notes` beside who cancelled it and when.
+ */
+export const cancelRequestSchema = z.object({
+  requestId: z.string().min(1),
+  reason: z.string().trim().max(CANCEL_REASON_MAX, `Keep the reason under ${CANCEL_REASON_MAX} characters.`).optional(),
+})

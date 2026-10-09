@@ -1,12 +1,14 @@
 import { isWarehouseDestination } from "@/lib/bubble/enums"
 import { TOOL_STATUS_AVAILABLE, TOOL_STATUS_DELIVERED, type ToolStatusNew } from "@/lib/bubble/tool-enums"
+import { isStatusLocked } from "@/lib/tools/tool-edit"
 import { normaliseToolName } from "@/lib/tools/tool-name"
 
 /**
  * The stock take: making `tools` rows say where tools physically are. Built
  * for go-live, and kept as the everyday "the record is wrong" fix. It only ever
  * writes what a trip drop would have written, and skips anything a live trip
- * or request holds, so it can't contradict the lifecycle.
+ * or request holds or that reads `Assigned`/`In Transit` (`lockReasonOf`), so
+ * it can't contradict the lifecycle.
  *
  * Pure and client-safe — the page and `saveStockTakeAction` both read these.
  * The Bubble half is `lib/bubble/stock-take.ts`.
@@ -46,9 +48,25 @@ export type StockTakeTool = {
   currentUser: string
 }
 
+/** Why each locked tool can't be counted, keyed by tool id. Unlocked tools are absent. */
+export type StockTakeLocks = Readonly<Record<string, string>>
+
+/**
+ * Why a stock take must leave this tool alone, or `undefined` if it may move
+ * it. `holds` is the live claim per tool (`findStockTakeHolds`); a claim
+ * outranks the status, the same order the tool detail page uses. `Assigned` /
+ * `In Transit` with no claim behind it is still locked (`isStatusLocked`) — it
+ * is released on its tool page first, then counted.
+ */
+export function lockReasonOf(tool: StockTakeTool, holds: ReadonlyMap<string, string>): string | undefined {
+  return holds.get(tool.id) ?? (isStatusLocked(tool.status) ? `Marked ${tool.status}` : undefined)
+}
+
 export type PasteMatch = {
   /** Tools a pasted line named unambiguously. */
   matched: string[]
+  /** Lines naming a locked tool — shown, never ticked. */
+  locked: string[]
   /** Lines that named no tool — shown, never written. */
   unmatched: string[]
   /** Lines naming more than one tool (`tools.name` isn't unique). Picked by hand from the list. */
@@ -60,18 +78,19 @@ export type PasteMatch = {
  * No fuzzy matching on purpose: a near-miss is exactly the drift this page
  * exists to stop, so it is reported rather than guessed at.
  */
-export function matchPastedNames(text: string, tools: StockTakeTool[]): PasteMatch {
+export function matchPastedNames(text: string, tools: StockTakeTool[], locks: StockTakeLocks): PasteMatch {
   const byName = new Map<string, string[]>()
   for (const tool of tools) {
     const key = normaliseToolName(tool.name)
     byName.set(key, [...(byName.get(key) ?? []), tool.id])
   }
 
-  const result: PasteMatch = { matched: [], unmatched: [], ambiguous: [] }
+  const result: PasteMatch = { matched: [], locked: [], unmatched: [], ambiguous: [] }
   const lines = [...new Set(text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))]
   for (const line of lines) {
     const ids = byName.get(normaliseToolName(line)) ?? []
-    if (ids.length === 1) result.matched.push(ids[0])
+    if (ids.length === 1 && locks[ids[0]]) result.locked.push(`${line} (${locks[ids[0]]})`)
+    else if (ids.length === 1) result.matched.push(ids[0])
     else if (ids.length === 0) result.unmatched.push(line)
     else result.ambiguous.push(line)
   }

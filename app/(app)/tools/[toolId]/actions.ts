@@ -78,12 +78,15 @@ export async function updateToolAction(input: unknown): Promise<ToolEditState> {
   // Refuse the whole save rather than quietly dropping the locked half of it:
   // a PM who moved the location field and got a success toast would have no
   // reason to look again.
-  const movesTool =
-    values.location !== tool.location ||
-    values.floor !== tool.floor ||
-    values.markAvailable
-  if (movesTool && hold) {
+  const movesLocation = values.location !== tool.location || values.floor !== tool.floor
+  if ((movesLocation || values.markAvailable) && hold) {
     return { status: "error", message: holdRefusal(hold) }
+  }
+  if (movesLocation && editability.statusLocked) {
+    return {
+      status: "error",
+      message: `This tool is marked ${tool.status}, so its location can't be changed here. Release it to Available first.`,
+    }
   }
 
   // The referential check `tools.location` never got in Bubble. A value that
@@ -109,15 +112,15 @@ export async function updateToolAction(input: unknown): Promise<ToolEditState> {
   if (editability.movable) {
     if (values.location !== tool.location) patch.location = values.location
     if (values.floor !== tool.floor) patch.floor = values.floor
+  }
 
-    if (values.markAvailable && editability.canRelease) {
-      patch.statusNew = TOOL_STATUS_AVAILABLE
-      // `Available` means nobody has it, so the last driver's name goes with
-      // it. The field isn't shown anywhere any more, but clearing it keeps the
-      // row from carrying a stale name. Skipped when it was empty anyway, so a
-      // release from an unheld tool doesn't log a no-op change.
-      if (tool.currentUser !== "") patch.currentUser = ""
-    }
+  if (values.markAvailable && editability.canRelease) {
+    patch.statusNew = TOOL_STATUS_AVAILABLE
+    // `Available` means nobody has it, so the last driver's name goes with
+    // it. The field isn't shown anywhere any more, but clearing it keeps the
+    // row from carrying a stale name. Skipped when it was empty anyway, so a
+    // release from an unheld tool doesn't log a no-op change.
+    if (tool.currentUser !== "") patch.currentUser = ""
   }
 
   // Reachable when the form is dirty but every change cancels out, or when the

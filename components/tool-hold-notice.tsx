@@ -61,12 +61,15 @@ export function ToolHoldNotice({ hold }: { hold: ToolHold }) {
  * tool has silently dropped out of every picker in the app (`isFreeToAssign` is
  * false for it), and that is invisible from anywhere else.
  */
-export function ToolOrphanNotice({ status }: { status: string }) {
+export function ToolOrphanNotice({ status, statusLocked }: { status: string; statusLocked: boolean }) {
   return (
     <Alert>
       <UnlockIcon />
       <AlertTitle>Marked &quot;{status || "blank"}&quot;</AlertTitle>
-      <AlertDescription>Use the switch below to make it available again.</AlertDescription>
+      <AlertDescription>
+        Use the switch below to make it available again.
+        {statusLocked && " Its location can be changed once it's saved as Available."}
+      </AlertDescription>
     </Alert>
   )
 }

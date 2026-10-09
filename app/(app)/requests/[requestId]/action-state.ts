@@ -30,3 +30,14 @@ export type CloseRequestState =
   | { status: "closed"; requestStatus: string }
 
 export const INITIAL_CLOSE_REQUEST_STATE: CloseRequestState = { status: "idle" }
+
+/**
+ * Cancelling a request that never went out. `warning` is a follow-up that
+ * didn't land after the cancel itself did — a tool count short, or the note.
+ */
+export type CancelRequestState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "cancelled"; warning?: string }
+
+export const INITIAL_CANCEL_REQUEST_STATE: CancelRequestState = { status: "idle" }

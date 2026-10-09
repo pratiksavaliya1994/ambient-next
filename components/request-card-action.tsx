@@ -1,4 +1,4 @@
-import { CheckCircle2Icon, PackageCheckIcon, TruckIcon, WarehouseIcon, WrenchIcon } from "lucide-react"
+import { BanIcon, CheckCircle2Icon, PackageCheckIcon, TruckIcon, WarehouseIcon, WrenchIcon } from "lucide-react"
 import Link from "next/link"
 
 import { buttonVariants } from "@/components/ui/button"
@@ -81,6 +81,12 @@ const NEXT_ACTIONS: Record<RequestStatus, NextAction> = {
     href: null,
     className:
       "border-status-ok/40 bg-status-ok/25 text-status-ok-foreground hover:bg-status-ok/40 dark:bg-status-ok/30",
+  },
+  Cancelled: {
+    label: "Cancelled",
+    icon: BanIcon,
+    href: null,
+    className: "border-destructive/30 bg-destructive/10 text-destructive",
   },
 }
 

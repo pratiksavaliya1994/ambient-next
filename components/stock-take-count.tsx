@@ -9,7 +9,12 @@ import { StockTakeSetup } from "@/components/stock-take-setup"
 import { StockTakeToolList } from "@/components/stock-take-tool-list"
 import { toast } from "@/components/ui/toast"
 import type { ToolCondition } from "@/lib/bubble/tool-enums"
-import { summariseStockTake, type StockTakeState, type StockTakeTool } from "@/lib/tools/stock-take"
+import {
+  summariseStockTake,
+  type StockTakeLocks,
+  type StockTakeState,
+  type StockTakeTool,
+} from "@/lib/tools/stock-take"
 import { saveStockTakeAction } from "@/app/(app)/tools/stock-take/actions"
 
 /**
@@ -21,7 +26,16 @@ import { saveStockTakeAction } from "@/app/(app)/tools/stock-take/actions"
  *
  * After a save only the failures stay ticked, so Save again *is* the retry.
  */
-export function StockTakeCount({ tools, locations }: { tools: StockTakeTool[]; locations: string[] }) {
+export function StockTakeCount({
+  tools,
+  locks,
+  locations,
+}: {
+  tools: StockTakeTool[]
+  /** Tools a trip, request or `Assigned`/`In Transit` status holds — shown, never tickable. */
+  locks: StockTakeLocks
+  locations: string[]
+}) {
   const [location, setLocation] = React.useState("")
   const [floor, setFloor] = React.useState("")
   const [condition, setCondition] = React.useState<ToolCondition | "">("")
@@ -65,9 +79,15 @@ export function StockTakeCount({ tools, locations }: { tools: StockTakeTool[]; l
 
       {location && (
         <>
-          <StockTakePaste tools={tools} selected={selected} onChange={setSelected} />
+          <StockTakePaste tools={tools} locks={locks} selected={selected} onChange={setSelected} />
           <StockTakeSelected tools={tools} location={location} selected={selected} onChange={setSelected} />
-          <StockTakeToolList tools={tools} location={location} selected={selected} onChange={setSelected} />
+          <StockTakeToolList
+            tools={tools}
+            locks={locks}
+            location={location}
+            selected={selected}
+            onChange={setSelected}
+          />
           <StockTakeSaveBar
             summary={summariseStockTake(location, selected, tools)}
             state={state}

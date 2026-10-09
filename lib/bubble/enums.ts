@@ -121,6 +121,8 @@ export const REQUEST_STATUS = [
   // Pickup branch.
   "Partially Returned",
   "Returned",
+  // Either branch, before anything went out. See `docs/cancel-request.md`.
+  "Cancelled",
 ] as const
 export type RequestStatus = (typeof REQUEST_STATUS)[number]
 
@@ -147,6 +149,8 @@ const STEP_INDEX: Record<RequestStatus, number> = {
   Delivered: 3,
   "Partially Returned": 2,
   Returned: 3,
+  // Never walked: the detail page shows a cancelled notice instead of the stepper.
+  Cancelled: 0,
 }
 
 export function statusStepIndex(status: RequestStatus): number {
@@ -171,11 +175,13 @@ export function requestSteps(request: { delivery: boolean; pickup: boolean }): r
 
 /**
  * Whether a request still has work outstanding — the test the trip builder's
- * movement pool filters on. Everything but the two terminal values is open,
+ * movement pool filters on. Everything but the three terminal values is open,
  * including both partials: that is the entire point of them existing.
+ * `Cancelled` holds nothing, so every "who holds this tool" read that filters
+ * through here drops a cancelled request's `assignedtools` rows too.
  */
 export function isOpenRequest(status: RequestStatus): boolean {
-  return status !== "Delivered" && status !== "Returned"
+  return status !== "Delivered" && status !== "Returned" && status !== "Cancelled"
 }
 
 /**

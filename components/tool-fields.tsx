@@ -156,8 +156,11 @@ export function ToolLocationField<T extends FieldValues>({
             disabled={disabled}
             limit={40}
           >
+            {/* The vendored input defaults its own `disabled` to false, so the
+                root's alone leaves the field typeable and the trigger live. */}
             <ComboboxInput
               id={name}
+              disabled={disabled}
               placeholder="Search jobs and warehouses"
               aria-invalid={error ? true : undefined}
             />

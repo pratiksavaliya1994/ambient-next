@@ -73,7 +73,8 @@ async function AssignBody({ requestId }: { requestId: string }) {
   if (!request) notFound()
   // A pickup names its tools when it's created and its material lines need no
   // approval, so there is nothing to assign — the request page is the place.
-  if (isPickupRequest(request)) redirect(`/requests/${request.id}`)
+  // A cancelled request has nothing to assign either, and never will again.
+  if (isPickupRequest(request) || request.status === "Cancelled") redirect(`/requests/${request.id}`)
 
   const header = (
     <div className="flex flex-col gap-2">

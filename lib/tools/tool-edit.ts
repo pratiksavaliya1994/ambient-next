@@ -1,4 +1,9 @@
-import { isFreeToAssign, TOOL_STATUS_AVAILABLE } from "@/lib/bubble/tool-enums"
+import {
+  isFreeToAssign,
+  TOOL_STATUS_ASSIGNED,
+  TOOL_STATUS_AVAILABLE,
+  TOOL_STATUS_IN_TRANSIT,
+} from "@/lib/bubble/tool-enums"
 
 /**
  * What the tool detail page is allowed to change, and why.
@@ -25,7 +30,18 @@ import { isFreeToAssign, TOOL_STATUS_AVAILABLE } from "@/lib/bubble/tool-enums"
  * So "is anything holding this tool" is asked of the two tables that actually
  * hold claims, and `statusNew` is treated as the thing being repaired rather
  * than as evidence about itself.
+ *
+ * **On top of that, `Assigned` and `In Transit` lock the location by status
+ * alone** (`isStatusLocked`), even with no claim behind them. Moving such a
+ * tool by hand would leave the request or trip that set the status pointing at
+ * the wrong place. An orphan is still freed here, but in two steps: release it
+ * to `Available` (the switch stays offered), save, then fix where it is.
  */
+
+/** `statusNew` values whose location only a request or trip may change. */
+export function isStatusLocked(status: string): boolean {
+  return status === TOOL_STATUS_ASSIGNED || status === TOOL_STATUS_IN_TRANSIT
+}
 
 /** One tool, with every field the detail page reads or writes. */
 export type ToolDetail = {
@@ -61,10 +77,12 @@ export type ToolHold =
   | { kind: "request"; requestId: string; job: string; pickup: boolean }
 
 export type ToolEditability = {
-  /** No live claim, so `location` / `floor` unlock. */
+  /** No live claim and not `isStatusLocked`, so `location` / `floor` unlock. */
   movable: boolean
-  /** Why they are locked. `null` exactly when `movable`. */
+  /** The claim locking them, if one does. */
   hold: ToolHold | null
+  /** Unclaimed, but `statusNew` is `Assigned`/`In Transit`, which locks them too. */
+  statusLocked: boolean
   /**
    * Whether to offer the release control. Unclaimed and not already
    * `Available` — releasing a tool that is already free is a no-op worth not
@@ -84,11 +102,13 @@ export type ToolEditability = {
 }
 
 export function editabilityOf(tool: ToolDetail, hold: ToolHold | null): ToolEditability {
-  const movable = hold === null
+  const unclaimed = hold === null
+  const statusLocked = unclaimed && isStatusLocked(tool.status)
   return {
-    movable,
+    movable: unclaimed && !statusLocked,
     hold,
-    canRelease: movable && tool.status !== TOOL_STATUS_AVAILABLE,
-    orphaned: movable && !isFreeToAssign(tool.status),
+    statusLocked,
+    canRelease: unclaimed && tool.status !== TOOL_STATUS_AVAILABLE,
+    orphaned: unclaimed && !isFreeToAssign(tool.status),
   }
 }

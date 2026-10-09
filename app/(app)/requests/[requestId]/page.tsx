@@ -1,15 +1,14 @@
-import { ArrowLeftIcon, CheckIcon, TriangleAlertIcon, TruckIcon, WrenchIcon } from "lucide-react"
+import { ArrowLeftIcon, BanIcon, CheckIcon, TriangleAlertIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { AssignedToolRow } from "@/components/assigned-tool-row"
-import { CloseRequestAction } from "@/components/close-request-action"
-import { CompleteDeliveryAction } from "@/components/complete-delivery-action"
-import { assignLabelFor } from "@/components/request-card-action"
 import { RequestMaterialsCard } from "@/components/request-materials-card"
+import { NextAction } from "@/components/request-next-action"
 import { RequestStatusBadge, statusIcon, statusIndex } from "@/components/request-status-badge"
 import { RequestToolSlots } from "@/components/request-tool-slots"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -26,7 +25,7 @@ import {
 import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { assignedLabel, buildSlots, type AssignSlot, type CandidateTool } from "@/lib/bubble/assigned-tools-types"
 import { newYorkDayLabel } from "@/lib/bubble/dates"
-import { isOpenRequest, isPickupRequest, requestSteps, type RequestStatus } from "@/lib/bubble/enums"
+import { isPickupRequest, requestSteps, type RequestStatus } from "@/lib/bubble/enums"
 import { effectiveQty, pickupLineStatus } from "@/lib/bubble/requested-materials-types"
 import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { listLinkedPickupSources } from "@/lib/bubble/material-transfers"
@@ -36,6 +35,7 @@ import { listToolClaims } from "@/lib/bubble/trips-read"
 import { listToolTypes } from "@/lib/bubble/reference"
 import { getRequest, type ToolRequest } from "@/lib/bubble/requests"
 import { deriveTripStatus } from "@/lib/dispatch/tool-state"
+import { cancelBlockReason } from "@/lib/requests/cancel"
 
 export const metadata: Metadata = { title: "Request" }
 
@@ -79,12 +79,15 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   // driver will have to collect en route *before* committing to dispatch,
   // `In Transit` to watch them actually being collected, a partial to tell the
   // tools already dropped from the ones still owed, and a terminal one to keep
-  // saying which ones never made it. `New` has nothing assigned to classify.
+  // saying which ones never made it. `New` has nothing assigned to classify,
+  // and `Cancelled` released its tools — colouring them would describe
+  // whatever they're doing for someone else now.
   // Reuses the same classification `toDispatchSummaries` gives the Dispatch
   // board / Active trips screens, off the tools already read above, and colours
   // each row in the tools list rather than a list of its own.
+  const cancelled = request.status === "Cancelled"
   const tripStatus =
-    request.status === "New"
+    request.status === "New" || cancelled
       ? null
       : deriveTripStatus(request, assigned, toolsById, flagsByRequest.get(request.id))
   // Confirming or declining a pickup writes to a tool on this trip, so both
@@ -122,6 +125,10 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   // Transfers feeding this delivery that no trip holds yet: they ride on their
   // pickup's line, and the builder preselects them from here too.
   const transfersToSend = linked?.lines.filter((line) => pickupLineStatus(line, linked.tripRows) === "idle").length ?? 0
+  // Off the reads above — the action re-reads all of them before cancelling.
+  const cancelBlocked =
+    cancelBlockReason({ status: request.status, toolClaims: claims, lineRows, linkedRows: linked?.tripRows ?? [] }) !==
+    null
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -147,7 +154,17 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      <StatusStepper status={request.status} steps={requestSteps(request)} />
+      {cancelled ? (
+        <Alert variant="destructive">
+          <BanIcon />
+          <AlertTitle>Cancelled</AlertTitle>
+          <AlertDescription>
+            Nothing was sent. Its tools and materials were released; the notes say who cancelled it and why.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <StatusStepper status={request.status} steps={requestSteps(request)} />
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
         {/* Left column — the request itself */}
@@ -222,11 +239,12 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                   unassignedLines={unassignedLines}
                   movableCount={movableCount + linesToSend + transfersToSend}
                   hasLegacyTrip={hasLegacyTrip}
+                  cancelBlocked={cancelBlocked}
                 />
               </div>
             </CardHeader>
             <CardContent>
-              {incompleteSlots.length > 0 && (
+              {incompleteSlots.length > 0 && !cancelled && (
                 <div className="mb-4 flex items-start gap-1.5 rounded-md bg-status-attention/15 px-3 py-2 text-sm text-status-attention-foreground">
                   <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
                   <span className="min-w-0 wrap-anywhere">
@@ -301,135 +319,6 @@ function requestedCount(slots: AssignSlot[]): number {
 
 function assignedCount(slots: AssignSlot[]): number {
   return slots.reduce((sum, slot) => sum + slot.toolIds.length, 0)
-}
-
-/**
- * What can be done next, from the request's status and what is actually left
- * outstanding.
- *
- * Since phase 4 this page is **read-only about trips**: a request no longer
- * dispatches itself, because its tools can go out on several different trips
- * under several different drivers. "Add to a trip" is a link into the builder,
- * not an action here — and it only appears when the builder would have
- * something of this request's to show (`movableCount`), since a request whose
- * every assigned tool has landed is not waiting on a drive, it is waiting on
- * the tools nobody assigned.
- *
- * Which is the other half: **assigning stays open for the whole life of an
- * open request**, not just before dispatch. A load that goes out short is
- * exactly what the partial statuses exist for, and until this it was a dead
- * end — the trip left, the button vanished, and the missing tools could never
- * be added. `assignToolsAction` keeps the status from sliding back to
- * `Assigned` and the assign screen locks whatever has already gone.
- *
- * Pickup is the one exception, which is a live bug fixed in passing: a
- * pickup-only request offered "Assign tools" pointing at a screen built
- * entirely around requested tool *types* and their quantities — which a pickup
- * request does not have, since its physical tools are named at creation.
- *
- * Both terminal values render a pill rather than a dead button. So does an
- * `In Transit` request with nothing left to decide, which is the only case
- * where there is genuinely nothing to offer.
- */
-function NextAction({
-  request,
-  toolCount,
-  pendingPickupCount,
-  undeliverableCount,
-  outstandingSlots,
-  unassignedLines,
-  movableCount,
-  hasLegacyTrip,
-}: {
-  request: ToolRequest
-  toolCount: number
-  /** Off-site tools still waiting to be collected — blocks delivery. See `CompleteDeliveryAction`. */
-  pendingPickupCount: number
-  /** Tools never collected or turned away at the site — doesn't block, but isn't delivered either. */
-  undeliverableCount: number
-  /** Requested units never assigned — what makes "Close request" meaningful. */
-  outstandingSlots: number
-  /** A delivery's material lines assigned short of what was asked — they send you to the assign page too. Always 0 on a pickup. */
-  unassignedLines: number
-  /** Assigned tools not yet where this request was sending them, plus material lines left to send — what a trip would carry. */
-  movableCount: number
-  /**
-   * `In Transit` under the **pre-trip** flow — dispatched before phase 4, so it
-   * has no `triptool` rows and no run sheet to finish it from. The old
-   * Complete-delivery path stays reachable for exactly these until they drain;
-   * see `docs/phase-4-trips.md`.
-   */
-  hasLegacyTrip: boolean
-}) {
-  const pickup = isPickupRequest(request)
-  const terminal = pickup ? "Returned" : "Delivered"
-
-  if (!isOpenRequest(request.status)) {
-    return (
-      <Badge className="border-transparent bg-status-ok/15 text-sm text-status-ok-foreground">
-        <CheckIcon className="size-3.5" />
-        {request.status}
-      </Badge>
-    )
-  }
-
-  const partial = request.status === "Partially Delivered" || request.status === "Partially Returned"
-  const dispatched = request.status !== "New" && request.status !== "Assigned"
-  const legacy = request.status === "In Transit" && hasLegacyTrip
-
-  // A pickup names its tools at creation and its material lines need no
-  // approval, so there is nothing to assign. Once a request is on the road the
-  // link narrows to the one job still worth doing from here — filling the slots
-  // that went out short; swapping tools around a load already moving is not it.
-  const canAssign = !pickup && (!dispatched || outstandingSlots > 0 || unassignedLines > 0)
-  const assignLabel = dispatched
-    ? "Assign remaining"
-    : request.status === "New"
-      ? assignLabelFor(request)
-      : "Edit assignment"
-  const nothingToOffer = !canAssign && movableCount === 0 && !partial && !legacy
-
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-1.5">
-      {/* Legacy only — see `hasLegacyTrip`. Everything else finishes at a trip stop. */}
-      {legacy && (
-        <CompleteDeliveryAction
-          request={request}
-          toolCount={toolCount}
-          pendingPickupCount={pendingPickupCount}
-          undeliverableCount={undeliverableCount}
-        />
-      )}
-
-      {partial && (
-        <CloseRequestAction requestId={request.id} outstanding={outstandingSlots} terminalLabel={terminal} />
-      )}
-
-      {canAssign && (
-        <Link href={`/requests/${request.id}/assign`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-          <WrenchIcon />
-          {assignLabel}
-        </Link>
-      )}
-
-      {movableCount > 0 && (
-        <Link href={`/trips/new?requestId=${request.id}`} className={buttonVariants({ size: "sm" })}>
-          <TruckIcon />
-          Add to a trip
-        </Link>
-      )}
-
-      {/* Out on the road, fully assigned, nothing of this request's left to
-          load. The badge is the whole answer — and by construction it never
-          sits beside a button. */}
-      {nothingToOffer && request.status === "In Transit" && (
-        <Badge className="border-transparent bg-status-attention/15 text-sm text-status-attention-foreground">
-          <TruckIcon className="size-3.5" />
-          On a trip
-        </Badge>
-      )}
-    </div>
-  )
 }
 
 /**

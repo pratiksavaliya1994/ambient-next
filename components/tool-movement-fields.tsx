@@ -26,7 +26,7 @@ export function ToolMovementFields({
   control: Control<ToolEditFormValues>
   /** Every `jobs.name` plus the warehouse names, sorted. A picked value, never typed. */
   locations: string[]
-  /** Something holds the tool — see `editabilityOf`. */
+  /** A claim or an `Assigned`/`In Transit` status locks it — see `editabilityOf`. */
   disabled: boolean
   error?: string
 }) {

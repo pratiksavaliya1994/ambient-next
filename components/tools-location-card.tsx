@@ -1,3 +1,4 @@
+import { TruckIcon } from "lucide-react"
 import Link from "next/link"
 import * as React from "react"
 
@@ -16,15 +17,17 @@ export function LocationCard({
   location,
   tools,
   isExtra,
+  isDriver = false,
   jobId,
 }: {
   location: string
   tools: DashboardTool[]
   isExtra: boolean
+  /** The location is a driver's name — a truck, not a site. See `driverLocationsOf`. */
+  isDriver?: boolean
   /** `jobs._id` for this location, when it names a real job — see `siteJobIds`. Undefined renders unlinked. */
   jobId?: string
 }) {
-  const isUnset = location === NO_LOCATION
   const { groups, singles } = React.useMemo(() => groupToolsByType(tools), [tools])
 
   return (
@@ -39,50 +42,20 @@ export function LocationCard({
       // line. In light mode `--card` and `--background` are both pure white, so
       // the outline is the *only* thing separating one card from the next â€” and
       // packed this densely they need to read as distinct boxes.
-      className={cn("gap-1 border ring-0 [--card-spacing:--spacing(2)]", isExtra && "ring-2 ring-primary/60")}
+      className={cn(
+        "gap-1 border ring-0 [--card-spacing:--spacing(2)]",
+        isDriver && "border-status-active/60 bg-status-active/5",
+        isExtra && "ring-2 ring-primary/60"
+      )}
       title={isExtra ? `${location} â€” match found outside your selection` : undefined}
     >
-      {/* A full-bleed band, not just styled text: `-mt-(--card-spacing)` cancels
-          `Card`'s top padding so it reaches the card's top edge, where the
-          card's own `overflow-hidden rounded-xl` clips its corners for it.
-          `items-center` (over the slot's `items-start`) centres the count badge
-          against the title now that the band is the only thing setting this
-          row's height.
-
-          `bg-primary` + `text-primary-foreground`: the app's amber, so the band
-          carries no colour of its own and the pair is contrast-correct by
-          construction in both themes (`--primary` is the same value in each).
-          It's what separates the site name from the tool names beneath it â€” the
-          name itself no longer needs a tint.
-
-          `py-0.5`, not the card spacing: at this density the band only needs to
-          clear the text. No `border-b` â€” the fill already separates it, and the
-          slot's `[.border-b]:pb-(--card-spacing)` variant outranks any plain
-          `pb-*`, so a border here would silently pin the padding back open. */}
-      <CardHeader className="-mt-(--card-spacing) items-center bg-primary py-0.5">
-        {/* `truncate`, not `wrap-anywhere`: a job name like "107 Greenwich St -
-            J24-0407" wrapped to three lines at this column width. Unset fades
-            its own text rather than switching to `--muted-foreground`, which is
-            a grey picked to sit on `--background`, not on the amber band. */}
-        <CardTitle
-          className={cn("truncate text-sm text-primary-foreground", isUnset && "italic opacity-70")}
-          title={location}
-        >
-          {jobId ? (
-            <Link href={`/sites/${jobId}`} className="hover:underline">
-              {location}
-            </Link>
-          ) : (
-            location
-          )}
-        </CardTitle>
-        {isExtra && <span className="sr-only">Match found outside your selection</span>}
-        <CardAction>
-          <Badge variant="secondary" className="h-4 px-1.5 text-[10px] tabular-nums">
-            {tools.length}
-          </Badge>
-        </CardAction>
-      </CardHeader>
+      <LocationCardHeader
+        location={location}
+        count={tools.length}
+        isExtra={isExtra}
+        isDriver={isDriver}
+        jobId={jobId}
+      />
 
       {/* `overflow-y-auto` makes the used `overflow-x` compute to `auto` too, so
           a pathological name could raise a horizontal scrollbar â€” pin it shut.
@@ -99,5 +72,75 @@ export function LocationCard({
         <ToolTypeList groups={groups} singles={singles} />
       </CardContent>
     </Card>
+  )
+}
+
+function LocationCardHeader({
+  location,
+  count,
+  isExtra,
+  isDriver,
+  jobId,
+}: {
+  location: string
+  count: number
+  isExtra: boolean
+  isDriver: boolean
+  jobId?: string
+}) {
+  const isUnset = location === NO_LOCATION
+
+  return (
+    <>
+      {/* A full-bleed band, not just styled text: `-mt-(--card-spacing)` cancels
+          `Card`'s top padding so it reaches the card's top edge, where the
+          card's own `overflow-hidden rounded-xl` clips its corners for it.
+          `items-center` (over the slot's `items-start`) centres the count badge
+          against the title now that the band is the only thing setting this
+          row's height.
+
+          `bg-primary` + `text-primary-foreground`: the app's amber, so the band
+          carries no colour of its own and the pair is contrast-correct by
+          construction in both themes (`--primary` is the same value in each).
+          It's what separates the site name from the tool names beneath it â€” the
+          name itself no longer needs a tint.
+
+          `py-0.5`, not the card spacing: at this density the band only needs to
+          clear the text. No `border-b` â€” the fill already separates it, and the
+          slot's `[.border-b]:pb-(--card-spacing)` variant outranks any plain
+          `pb-*`, so a border here would silently pin the padding back open.
+
+          A driver's card swaps the amber for `In Transit`'s blue (the same
+          `--status-active` its tools' status badges use) plus a truck icon.
+          `text-primary-foreground` stays: it's the near-black that is the same
+          in both themes, and it reads on this blue as it does on the amber. */}
+      <CardHeader
+        className={cn("-mt-(--card-spacing) items-center py-0.5", isDriver ? "bg-status-active" : "bg-primary")}
+      >
+        {/* `truncate`, not `wrap-anywhere`: a job name like "107 Greenwich St -
+            J24-0407" wrapped to three lines at this column width. Unset fades
+            its own text rather than switching to `--muted-foreground`, which is
+            a grey picked to sit on `--background`, not on the amber band. */}
+        <CardTitle
+          className={cn("truncate text-sm text-primary-foreground", isUnset && "italic opacity-70")}
+          title={isDriver ? `${location} — in transit` : location}
+        >
+          {isDriver && <TruckIcon className="mr-1 inline size-3.5 align-[-2px]" aria-label="In transit" />}
+          {jobId ? (
+            <Link href={`/sites/${jobId}`} className="hover:underline">
+              {location}
+            </Link>
+          ) : (
+            location
+          )}
+        </CardTitle>
+        {isExtra && <span className="sr-only">Match found outside your selection</span>}
+        <CardAction>
+          <Badge variant="secondary" className="h-4 px-1.5 text-[10px] tabular-nums">
+            {count}
+          </Badge>
+        </CardAction>
+      </CardHeader>
+    </>
   )
 }

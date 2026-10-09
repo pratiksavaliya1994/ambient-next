@@ -227,7 +227,7 @@ export async function releaseTransfersForClose(request: {
 
   for (const line of clear) await setTransferLink(line.id, null)
   const settled = await Promise.all(clear.map((line) => waitForLine(line.id, (read) => read.transferToLineId === "")))
-  if (!settled.every(Boolean)) return { error: "Bubble is still clearing this request's transfers. Try Close again in a moment." }
+  if (!settled.every(Boolean)) return { error: "Bubble is still clearing this request's transfers. Try again in a moment." }
 
   return { touchedRequestIds: [...new Set(clear.flatMap((line) => [line.requestId, line.transferToRequestId]))] }
 }

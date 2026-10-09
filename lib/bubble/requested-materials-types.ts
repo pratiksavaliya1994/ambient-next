@@ -164,7 +164,8 @@ export function isStalePlan(row: ProgressRow): boolean {
 const claimedQty = (row: TripMaterialRow) => Math.max(row.qty, row.actualQty ?? 0)
 
 const isFinished = (row: ProgressRow) => row.state === "Dropped" || row.state === "Returned"
-const isLive = (row: ProgressRow) => IN_MOTION_STATES.includes(row.state) && !isStalePlan(row)
+/** A trip row still holding units: in motion, and not a plan its closed trip left behind. */
+export const isLive = (row: ProgressRow) => IN_MOTION_STATES.includes(row.state) && !isStalePlan(row)
 
 /**
  * A pickup line's trip rows, summed. A line can be **split across trips**

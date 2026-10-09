@@ -6,7 +6,7 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
-import { matchPastedNames, type PasteMatch, type StockTakeTool } from "@/lib/tools/stock-take"
+import { matchPastedNames, type PasteMatch, type StockTakeLocks, type StockTakeTool } from "@/lib/tools/stock-take"
 
 /**
  * A list of tool names — typed off labels, or pasted from a site lead's
@@ -16,10 +16,12 @@ import { matchPastedNames, type PasteMatch, type StockTakeTool } from "@/lib/too
  */
 export function StockTakePaste({
   tools,
+  locks,
   selected,
   onChange,
 }: {
   tools: StockTakeTool[]
+  locks: StockTakeLocks
   selected: ReadonlySet<string>
   onChange: (next: ReadonlySet<string>) => void
 }) {
@@ -27,7 +29,7 @@ export function StockTakePaste({
   const [match, setMatch] = React.useState<PasteMatch | null>(null)
 
   function tick() {
-    const result = matchPastedNames(text, tools)
+    const result = matchPastedNames(text, tools, locks)
     setMatch(result)
     onChange(new Set([...selected, ...result.matched]))
     // Keep only the lines that still need a human, so a second paste starts clean.
@@ -62,6 +64,9 @@ function PasteResult({ match }: { match: PasteMatch }) {
       <p className="text-muted-foreground">
         {match.matched.length} {match.matched.length === 1 ? "tool" : "tools"} ticked.
       </p>
+      {match.locked.length > 0 && (
+        <FieldError>Not ticked, can&apos;t be moved right now: {match.locked.join(", ")}.</FieldError>
+      )}
       {match.unmatched.length > 0 && (
         <FieldError>No tool is called: {match.unmatched.join(", ")}. Check the label and find it in the list.</FieldError>
       )}

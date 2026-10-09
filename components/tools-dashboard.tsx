@@ -18,6 +18,20 @@ import {
   typeOf,
   type DashboardFilters,
 } from "@/lib/tools/dashboard-filters"
+import { TOOL_STATUS_IN_TRANSIT } from "@/lib/bubble/tool-enums"
+
+/**
+ * Locations that are a driver, not a site. Dispatch writes `location = driver`
+ * alongside `statusNew = In Transit`, so any location holding an `In Transit`
+ * tool is a truck. Blank locations are never a driver.
+ */
+function driverLocationsOf(tools: DashboardTool[]): Set<string> {
+  return new Set(
+    tools
+      .filter((tool) => tool.status === TOOL_STATUS_IN_TRANSIT && tool.location !== NO_LOCATION)
+      .map((tool) => tool.location)
+  )
+}
 
 export function useFullscreen<T extends HTMLElement>() {
   const ref = React.useRef<T>(null)
@@ -76,6 +90,8 @@ export function ToolsDashboard({
   useAutoScroll(fsRef, isFullscreen)
 
   const grouped = React.useMemo(() => filterDashboard(tools, locations, filters), [tools, locations, filters])
+  // Read off the unfiltered list, so a status filter can't flip a driver's card back to a site's look.
+  const driverLocations = React.useMemo(() => driverLocationsOf(tools), [tools])
 
   return (
     <div
@@ -118,6 +134,7 @@ export function ToolsDashboard({
                   location={group.location}
                   tools={group.tools}
                   isExtra={group.isExtra}
+                  isDriver={driverLocations.has(group.location)}
                   jobId={jobIds[group.location]}
                 />
               </div>

@@ -1,4 +1,4 @@
-import { CheckCircle2Icon, ClipboardListIcon, PackageCheckIcon, TruckIcon, WarehouseIcon } from "lucide-react"
+import { BanIcon, CheckCircle2Icon, ClipboardListIcon, PackageCheckIcon, TruckIcon, WarehouseIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { statusStepIndex, type RequestStatus } from "@/lib/bubble/enums"
@@ -40,6 +40,8 @@ const STATUS_THEMES: Record<RequestStatus, { badge: string; icon: typeof TruckIc
     icon: TruckIcon,
   },
   Returned: { badge: "border-transparent bg-status-ok/15 text-status-ok-foreground", icon: WarehouseIcon },
+  // Not green: nothing was delivered, and a scan of the list must not read it as done.
+  Cancelled: { badge: "border-transparent bg-destructive/10 text-destructive", icon: BanIcon },
 }
 
 /**

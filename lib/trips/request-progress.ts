@@ -10,7 +10,7 @@
  * that sent three of its eight tools had nowhere to live.
  */
 
-import { isPickupRequest, isWarehouseLocation, type RequestStatus } from "@/lib/bubble/enums"
+import { isOpenRequest, isPickupRequest, isWarehouseLocation, type RequestStatus } from "@/lib/bubble/enums"
 import {
   TOOL_STATUS_AVAILABLE,
   TOOL_STATUS_DELIVERED,
@@ -184,7 +184,8 @@ export function requestProgress(
  * demand is real and unmet — that is the case the escape hatch exists for.
  */
 export function deriveRequestStatus(progress: RequestProgress, current: RequestStatus): RequestStatus {
-  if (current === "Delivered" || current === "Returned") return current
+  // `Cancelled` too: a sync after a cleared transfer must never revive it.
+  if (!isOpenRequest(current)) return current
   if (progress.assigned === 0 && progress.materialLinesAssigned === 0) return "New"
   const toolsDone = progress.landed === progress.assigned && progress.unfilledSlots === 0
   if (toolsDone && progress.materialLinesDone === progress.materialLines) return progress.terminal

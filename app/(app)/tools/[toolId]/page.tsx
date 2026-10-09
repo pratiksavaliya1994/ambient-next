@@ -94,7 +94,7 @@ export default async function ToolDetailPage({ params }: { params: Promise<{ too
       {/* Order is deliberate: why it's locked beats why it's odd. A held tool
           can't be orphaned, so those two never both render. */}
       {hold && <ToolHoldNotice hold={hold} />}
-      {editability.orphaned && <ToolOrphanNotice status={tool.status} />}
+      {editability.orphaned && <ToolOrphanNotice status={tool.status} statusLocked={editability.statusLocked} />}
       {tripFlag && <ToolTripFlagNotice flag={tripFlag} />}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -107,7 +107,9 @@ export default async function ToolDetailPage({ params }: { params: Promise<{ too
               <CardTitle className="text-base">Edit</CardTitle>
               {!editability.movable && (
                 <span className="text-sm text-muted-foreground">
-                  Only Type and Condition can be changed right now.
+                  {editability.hold
+                    ? "Location and floor are locked while a trip or request holds it."
+                    : `Location and floor are locked while it's marked ${tool.status}.`}
                 </span>
               )}
             </CardHeader>

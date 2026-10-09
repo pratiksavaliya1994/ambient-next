@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
-import { isPickupRequest } from "@/lib/bubble/enums"
+import { isOpenRequest, isPickupRequest } from "@/lib/bubble/enums"
 import { TOOL_STATUS_IN_TRANSIT } from "@/lib/bubble/tool-enums"
 import { setRequestStatuses } from "@/lib/bubble/request-status"
 import { closeRequestSchema } from "@/lib/schemas/trip"
@@ -12,8 +12,7 @@ import { listAssignedTools, listToolsByIds } from "@/lib/bubble/assigned-tools"
 import { clearRequestOrder } from "@/lib/bubble/request-order"
 import { getRequest, offloadRequest } from "@/lib/bubble/requests"
 import { listTripFlags } from "@/lib/bubble/triptool-read"
-import { assignMaterials, targetsLanded, waitForMaterialLines } from "@/lib/bubble/requested-materials"
-import { holdsStock, IN_MOTION_STATES, lineProgress } from "@/lib/bubble/requested-materials-types"
+import { IN_MOTION_STATES } from "@/lib/bubble/requested-materials-types"
 import { listTripMaterialsForLines } from "@/lib/bubble/tripmaterial-read"
 import { releaseTransfersForClose } from "@/lib/bubble/material-transfers"
 import { syncRequestStatuses } from "@/lib/trips/sync-request-status"
@@ -21,6 +20,8 @@ import { displayNameOf, requireSession } from "@/lib/auth/session"
 import { deriveTripStatus } from "@/lib/dispatch/tool-state"
 import { offloadSchema } from "@/lib/schemas/assignment"
 import type { OffloadState } from "@/app/(app)/requests/[requestId]/action-state"
+
+import { releaseUnshippedStock } from "./release-stock"
 
 /**
  * Drops the load: one call to `update-request-status` (`offloadRequest`),
@@ -155,7 +156,7 @@ export async function closeRequestAction(input: unknown): Promise<CloseRequestSt
   const { requestId } = parsed.data
   const request = await getRequest(requestId)
   if (!request) return { status: "error", message: "That request no longer exists in Bubble." }
-  if (request.status === "Delivered" || request.status === "Returned") {
+  if (!isOpenRequest(request.status)) {
     return { status: "error", message: `This request is already ${request.status}.` }
   }
 
@@ -195,40 +196,9 @@ export async function closeRequestAction(input: unknown): Promise<CloseRequestSt
   const transfers = await releaseTransfersForClose(request)
   if ("error" in transfers) return { status: "error", message: transfers.error }
 
-  // Stock that never left the yard goes back on the shelf — **before** the
-  // terminal status, because nothing re-opens a closed request, so one closed
-  // while holding stock would hold it for good. Only inventory delivery lines
-  // hold stock (`holdsStock`, Bubble's own test); each is lowered to what was
-  // actually dropped **from the warehouse** — `lineProgress` without `linked`,
-  // so units a transfer brought in are never counted as shelf stock.
-  const releases = request.materialLines
-    .filter((line) => holdsStock(line, request))
-    .map((line) => ({ lineId: line.id, targetQty: lineProgress(line, tripRows).delivered, from: line.assignedQty }))
-    .filter((entry) => entry.from > entry.targetQty)
-    .map(({ lineId, targetQty }) => ({ lineId, targetQty }))
-
-  if (releases.length > 0) {
-    try {
-      await assignMaterials(requestId, releases, displayNameOf(session), { release: true })
-      const { settled } = await waitForMaterialLines(requestId, targetsLanded(releases))
-      // Retrying is safe — the release is a target, so a second press writes
-      // only what the first didn't.
-      if (!settled) {
-        return {
-          status: "error",
-          message: "Bubble is still returning this request's unshipped stock. Try Close again in a moment.",
-        }
-      }
-    } catch (error) {
-      return {
-        status: "error",
-        message:
-          error instanceof Error
-            ? `Couldn't return the unshipped stock: ${error.message}`
-            : "Couldn't return the unshipped stock.",
-      }
-    }
-  }
+  // Stock that never left the yard goes back on the shelf, before the terminal status.
+  const stock = await releaseUnshippedStock(request, tripRows, displayNameOf(session))
+  if ("error" in stock) return { status: "error", message: stock.error }
 
   const terminal = isPickupRequest(request) ? "Returned" : "Delivered"
 
@@ -249,7 +219,7 @@ export async function closeRequestAction(input: unknown): Promise<CloseRequestSt
   revalidatePath(`/requests/${requestId}`)
   for (const id of others) revalidatePath(`/requests/${id}`)
   revalidatePath("/trips/new")
-  if (releases.length > 0) revalidatePath("/materials")
+  if (stock.released) revalidatePath("/materials")
 
   return { status: "closed", requestStatus: terminal }
 }

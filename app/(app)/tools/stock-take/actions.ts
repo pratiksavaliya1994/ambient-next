@@ -13,6 +13,7 @@ import {
 } from "@/lib/bubble/stock-take"
 import { stockTakeSaveSchema } from "@/lib/schemas/stock-take"
 import {
+  lockReasonOf,
   stockTakeActor,
   stockTakeStatusFor,
   type StockTakeOutcome,
@@ -93,8 +94,9 @@ async function runStockTake(
       const writes: typeof written = []
       for (const id of chunk) {
         const tool = tools.get(id)
+        const lock = tool && lockReasonOf(tool, holds)
         if (!tool) outcomes.set(id, { toolId: id, name: id, result: "failed", detail: "No such tool any more." })
-        else if (holds.has(id)) outcomes.set(id, { toolId: id, name: tool.name, result: "held", detail: holds.get(id) })
+        else if (lock) outcomes.set(id, { toolId: id, name: tool.name, result: "held", detail: lock })
         else {
           const patch = buildPatch(tool)
           // Already right — writing it anyway would only add an empty `toolshistory` row.

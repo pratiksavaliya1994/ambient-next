@@ -44,10 +44,10 @@ export type { AssignedTool, CandidateTool, ToolRequestClaim }
  * after by `assignToolsAction`.
  */
 
-const ASSIGNED_TOOLS = "assignedtools"
+export const ASSIGNED_TOOLS = "assignedtools"
 const TOOLS = "tools"
 
-const assignedToolRow = z.looseObject({
+export const assignedToolRow = z.looseObject({
   _id: z.string(),
   requestID: z.string().optional(),
   toolID: z.string().optional(),
